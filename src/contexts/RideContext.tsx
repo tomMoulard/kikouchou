@@ -120,6 +120,7 @@ const compareRides = (a: Ride, b: Ride): boolean =>
   a.id === b.id &&
   a.tripId === b.tripId &&
   a.direction === b.direction &&
+  a.kind === b.kind &&
   a.meetDatetime === b.meetDatetime &&
   a.location === b.location &&
   a.leadTimeMinutes === b.leadTimeMinutes &&

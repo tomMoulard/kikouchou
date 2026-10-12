@@ -120,6 +120,10 @@ export const rideDirectionSchema = z.enum(['pickup', 'dropoff'], {
   message: 'Direction must be pickup or dropoff',
 });
 
+export const rideKindSchema = z.enum(['shuttle', 'carpool'], {
+  message: 'Ride kind must be shuttle or carpool',
+});
+
 export const childSeatKindSchema = z.enum(
   ['rearFacing', 'forwardFacing', 'booster'],
   { message: 'Unknown child seat kind' },
@@ -454,6 +458,7 @@ export const VehicleFormDataSchema = z.object({
  */
 export const RideFormDataSchema = z.object({
   direction: rideDirectionSchema,
+  kind: rideKindSchema.optional(),
   meetDatetime: isoDateTimeStringSchema,
   location: z
     .string()

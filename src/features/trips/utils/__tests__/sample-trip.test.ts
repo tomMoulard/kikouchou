@@ -37,6 +37,7 @@ import {
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
   RIDE_DIRECTIONS,
+  RIDE_KINDS,
   getPersonHeadcount,
   type Language,
 } from '@/types';
@@ -135,12 +136,14 @@ describe('buildSampleTrip', () => {
       const expenseCategories = new Set(rows.expenses.map((expense) => expense.category));
       const splitModes = new Set(rows.expenses.map((expense) => expense.splitMode));
       const directions = new Set(rows.rides.map((ride) => ride.direction));
+      const rideKinds = new Set(rows.rides.map((ride) => ride.kind ?? 'shuttle'));
 
       expect([...categories].sort()).toEqual([...ACTIVITY_CATEGORIES].sort());
       expect([...kinds].sort()).toEqual([...EXPENSE_KINDS].sort());
       expect([...expenseCategories].sort()).toEqual([...EXPENSE_CATEGORIES].sort());
       expect([...splitModes].sort()).toEqual([...EXPENSE_SPLIT_MODES].sort());
       expect([...directions].sort()).toEqual([...RIDE_DIRECTIONS].sort());
+      expect([...rideKinds].sort()).toEqual([...RIDE_KINDS].sort());
       expect(rows.activities.some((activity) => activity.allDay)).toBe(true);
       expect(rows.persons.some((person) => getPersonHeadcount(person) > 1)).toBe(true);
       expect(rows.transports.some((transport) => transport.type === 'departure')).toBe(true);

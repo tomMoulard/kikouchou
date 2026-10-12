@@ -14,6 +14,7 @@ import {
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
   RIDE_DIRECTIONS,
+  RIDE_KINDS,
 } from '@/types';
 
 // ============================================================================
@@ -398,6 +399,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         example: 'pickup',
         enum: RIDE_DIRECTIONS,
       },
+      kind: {
+        type: 'string',
+        required: false,
+        description: 'carpool: a guest driving from home, location is their start',
+        example: 'carpool',
+        enum: RIDE_KINDS,
+      },
       meetDatetime: {
         type: 'string',
         required: true,
@@ -457,6 +465,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         description: 'Whether the car fetches guests or takes them away',
         example: 'pickup',
         enum: RIDE_DIRECTIONS,
+      },
+      kind: {
+        type: 'string',
+        required: false,
+        description: 'Shuttle or carpool',
+        example: 'carpool',
+        enum: RIDE_KINDS,
       },
       meetDatetime: {
         type: 'string',

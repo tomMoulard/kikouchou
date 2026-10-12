@@ -16,6 +16,11 @@
  * inventing `Ride` rows would push one device's guesses into the shared
  * document as though the group had agreed them.
  *
+ * A carpool (`journey.kind === 'carpool'`) reads differently in three places:
+ * its time is when the car sets off, its place is the far end of the route,
+ * and each passenger row names that passenger's own stop, which is the
+ * `location` of their leg.
+ *
  * The actions are deliberately per **leg**, not per journey: a leg exists in
  * both storage shapes, so editing or deleting one is safe on a legacy journey
  * that has no ride row to update. Any control that edits the *journey* has to
@@ -158,6 +163,8 @@ interface RidePassengerRowProps {
   readonly isActionsDisabled: boolean;
   /** Hides the row menu on a read-only trip. */
   readonly readOnly: boolean;
+  /** Names the passenger's own stop, which only a carpool has. */
+  readonly showStop: boolean;
 }
 
 // ============================================================================
@@ -203,6 +210,7 @@ const RidePassengerRow = memo(function RidePassengerRow({
   onDelete,
   isActionsDisabled,
   readOnly,
+  showStop,
 }: RidePassengerRowProps): ReactElement {
   const { t } = useTranslation(),
     { transport, person } = leg,
@@ -281,6 +289,15 @@ const RidePassengerRow = memo(function RidePassengerRow({
         )}
       </div>
 
+      {showStop && transport.location !== '' && (
+        <p className="pl-5 flex items-center gap-1 text-xs text-muted-foreground">
+          <MapPin className="size-3 shrink-0" aria-hidden="true" />
+          <span className="truncate" title={transport.location}>
+            {t('rides.carpoolStop', { location: transport.location })}
+          </span>
+        </p>
+      )}
+
       {/* "Meet at gate 12" is written against one passenger's leg, and folding
           the legs into one card must not throw it away. */}
       {transport.notes !== undefined && transport.notes !== '' && (
@@ -336,8 +353,17 @@ const RideCard = memo(function RideCard({
   const { t } = useTranslation(),
     // Colour never carries the meaning on its own: the arrow stays.
     isPickup = journey.direction === 'pickup',
+    isCarpool = journey.kind === 'carpool',
     DirectionIcon = isPickup ? ArrowDownToLine : ArrowUpFromLine,
-    directionLabel = t(`rides.directions.${journey.direction}`),
+    directionLabel = isCarpool
+      ? t(isPickup ? 'rides.carpoolDirections.pickup' : 'rides.carpoolDirections.dropoff')
+      : t(`rides.directions.${journey.direction}`),
+    // A carpool's place is the far end of its route, so it says which end.
+    placeLabel = !isCarpool
+      ? journey.location
+      : t(isPickup ? 'rides.carpoolFrom' : 'rides.carpoolTo', {
+          location: journey.location,
+        }),
     { date: meetDate, time: meetTime } = useMemo(
       () =>
         formatTransportDatetimeParts(journey.meetDatetime, dateLocale, 'dayAndTime'),
@@ -403,7 +429,7 @@ const RideCard = memo(function RideCard({
           directionLabel,
           meetDate,
           meetTime,
-          journey.location,
+          placeLabel,
           driverSummary,
           t('rides.passengers', { count: journey.legs.length }),
         ]
@@ -413,7 +439,7 @@ const RideCard = memo(function RideCard({
         directionLabel,
         meetDate,
         meetTime,
-        journey.location,
+        placeLabel,
         driverSummary,
         journey.legs.length,
         t,
@@ -497,20 +523,22 @@ const RideCard = memo(function RideCard({
           <Clock className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="font-medium">{meetDate}</span>
           <span className="text-muted-foreground">
-            {t('rides.meetAt', { time: meetTime })}
+            {isCarpool
+              ? t('rides.departAt', { time: meetTime })
+              : t('rides.meetAt', { time: meetTime })}
           </span>
         </div>
 
         {/* Where it meets */}
         <div className="flex items-center gap-2 text-sm">
           <MapPin className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="truncate" title={journey.location}>
-            {journey.location}
+          <span className="truncate" title={placeLabel}>
+            {placeLabel}
           </span>
         </div>
 
         {/* When the driver has to set off — the whole reason a lead time exists */}
-        {leaveTime !== '' && (
+        {leaveTime !== '' && !isCarpool && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Timer className="size-4 shrink-0" aria-hidden="true" />
             <span>{t('rides.leaveAt', { time: leaveTime })}</span>
@@ -590,6 +618,10 @@ const RideCard = memo(function RideCard({
               onDelete={onDeleteLeg}
               isActionsDisabled={isActionsDisabled}
               readOnly={readOnly}
+              // The driver's own leg starts where the car does, not at a stop.
+              showStop={
+                isCarpool && leg.transport.personId !== journey.driverId
+              }
             />
           ))}
         </ul>

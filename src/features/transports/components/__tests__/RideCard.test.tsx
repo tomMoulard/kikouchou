@@ -330,6 +330,48 @@ describe('RideCard', () => {
     expect(screen.getByText('Paris CDG')).toBeInTheDocument();
   });
 
+  it('draws a carpool by its departure, its far end and each passenger stop', () => {
+    const rideId = 'ride-1' as RideId,
+      ride: Ride = {
+        id: rideId,
+        tripId: TRIP_ID,
+        direction: 'pickup',
+        kind: 'carpool',
+        meetDatetime: MEET_DATETIME,
+        location: 'Lyon',
+        // Left over from when it was a shuttle; a carpool ignores it.
+        leadTimeMinutes: 30,
+        driverId: DRIVER.id,
+      };
+
+    renderCard(
+      resolveFixture(
+        [
+          makeTransport('t-driver', DRIVER.id, '2026-07-15T18:00:00', {
+            rideId,
+            location: 'The house',
+          }),
+          makeTransport('t-alice', ALICE.id, '2026-07-15T16:00:00', {
+            rideId,
+            location: 'Valence',
+          }),
+        ],
+        [ride],
+        [ALICE, DRIVER],
+      ),
+    );
+
+    expect(screen.getByText('rides.carpoolDirections.pickup')).toBeInTheDocument();
+    expect(screen.getByText('rides.departAt(time=14:30)')).toBeInTheDocument();
+    expect(screen.getByText('rides.carpoolFrom(location=Lyon)')).toBeInTheDocument();
+    expect(screen.getByText('rides.carpoolStop(location=Valence)')).toBeInTheDocument();
+    // The driver's own leg starts with the car: no stop of its own.
+    expect(
+      screen.queryByText('rides.carpoolStop(location=The house)'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/rides\.leaveAt/)).not.toBeInTheDocument();
+  });
+
   it('moves the leave time with the ride lead time', () => {
     renderCard(resolveSharedRide({ leadTimeMinutes: 90 }));
 

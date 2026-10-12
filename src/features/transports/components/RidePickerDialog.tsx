@@ -118,6 +118,18 @@ const RidePickerDialog = memo(function RidePickerDialog({
                     <Clock className="size-4 shrink-0" aria-hidden="true" />
                     {formatTransportDatetime(ride.meetDatetime, dateLocale, 'dayAndTime')}
                   </span>
+                  {/* A carpool is offered for being on the way, not for meeting
+                      here, so the guest needs to see where it comes from. */}
+                  {ride.kind === 'carpool' && (
+                    <span className="text-xs text-muted-foreground">
+                      {t(
+                        ride.direction === 'pickup'
+                          ? 'rides.carpoolFrom'
+                          : 'rides.carpoolTo',
+                        { location: ride.location },
+                      )}
+                    </span>
+                  )}
                   <span className="flex items-center gap-2 text-xs text-muted-foreground">
                     {driver ? (
                       <>

@@ -15,6 +15,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CARPOOL_LEAD_TIME_MINUTES,
+  CARPOOL_MAX_SPAN_HOURS,
+  isWithinRideWindow,
   RIDE_MATCH_WINDOW_MINUTES,
   resolveRides,
   rideConcernsPerson,
@@ -451,5 +454,87 @@ describe('selectRideByLeg', () => {
     expect(journeys).toHaveLength(1);
     expect(journeys[0]?.isLegacy).toBe(true);
     expect(selectRideByLeg(journeys).size).toBe(0);
+  });
+});
+
+describe('resolveRides for a carpool', () => {
+  it('reads an absent kind as a shuttle', () => {
+    const [journey] = resolveRides({
+      transports: [],
+      rides: [makeRide('r1', '2026-07-15T10:00:00.000Z')],
+      vehicles: [],
+      persons: [],
+    });
+
+    expect(journey?.kind).toBe('shuttle');
+  });
+
+  it('sets off at its own time, whatever lead time the row still carries', () => {
+    const [journey] = resolveRides({
+      transports: [],
+      rides: [
+        makeRide('r1', '2026-07-15T10:00:00.000Z', {
+          kind: 'carpool',
+          leadTimeMinutes: 45,
+        }),
+      ],
+      vehicles: [],
+      persons: [],
+    });
+
+    expect(journey?.leadTimeMinutes).toBe(CARPOOL_LEAD_TIME_MINUTES);
+    expect(journey?.leaveAtMs).toBe(journey?.meetAtMs);
+  });
+
+  it('does not flag a stop reached hours after the car sets off', () => {
+    const journeys = resolveRides({
+      transports: [
+        makeTransport('t1', 'alice', '2026-07-15T14:00:00.000Z', {
+          rideId: 'r1' as RideId,
+        }),
+      ],
+      rides: [makeRide('r1', '2026-07-15T10:00:00.000Z', { kind: 'carpool' })],
+      vehicles: [],
+      persons: [makePerson('alice')],
+    });
+
+    expect(selectMismatchedLegs(journeys)).toEqual([]);
+  });
+
+  it('flags a stop before the car sets off, and one beyond a day of driving', () => {
+    const journeys = resolveRides({
+      transports: [
+        makeTransport('early', 'alice', '2026-07-15T08:00:00.000Z', {
+          rideId: 'r1' as RideId,
+        }),
+        makeTransport('late', 'bob', '2026-07-16T09:00:00.000Z', {
+          rideId: 'r1' as RideId,
+        }),
+      ],
+      rides: [makeRide('r1', '2026-07-15T10:00:00.000Z', { kind: 'carpool' })],
+      vehicles: [],
+      persons: [makePerson('alice'), makePerson('bob')],
+    });
+
+    expect(
+      selectMismatchedLegs(journeys).map(({ leg }) => [leg.transport.id, leg.mismatch]),
+    ).toEqual([
+      ['early', 'before'],
+      ['late', 'after'],
+    ]);
+  });
+});
+
+describe('isWithinRideWindow', () => {
+  it('keeps a shuttle window symmetric', () => {
+    expect(isWithinRideWindow(RIDE_MATCH_WINDOW_MINUTES, 'shuttle')).toBe(true);
+    expect(isWithinRideWindow(-RIDE_MATCH_WINDOW_MINUTES - 1, 'shuttle')).toBe(false);
+    expect(isWithinRideWindow(RIDE_MATCH_WINDOW_MINUTES + 1, 'shuttle')).toBe(false);
+  });
+
+  it('lets a carpool reach its stops up to its maximum span', () => {
+    expect(isWithinRideWindow(CARPOOL_MAX_SPAN_HOURS * 60, 'carpool')).toBe(true);
+    expect(isWithinRideWindow(CARPOOL_MAX_SPAN_HOURS * 60 + 1, 'carpool')).toBe(false);
+    expect(isWithinRideWindow(-RIDE_MATCH_WINDOW_MINUTES - 1, 'carpool')).toBe(false);
   });
 });

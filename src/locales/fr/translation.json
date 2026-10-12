@@ -1840,6 +1840,24 @@
       "pickup": "Aller chercher",
       "dropoff": "Déposer"
     },
+    "kind": "Type de trajet",
+    "kinds": {
+      "shuttle": "Navette depuis la maison",
+      "carpool": "Covoiturage en route"
+    },
+    "carpoolHint": "Un invité vient en voiture, ou repart en voiture, et prend d'autres invités en chemin. Chaque passager est pris au lieu et à l'heure de son propre transport. Les invités qui attendent près de l'itinéraire voient cette voiture dans leur liste.",
+    "carpoolDirections": {
+      "pickup": "Covoiturage aller",
+      "dropoff": "Covoiturage retour"
+    },
+    "carpoolDepartDatetime": "Date et heure de départ",
+    "carpoolStart": "Lieu de départ du conducteur",
+    "carpoolEnd": "Lieu d'arrivée du conducteur",
+    "carpoolLocationPlaceholder": "ex. Paris",
+    "carpoolFrom": "Depuis {{location}}",
+    "carpoolTo": "Vers {{location}}",
+    "carpoolStop": "Arrêt : {{location}}",
+    "departAt": "Départ à {{time}}",
     "meetAt": "Rendez-vous à {{time}}",
     "meetingPoint": "Point de rendez-vous",
     "leaveAt": "Départ à {{time}}",

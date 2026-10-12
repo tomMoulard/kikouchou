@@ -75,6 +75,7 @@ import {
   MAX_EXPENSE_SPLITS,
   normalizePersonHeadcount,
   RIDE_DIRECTIONS,
+  RIDE_KINDS,
   ROOM_ICONS,
 } from '@/types';
 
@@ -462,6 +463,8 @@ function buildTransportRecord(
  *   where it is permanently due and permanently on screen.
  * - `direction` drives an icon and a phrase lookup. An unknown value from a
  *   newer peer falls back to `pickup` rather than rendering an empty pill.
+ * - `kind` decides what `location` means. An unknown value from a newer peer
+ *   is dropped, which reads as `shuttle`, the meaning every older ride has.
  *
  * @param ride - The record as the document holds it
  * @param tripId - The local trip id, which is the only write key
@@ -487,6 +490,9 @@ function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
 
   if (!RIDE_DIRECTIONS.includes(row.direction)) {
     row.direction = 'pickup';
+  }
+  if (row.kind !== undefined && !RIDE_KINDS.includes(row.kind)) {
+    delete row.kind;
   }
 
   return row;

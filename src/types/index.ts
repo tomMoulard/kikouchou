@@ -124,6 +124,24 @@ export const RIDE_DIRECTIONS: readonly RideDirection[] = [
 ] as const;
 
 /**
+ * What shape of car journey a ride is.
+ *
+ * `shuttle` is a car based at the house that meets guests at one place, a
+ * station or an airport, and comes back. `carpool` is a guest driving their
+ * own way to the trip, or home from it, and collecting other guests at their
+ * own stops along the route. The {@link RideDirection} keeps its meaning for
+ * both: `pickup` ends at the house, `dropoff` starts there.
+ *
+ * Absent on every ride written before carpools existed, and read as `shuttle`.
+ */
+export type RideKind = 'shuttle' | 'carpool';
+
+/**
+ * All ride kinds, in the order they are offered in the form.
+ */
+export const RIDE_KINDS: readonly RideKind[] = ['shuttle', 'carpool'] as const;
+
+/**
  * Kind of child restraint a guest needs in a car.
  *
  * Deliberately *declared* rather than derived. Which seat a child needs is a
@@ -1186,6 +1204,19 @@ export interface Ride extends Identifiable, TripScoped {
   direction: RideDirection;
 
   /**
+   * Whether this is a shuttle from the house or a carpool along a route.
+   *
+   * For a `carpool`, {@link meetDatetime} is when the car sets off from its
+   * first point, {@link location} is the far end of the route (where the driver
+   * starts for a `pickup`, where they end for a `dropoff`), and each passenger's
+   * stop is the `location` of their own leg. The stops therefore stay on the
+   * passengers' own records, for the same reason membership does.
+   *
+   * Absent means `shuttle`.
+   */
+  kind?: RideKind;
+
+  /**
    * When the car must be at the meeting point, ISO 8601 with timezone.
    *
    * This is the *rendez-vous*, not the departure from the house — subtract
@@ -1894,6 +1925,8 @@ export interface VehicleFormData {
 export interface RideFormData {
   /** Whether the car is fetching guests or taking them away */
   direction: RideDirection;
+  /** A shuttle from the house, or a carpool along a route. Absent means shuttle */
+  kind?: RideKind;
   /** When the car must be at the meeting point, ISO 8601 with timezone */
   meetDatetime: ISODateTimeString;
   /** Where the car meets its passengers */
