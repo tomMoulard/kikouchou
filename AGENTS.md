@@ -14,6 +14,7 @@ bun run build                 # tsc -b && vite build
 # Quality
 bun run lint                  # ESLint
 bun run validate              # generate-proto + test:run + lint + build + generate-icons + test:e2e:run
+                              # Runs the WHOLE Playwright suite: leave it to CI (see E2E tests)
                               # (generate-proto runs first and needs `buf` installed)
 
 # Unit tests (Vitest)
@@ -1191,6 +1192,17 @@ the metric that fell instead of hiding it in a table.
   deletes tests or adds untested branches.
 
 **E2E tests** — `e2e/{feature}.spec.ts`; use `@playwright/test`; `@axe-core/playwright` available for a11y checks.
+
+- **When you build a feature, run only the relevant specs. CI runs the full
+  suite.** Run the spec files that cover the screens and flows you changed,
+  plus any spec you added or edited:
+  `npx playwright test e2e/trip-lifecycle.spec.ts e2e/room-assignment.spec.ts`.
+  Do not run `bun run test:e2e` or `bun run validate` locally, because both
+  run every Playwright spec. For the local gate, run `tsc -b`, `bun run lint`,
+  `bun run test:run` and the relevant specs. If you do not know which specs
+  cover a change, grep `e2e/` for the route, the component or the visible text.
+  The exception is a change that this file tells you to prove with a full run,
+  for example the lazy locale bundles above.
 
 - **A trip page's names are not unique in the document.** From `xl` up, the
   organiser's column sits beside the trip pages and repeats what they list: the
