@@ -51,6 +51,14 @@ const STORAGE_KEY = 'kikouchou-install-dismissed',
 export interface InstallPromptProps {
   /** Additional CSS classes to apply to the container */
   readonly className?: string;
+  /**
+   * Hides the card without dismissing it, for as long as it is true.
+   *
+   * Set while the visitor is creating a trip: the card would sit over a form
+   * they are filling in. Nothing is written, so the card comes back, after the
+   * usual delay, on the next page.
+   */
+  readonly suppressed?: boolean;
 }
 
 // ============================================================================
@@ -100,6 +108,7 @@ function storeDismissal(): void {
  * - Displays a fixed banner at the bottom of the screen
  * - Only renders when installation is available
  * - Respects user dismissal for 7 days via localStorage
+ * - Stays out of the way while `suppressed` (the trip creation form)
  * - Answers an explicit `?install=1` request at once, dismissal and delay aside
  * - Shows success feedback after installation
  * - Fully accessible with ARIA attributes
@@ -123,6 +132,7 @@ function storeDismissal(): void {
  */
 export const InstallPrompt = memo(function InstallPrompt({
   className,
+  suppressed = false,
 }: InstallPromptProps): ReactElement | null {
   const { t } = useTranslation(),
    {
@@ -200,7 +210,7 @@ export const InstallPrompt = memo(function InstallPrompt({
     // hides a card the visitor asked to see.
     if (installIntent) {return undefined;}
 
-    if (canInstall && !isDismissed) {
+    if (canInstall && !isDismissed && !suppressed) {
       // Small delay before showing to avoid flash on page load
       const timer = setTimeout(() => {
         setIsVisible(true);
@@ -213,7 +223,7 @@ export const InstallPrompt = memo(function InstallPrompt({
     }
     // When conditions change (not canInstall or isDismissed), hide via timeout cleanup
     return undefined;
-  }, [canInstall, isDismissed, installIntent]);
+  }, [canInstall, isDismissed, installIntent, suppressed]);
 
   /**
    * A request raised after mount shows the card at once, dismissal or not.
@@ -299,8 +309,9 @@ export const InstallPrompt = memo(function InstallPrompt({
   //   is the whole offer. A list of menu steps is not an install button, and a
   //   card that cannot install anything is one more thing to dismiss.
   // - User has dismissed recently
+  // - The visitor is creating a trip (`suppressed`)
   // - Not yet visible (initial delay)
-  if (!canInstall || isDismissed || !isVisible) {
+  if (!canInstall || isDismissed || suppressed || !isVisible) {
     return null;
   }
 

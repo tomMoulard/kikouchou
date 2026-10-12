@@ -5,7 +5,7 @@
  * @module App
  */
 
-import { type ReactElement } from 'react';
+import { type ReactElement, useSyncExternalStore } from 'react';
 import { ThemeProvider } from 'next-themes';
 import { RouterProvider } from 'react-router-dom';
 
@@ -17,6 +17,7 @@ import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
 import { PetMount } from '@/features/pet/components/PetMount';
 import { applyStoredPalette } from '@/lib/palette';
+import { isTripCreationPath } from '@/lib/pwa/trip-creation-path';
 import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
 
@@ -52,6 +53,42 @@ applyStoredTheme();
 applyStoredPalette();
 
 // ============================================================================
+// Hooks
+// ============================================================================
+
+/**
+ * Subscribes to the router's location from outside `RouterProvider`.
+ *
+ * @param onChange - Called by the router after each state change
+ * @returns The unsubscribe function
+ */
+function subscribeToRouter(onChange: () => void): () => void {
+  return router.subscribe(onChange);
+}
+
+/**
+ * Reads the current path, base path included.
+ *
+ * @returns The router's current pathname
+ */
+function getRouterPathname(): string {
+  return router.state.location.pathname;
+}
+
+/**
+ * Whether the visitor is on the trip creation form.
+ *
+ * The global chrome below sits outside `RouterProvider`, where `useLocation`
+ * throws, so this reads the router object directly.
+ *
+ * @returns True on `/trips/new`
+ */
+function useIsCreatingTrip(): boolean {
+  const pathname = useSyncExternalStore(subscribeToRouter, getRouterPathname);
+  return isTripCreationPath(pathname, router.basename ?? '/');
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -82,6 +119,8 @@ applyStoredPalette();
  * ```
  */
 function App(): ReactElement {
+  const isCreatingTrip = useIsCreatingTrip();
+
   return (
     /*
       `attribute="class"` is not optional: `index.css` declares the dark
@@ -167,7 +206,11 @@ function App(): ReactElement {
       */}
       <StatusAnnouncer />
       <PaletteSync />
-      <InstallPrompt />
+      {/*
+        Hidden on the trip creation form: the card sits over the form the
+        visitor is filling in. It comes back on the next page.
+      */}
+      <InstallPrompt suppressed={isCreatingTrip} />
       <OfflineIndicator />
       {/*
         The pet, when the user turned it on in Settings. Out here with the
