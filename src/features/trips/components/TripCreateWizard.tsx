@@ -1,15 +1,15 @@
 /**
  * @fileoverview The first trip, one question per screen.
  *
- * Shown on `/trips/new` for a device that holds no trip yet, behind the
- * `first-trip-wizard` feature flag, and compared against the one-page form on
- * `trip_created`. Five questions — name, dates, place, guests, rooms — and a
+ * Shown on `/trips/new` for a device that holds no trip of its own yet. It won
+ * the `first-trip-wizard` experiment against the one-page form, which is still
+ * what a later trip gets. Five questions (name, dates, place, guests, rooms) and a
  * screen that says the trip is ready. Enter advances, Back goes back, and
  * everything after the dates can be skipped: a trip needs a name and two
  * dates, nothing else, and the rooms page is a fine place to add rooms.
  *
  * The writes are `createTripWithDetails`, the same call the one-page form
- * makes, so the two arms differ in their screens and in nothing else.
+ * makes, so the two paths differ in their screens and in nothing else.
  *
  * It is also the screen behind a trip template link. A `prefill` carries the
  * place, the map pin, the description, the currency and the rooms the

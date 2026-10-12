@@ -55,6 +55,7 @@ import {
 } from '@/components/ui/sheet';
 import { listGuestsOnSiteOnDate } from '@/features/persons/utils/guest-presence';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
+import { NavigationVisibilityContext } from '@/contexts/NavigationVisibilityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
@@ -1136,6 +1137,12 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    isWideViewport = useWideViewport(),
    isShortLandscape = useShortLandscapeViewport(),
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
+  /**
+   * Whether the page on screen asked for the navigation to go, through
+   * `useHideNavigation`. The first-trip wizard does: on a first visit no
+   * trip tab can open, and the bar only competes with the one question.
+   */
+   [isNavigationHiddenByPage, setNavigationHiddenByPage] = useState(false),
 
   // Memoize derived values to prevent unnecessary re-renders
    tripName = useMemo(() => currentTrip?.name ?? null, [currentTrip]),
@@ -1193,7 +1200,13 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    * that the furniture costs more than it is worth. A phone turned upright
    * puts every piece of it straight back.
    */
-   showFocusedForm = isShortLandscape && isFocusedFormPath(location.pathname);
+   showFocusedForm = isShortLandscape && isFocusedFormPath(location.pathname),
+
+  /**
+   * Whether the sidebar and the bottom bar are off the screen. The header
+   * stays unless the focused form drops it too: it carries no navigation.
+   */
+   hideNavigation = showFocusedForm || isNavigationHiddenByPage;
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1204,88 +1217,90 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
     // No background here: `body` paints it. A background on this element would
     // cover `SeasonalBackdrop`, which sits at `-z-10` so that it paints over
     // the page background and under everything else.
-    <div className="min-h-svh">
-      {showFocusedForm ? null : <SeasonalBackdrop />}
-      {/* Skip link for keyboard navigation - allows users to bypass navigation */}
-      <a
-        href="#main-content"
-        className={cn(
-          'sr-only focus:not-sr-only',
-          'focus:absolute focus:top-2 focus:left-2 focus:z-[100]',
-          'focus:px-4 focus:py-2 focus:rounded-md',
-          'focus:bg-background focus:text-foreground',
-          'focus:ring-2 focus:ring-ring focus:ring-offset-2',
-          'focus:shadow-lg',
+    <NavigationVisibilityContext.Provider value={setNavigationHiddenByPage}>
+      <div className="min-h-svh">
+        {showFocusedForm ? null : <SeasonalBackdrop />}
+        {/* Skip link for keyboard navigation - allows users to bypass navigation */}
+        <a
+          href="#main-content"
+          className={cn(
+            'sr-only focus:not-sr-only',
+            'focus:absolute focus:top-2 focus:left-2 focus:z-[100]',
+            'focus:px-4 focus:py-2 focus:rounded-md',
+            'focus:bg-background focus:text-foreground',
+            'focus:ring-2 focus:ring-ring focus:ring-offset-2',
+            'focus:shadow-lg',
+          )}
+        >
+          {t('nav.skipToMain', 'Skip to main content')}
+        </a>
+
+        {/* Header */}
+        {showFocusedForm ? null : <Header tripName={tripName} />}
+
+        {/* Desktop sidebar */}
+        {hideNavigation ? null : (
+          <DesktopSidebar
+            isCollapsed={isSidebarCollapsed}
+            onToggle={toggleSidebar}
+            tripId={tripId}
+            trip={currentTrip}
+          />
         )}
-      >
-        {t('nav.skipToMain', 'Skip to main content')}
-      </a>
 
-      {/* Header */}
-      {showFocusedForm ? null : <Header tripName={tripName} />}
+        {/* Main content area */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={cn(
+            // `pb-bottom-stack` is the one place the bottom-edge arithmetic
+            // lives. `pb-20` here cleared the `h-16` nav bar and nothing else, so
+            // the last row of every list sat inside the FAB's 80-136px band and
+            // four pages had each pasted their own compensation on top of it.
+            // With the shell gone there is no nav bar and no FAB to clear, and
+            // the padding that cleared them is the height the form needs back.
+            showFocusedForm ? 'pt-2 pb-4' : hideNavigation ? 'pt-4 pb-6' : 'pb-bottom-stack pt-4',
+            'transition-all duration-300',
+            // Adjust left margin based on sidebar state (desktop only)
+            hideNavigation ? '' : isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',
+            'px-4 md:px-6',
+            // Remove focus outline when programmatically focused via skip link
+            'focus:outline-none',
+          )}
+        >
+          {showViewerCard ? <ViewerUnlockCard className="mb-4" /> : null}
+          {showReminderOffer && canReceivePush ? (
+            <ReminderCard trip={currentTrip} className="mb-4" />
+          ) : null}
+          {showReminderOffer && !canReceivePush ? (
+            <InstallNudgeCard trip={currentTrip} className="mb-4" />
+          ) : null}
+          {/*
+            Two columns from `xl` up on the trip pages, one everywhere else.
 
-      {/* Desktop sidebar */}
-      {showFocusedForm ? null : (
-        <DesktopSidebar
-          isCollapsed={isSidebarCollapsed}
-          onToggle={toggleSidebar}
-          tripId={tripId}
-          trip={currentTrip}
-        />
-      )}
+            The pages keep their own reading-width caps: they simply stop being
+            the only thing on a 1720px screen. `min-w-0` on the content column is
+            what lets a page's own horizontal scroller — the calendar timeline,
+            the wide tables — still shrink instead of pushing the panel off the
+            edge, and the panel sticks so it stays readable down a long list.
+          */}
+          {showGlancePanel && currentTrip !== null ? (
+            <div className="xl:flex xl:items-start xl:gap-6">
+              <div className="min-w-0 xl:flex-1">{children}</div>
+              <TripGlancePanel
+                trip={currentTrip}
+                className="hidden xl:sticky xl:top-6 xl:block xl:w-80 xl:shrink-0"
+              />
+            </div>
+          ) : (
+            children
+          )}
+        </main>
 
-      {/* Main content area */}
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className={cn(
-          // `pb-bottom-stack` is the one place the bottom-edge arithmetic
-          // lives. `pb-20` here cleared the `h-16` nav bar and nothing else, so
-          // the last row of every list sat inside the FAB's 80-136px band and
-          // four pages had each pasted their own compensation on top of it.
-          // With the shell gone there is no nav bar and no FAB to clear, and
-          // the padding that cleared them is the height the form needs back.
-          showFocusedForm ? 'pt-2 pb-4' : 'pb-bottom-stack pt-4',
-          'transition-all duration-300',
-          // Adjust left margin based on sidebar state (desktop only)
-          showFocusedForm ? '' : isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',
-          'px-4 md:px-6',
-          // Remove focus outline when programmatically focused via skip link
-          'focus:outline-none',
-        )}
-      >
-        {showViewerCard ? <ViewerUnlockCard className="mb-4" /> : null}
-        {showReminderOffer && canReceivePush ? (
-          <ReminderCard trip={currentTrip} className="mb-4" />
-        ) : null}
-        {showReminderOffer && !canReceivePush ? (
-          <InstallNudgeCard trip={currentTrip} className="mb-4" />
-        ) : null}
-        {/*
-          Two columns from `xl` up on the trip pages, one everywhere else.
-
-          The pages keep their own reading-width caps: they simply stop being
-          the only thing on a 1720px screen. `min-w-0` on the content column is
-          what lets a page's own horizontal scroller — the calendar timeline,
-          the wide tables — still shrink instead of pushing the panel off the
-          edge, and the panel sticks so it stays readable down a long list.
-        */}
-        {showGlancePanel && currentTrip !== null ? (
-          <div className="xl:flex xl:items-start xl:gap-6">
-            <div className="min-w-0 xl:flex-1">{children}</div>
-            <TripGlancePanel
-              trip={currentTrip}
-              className="hidden xl:sticky xl:top-6 xl:block xl:w-80 xl:shrink-0"
-            />
-          </div>
-        ) : (
-          children
-        )}
-      </main>
-
-      {/* Mobile bottom navigation */}
-      {showFocusedForm ? null : <MobileNav tripId={tripId} />}
-    </div>
+        {/* Mobile bottom navigation */}
+        {hideNavigation ? null : <MobileNav tripId={tripId} />}
+      </div>
+    </NavigationVisibilityContext.Provider>
   );
 }
 

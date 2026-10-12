@@ -307,10 +307,10 @@ How the seed behaves, and why:
   that uploads nothing. Do not add a settings read to that live query: it made
   `trip-sharing-sync.spec.ts` fail twice as often under load. For the same reason it has no guest group: a group is synced with the
   account.
-- **It is not the user's own trip.** `TripsEntryRedirect` does not count it, so
-  a first open still goes to the create form and the first-trip wizard
-  experiment keeps its traffic. The "plan your own trip" card does not count it
-  either. Read it from `useTripContext().sampleTripId`.
+- **It is not the user's own trip.** `TripsEntryRedirect` and `TripCreatePage`
+  do not count it, so a first open still goes to `/trips/new` and gets the
+  first-trip wizard. The "plan your own trip" card does not count it either.
+  Read it from `useTripContext().sampleTripId`.
 - **It starts two weeks from today.** Dates are relative, so the sample does not
   go stale, and no reminder or "leave now" notice fires for it.
 - **Automation does not get it.** `navigator.webdriver` turns the seed off, so
@@ -530,12 +530,19 @@ or `false`; without an analytics client it is `false` at once. A screen that
 swaps experiences on a flag waits on `undefined` rather than flashing the
 control arm. `localStorage['kikouchou-flag:<key>']` = `on` | `off` forces an
 arm without a PostHog project, which is how the e2e specs reach a flagged
-experience on servers that carry no key. There are two flags. The first-trip
-wizard (`first-trip-wizard`) swaps the one-page form for the wizard, and
+experience on servers that carry no key. There is one flag:
 `ent-trip-templates` offers the publish control on a trip's settings screen to
 the static "enterprise customers" cohort. A screen behind a flag keeps one code
-path for the writes — `createTripWithDetails` in both cases — so the arms differ
-in what they show and not in what they save.
+path for the writes, so the arms differ in what they show and not in what they
+save.
+
+The first-trip wizard was the other flag (`first-trip-wizard`). It went to 100%
+and its flag is gone from the code: a device with no trip of its own always
+gets `TripCreateWizard` on `/trips/new`, and a later trip gets the one-page
+form. Both write through `createTripWithDetails`. The wizard hides the sidebar
+and the bottom bar through `useHideNavigation`, because no trip tab can open
+on a first visit. An e2e spec that tests the form seeds a trip first
+(`seedTrip`); one that only needs a trip uses `e2e/support/trip-create.ts`.
 
 `ent-trip-templates` gates the **publishing** side only, and deliberately. A
 template link handed out is followed by a customer of that enterprise, who is
