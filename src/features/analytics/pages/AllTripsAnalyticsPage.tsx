@@ -51,7 +51,8 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const {
-    trips,
+    trips: tripsOnDevice,
+    sampleTripId,
     currentTrip,
     isLoading: isTripsLoading,
     error: tripsError,
@@ -60,6 +61,13 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
   // Not live: nothing on this page depends on the time, so a ticking clock
   // would only re-read every trip once a minute to render the same numbers.
   const { now, retryToken, retry } = useAnalyticsClock();
+
+  // The sample trip is a demo of the app, not one of the user's trips, so it
+  // stays out of their totals, map and breakdown. Its own page still works.
+  const trips = useMemo(
+    () => tripsOnDevice.filter((trip) => trip.id !== sampleTripId),
+    [sampleTripId, tripsOnDevice],
+  );
 
   const tripScopeHref = useMemo(
     () => (currentTrip ? `/trips/${currentTrip.id}/analytics` : '/trips'),

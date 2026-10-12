@@ -206,6 +206,39 @@ describe('AllTripsAnalyticsPage', () => {
     expect(within(breakdown).getByText('Trip B')).toBeInTheDocument();
   });
 
+  it('leaves the sample trip out of the totals and the breakdown', async () => {
+    const sample = trip('trip-sample' as TripId, 'Sample trip');
+    mockTripContext({
+      trips: [TRIP_A_ROW, sample],
+      sampleTripId: sample.id,
+    });
+    await db.persons.bulkPut([
+      person('p1', TRIP_A, 2),
+      person('p2', sample.id, 5),
+    ]);
+
+    render(<AllTripsAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(statValue('analytics.totalPeople')).toBe('2');
+    });
+    expect(statValue('analytics.trips')).toBe('1');
+    const breakdown = screen.getByRole('list', { name: 'analytics.tripBreakdown' });
+    expect(within(breakdown).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(breakdown).queryByText('Sample trip')).not.toBeInTheDocument();
+  });
+
+  it('shows the empty state when the sample is the only trip', async () => {
+    const sample = trip('trip-sample' as TripId, 'Sample trip');
+    mockTripContext({ trips: [sample], currentTrip: sample, sampleTripId: sample.id });
+
+    render(<AllTripsAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(screen.getByText('analytics.emptyTrips')).toBeInTheDocument();
+    });
+  });
+
   it('renders an alert when the read fails', async () => {
     const boom = new Error('IndexedDB is gone');
     vi.spyOn(db.persons, 'where').mockImplementation(() => {
