@@ -1,22 +1,18 @@
 /**
  * @fileoverview The offer itself, as a dialog, for every screen that asks.
  *
- * Lifted out of `UpgradePrompt` when a second caller appeared. `TripTemplateCard`
- * asks the same question from the trip settings screen when the enterprise flag
- * says no, and two dialogs describing one fake tier would drift apart within a
- * week: the price, the feature list and the disclaimer are the offer, and the
- * offer has to read the same wherever it is opened.
+ * `TripTemplateCard` opens it from the trip settings screen when the enterprise
+ * flag says no. The price, the feature list and the disclaimer are the offer.
  *
- * What stays with the caller is the card and the funnel steps a card owns:
- * `upgrade_prompt_shown`, `upgrade_prompt_opened`, `upgrade_prompt_dismissed`
- * and `upgrade_plan_clicked` all describe something that happened on a card.
+ * What stays with the caller is the button and the funnel step it owns:
+ * `upgrade_prompt_opened` describes something that happened outside the dialog.
  * This component owns the one step that happens inside it,
  * `upgrade_intent_declared`, and nothing else.
  *
  * `hasDeclared` and `onDeclare` are props rather than a `useUpgradeInterest`
  * call of this component's own, deliberately. That hook reads localStorage once
- * per instance, so a second copy here would answer the caller's card with a
- * stale value: the reader would leave an address and the card behind the dialog
+ * per instance, so a second copy here would answer the caller with a stale
+ * value: the reader would leave an address and the caller behind the dialog
  * would still think the question was unanswered.
  *
  * Honesty rule, inherited from the card: this must never claim a limit exists,
