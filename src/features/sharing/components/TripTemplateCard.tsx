@@ -21,13 +21,11 @@
  *   still being the only person who can use them.
  * - **Flag off, or still being decided.** The same card, the same description,
  *   a disabled publish button with a line saying why, and a second button that
- *   opens the paid-tier offer — the same `UpgradeOfferDialog` the "Would you
- *   pay for Kikouchou?" card opens, so an answer given here lands in the same
- *   funnel and the same waiting list as an answer given anywhere else.
+ *   opens the paid-tier offer — `UpgradeOfferDialog`, so an answer given here
+ *   lands in the paid-tier funnel and its waiting list.
  *
- * Undecided reads as off, the "fail closed" reading `UpgradePrompt` takes for
- * the same flag: the alternative is a live publish button that goes dead under
- * somebody's cursor a moment later.
+ * Undecided reads as off, the "fail closed" reading: the alternative is a live
+ * publish button that goes dead under somebody's cursor a moment later.
  *
  * @module features/sharing/components/TripTemplateCard
  */
@@ -185,15 +183,13 @@ export const TripTemplateCard = memo(function TripTemplateCard({
   /**
    * Opens the paid-tier offer, and counts the open.
    *
-   * The same event the upgrade card's own button sends, with the same
-   * placement, because this is the same step of the same funnel reached from a
-   * different button. A separate event would make the funnel unreadable.
+   * `upgrade_prompt_opened` is the interest step of the paid-tier funnel. A
+   * separate event would make the funnel unreadable.
    *
    * No `captureFeatureInteraction`, and there must not be one. That call means
    * "somebody acted on the enabled experience", and this button only exists
    * when the flag said no: a click on it is evidence about the offer, not about
-   * the gated feature. `UpgradePrompt` reports the interaction because its own
-   * offer button sits behind the gate.
+   * the gated feature.
    */
   const handleOfferOpen = useCallback((): void => {
     captureEvent('upgrade_prompt_opened', {

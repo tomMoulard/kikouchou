@@ -40,7 +40,6 @@ import { AccountSection } from '@/features/auth/components/AccountSection';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { PetSettingsCard } from '@/features/pet';
-import { UpgradePrompt } from '@/features/upgrade';
 import { db } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
 import { captureEvent } from '@/lib/posthog';
@@ -338,10 +337,6 @@ function SettingsPageComponent(): ReactElement {
             only card here that asks the browser for something, and above About
             because it is a preference rather than reference material. */}
         <NotificationSettings />
-
-        {/* Would anybody pay? A fake-door test, below the preferences and
-            above the reference material. See `features/upgrade`. */}
-        <UpgradePrompt placement="settings" />
 
         {/* About Section */}
         <AboutSection />

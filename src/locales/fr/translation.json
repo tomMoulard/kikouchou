@@ -1623,13 +1623,6 @@
     "printSummaryNoTrip": "Ouvrez un voyage pour imprimer son récapitulatif."
   },
   "upgrade": {
-    "card": {
-      "title": "Paieriez-vous pour Kikouchou ?",
-      "description": "Nous réfléchissons à une offre payante pour celles et ceux qui organisent beaucoup. Dites-nous si cela vaut la peine.",
-      "action": "Voir ce que cela comprendrait",
-      "notNow": "Pas maintenant",
-      "locked": "L'offre complète est réservée aux comptes entreprise pour le moment. Les prix ci-dessus prennent quand même votre réponse."
-    },
     "dialog": {
       "title": "Kikouchou Pro",
       "description": "Environ {{price}} € par mois. L'application gratuite garderait {{limit}} voyages actifs, et Pro lèverait cette limite.",
@@ -1641,10 +1634,6 @@
       "emailInvalid": "Indiquez une adresse e-mail à laquelle nous pouvons vous joindre.",
       "alreadyDeclared": "Merci de nous avoir dit que cela vous intéresse.",
       "disclaimer": "Rien n'est en vente et rien n'est facturé. Nous gardons votre adresse uniquement pour vous prévenir si cela est construit, et nous n'envoyons rien d'autre."
-    },
-    "plans": {
-      "per_trip": "{{price}} € par voyage",
-      "unlimited_monthly": "{{price}} € par mois, voyages illimités"
     },
     "features": {
       "unlimitedTrips": "Autant de voyages actifs que vous voulez, au lieu de {{limit}}",
