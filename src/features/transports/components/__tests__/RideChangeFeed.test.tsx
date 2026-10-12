@@ -87,6 +87,7 @@ function makeJourney(meetDatetime: ISODateTimeString): ResolvedRide {
     id: 'ride-a' as RideId,
     ride: undefined,
     direction: 'pickup',
+    kind: 'shuttle',
     meetDatetime,
     meetAtMs: new Date(meetDatetime).getTime(),
     location: 'Gare Montparnasse',

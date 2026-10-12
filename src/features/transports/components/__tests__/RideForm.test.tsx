@@ -286,6 +286,46 @@ describe('RideForm', () => {
     );
   });
 
+  it('submits a carpool with no lead time and relabels its fields', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderForm({ onSubmit });
+
+    await user.click(screen.getByLabelText('rides.kinds.carpool'));
+
+    // A carpool's time already is its departure: no lead time is asked.
+    expect(screen.queryByLabelText('rides.leadTime')).not.toBeInTheDocument();
+    expect(screen.getByText('rides.carpoolHint')).toBeInTheDocument();
+    expect(screen.getByLabelText('rides.carpoolDirections.pickup')).toBeInTheDocument();
+    expect(screen.getByText('rides.carpoolStart')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/rides.carpoolDepartDatetime/), {
+      target: { value: '2026-07-15T09:00' },
+    });
+    await user.type(screen.getByTestId('location-picker'), 'Lyon');
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'carpool',
+        direction: 'pickup',
+        meetDatetime: new Date('2026-07-15T09:00').toISOString(),
+        location: 'Lyon',
+        leadTimeMinutes: undefined,
+      }),
+    );
+  });
+
+  it('names the end of a carpool home as where the driver ends', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.click(screen.getByLabelText('rides.kinds.carpool'));
+    await user.click(screen.getByLabelText('rides.carpoolDirections.dropoff'));
+
+    expect(screen.getByText('rides.carpoolEnd')).toBeInTheDocument();
+  });
+
   it('refuses to submit without a meeting time or a place', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);

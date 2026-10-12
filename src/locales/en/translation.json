@@ -1840,6 +1840,24 @@
       "pickup": "Pick-up",
       "dropoff": "Drop-off"
     },
+    "kind": "Kind of ride",
+    "kinds": {
+      "shuttle": "Shuttle from the house",
+      "carpool": "Carpool on the way"
+    },
+    "carpoolHint": "A guest drives to the trip, or home from it, and collects others on the way. Each passenger is picked up at the place and time of their own transport. Guests who wait near the route see this car in their list.",
+    "carpoolDirections": {
+      "pickup": "Carpool to the trip",
+      "dropoff": "Carpool home"
+    },
+    "carpoolDepartDatetime": "Departure date and time",
+    "carpoolStart": "Where the driver sets off",
+    "carpoolEnd": "Where the driver ends the journey",
+    "carpoolLocationPlaceholder": "e.g. Paris",
+    "carpoolFrom": "From {{location}}",
+    "carpoolTo": "To {{location}}",
+    "carpoolStop": "Stop: {{location}}",
+    "departAt": "Sets off at {{time}}",
     "meetAt": "Meeting at {{time}}",
     "meetingPoint": "Meeting point",
     "leaveAt": "Leave at {{time}}",

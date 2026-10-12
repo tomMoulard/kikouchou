@@ -62,6 +62,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useTripContext } from '@/contexts/TripContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
@@ -531,7 +532,8 @@ const UpcomingPickups = memo(function UpcomingPickups({
   const { upcomingPickups, nowMs } = useTransportContext(),
     // A leg sitting in a ride somebody has volunteered for is not unassigned,
     // even though the leg itself carries no `driverId`.
-    { rides, createRide, updateRide, setTransportRide } = useRideContext();
+    { rides, createRide, updateRide, setTransportRide } = useRideContext(),
+    { currentTrip } = useTripContext();
   const { persons } = usePersonContext();
   const { notifySuccess } = useOfflineAwareNotify();
 
@@ -624,13 +626,18 @@ const UpcomingPickups = memo(function UpcomingPickups({
   const joinableRidesByTransport = useMemo(() => {
     const map = new Map<TransportId, readonly Ride[]>();
     for (const pickup of pickupsNeedingDriver) {
-      const candidates = selectJoinableRides(rides, pickup, nowMs);
+      const candidates = selectJoinableRides(
+        rides,
+        pickup,
+        nowMs,
+        currentTrip?.coordinates,
+      );
       if (candidates.length > 0) {
         map.set(pickup.id, candidates);
       }
     }
     return map;
-  }, [pickupsNeedingDriver, rides, nowMs]);
+  }, [pickupsNeedingDriver, rides, nowMs, currentTrip?.coordinates]);
 
   const joinableRides = useMemo(
     () =>

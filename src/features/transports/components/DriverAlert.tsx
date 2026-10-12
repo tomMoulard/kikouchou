@@ -261,11 +261,19 @@ const DriverAlertRow = memo(function DriverAlertRow({
     headline = t(selectHeadlineKey(departure, passengerNames.length > 0), {
       time: leaveClock,
       names: passengerNames.join(', '),
-      location: journey.location,
+      // A carpool's own place is the driver's end of the road; the first
+      // passenger's stop is where they are actually expected.
+      location:
+        journey.kind === 'carpool'
+          ? (journey.legs[0]?.transport.location ?? journey.location)
+          : journey.location,
     }),
-    timesLine = `${t('rides.leaveAt', { time: leaveFull })} · ${t('rides.meetAt', {
-      time: meetFull,
-    })}`,
+    timesLine =
+      journey.kind === 'carpool'
+        ? t('rides.departAt', { time: meetFull })
+        : `${t('rides.leaveAt', { time: leaveFull })} · ${t('rides.meetAt', {
+            time: meetFull,
+          })}`,
     announcement: RideDepartureAnnouncement | undefined =
       status === 'upcoming'
         ? undefined

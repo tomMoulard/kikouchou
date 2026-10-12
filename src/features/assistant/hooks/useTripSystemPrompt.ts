@@ -435,11 +435,20 @@ function formatRideLine(
 ): string {
   const vehicle =
     ride.vehicleId === undefined ? undefined : vehicles.get(ride.vehicleId);
-  const passengers = legs.map((leg) => personNameById(persons, leg.personId));
+  const isCarpool = ride.kind === 'carpool';
+  // A carpool collects each passenger at their own leg's place, so the stop
+  // is named next to them; a shuttle meets everybody at the ride's location.
+  const passengers = legs.map((leg) =>
+    isCarpool
+      ? `${personNameById(persons, leg.personId)} (stop: ${toPromptText(leg.location)})`
+      : personNameById(persons, leg.personId),
+  );
 
   const segments = [
-    `- ${ride.direction} (id: ${ride.id})`,
-    `${formatLocalDatetime(ride.meetDatetime)} at ${toPromptText(ride.location)}`,
+    `- ${isCarpool ? 'carpool ' : ''}${ride.direction} (id: ${ride.id})`,
+    isCarpool
+      ? `sets off ${formatLocalDatetime(ride.meetDatetime)}, ${ride.direction === 'pickup' ? 'from' : 'to'} ${toPromptText(ride.location)}`
+      : `${formatLocalDatetime(ride.meetDatetime)} at ${toPromptText(ride.location)}`,
     // Both stated even when empty: "nobody is driving this yet" is the question
     // the ride list exists to answer, and a missing segment reads as unknown.
     //
@@ -452,7 +461,9 @@ function formatRideLine(
     `car: ${vehicle ? `"${toPromptText(vehicle.name)}"` : 'not chosen'}`,
     // The effective value, not the stored one, so an unset lead time answers
     // "when do I leave" instead of leaving the default unstated.
-    `leaves ${ride.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES} min before`,
+    isCarpool
+      ? ''
+      : `leaves ${ride.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES} min before`,
     passengers.length > 0
       ? `passengers: ${passengers.join(', ')}`
       : 'no passengers yet',

@@ -307,3 +307,83 @@ describe('selectJoinableRides', () => {
     expect(candidates.map((each) => each.id)).toEqual(['r1']);
   });
 });
+
+describe('selectJoinableRides for a carpool', () => {
+  const nowMs = new Date(at(15, 8)).getTime(),
+    LYON = { lat: 45.7606, lon: 4.8594 },
+    VALENCE = { lat: 44.9913, lon: 4.9786 },
+    BORDEAUX = { lat: 44.8378, lon: -0.5792 },
+    HOUSE = { lat: 43.9116, lon: 5.2003 };
+
+  /**
+   * A carpool from Lyon to the house, setting off at 10:00.
+   *
+   * @param id - Ride id
+   * @param overrides - Fields to set on top
+   * @returns The ride
+   */
+  function carpool(id: string, overrides: Partial<Ride> = {}): Ride {
+    return ride(id, {
+      kind: 'carpool',
+      meetDatetime: at(15, 10),
+      location: 'Lyon',
+      coordinates: LYON,
+      ...overrides,
+    });
+  }
+
+  it('offers a carpool to a guest waiting on its route, whatever the place name', () => {
+    const candidates = selectJoinableRides(
+      [carpool('r1')],
+      leg('t1', { location: 'Valence TGV', coordinates: VALENCE, datetime: at(15, 11) }),
+      nowMs,
+      HOUSE,
+    );
+
+    expect(candidates.map((each) => each.id)).toEqual(['r1']);
+  });
+
+  it('does not offer a carpool to a guest far from its route', () => {
+    const candidates = selectJoinableRides(
+      [carpool('r1')],
+      leg('t1', { location: 'Bordeaux', coordinates: BORDEAUX, datetime: at(15, 11) }),
+      nowMs,
+      HOUSE,
+    );
+
+    expect(candidates).toEqual([]);
+  });
+
+  it('keeps the offer when a coordinate is missing, since nobody can prove a detour', () => {
+    const candidates = selectJoinableRides(
+      [carpool('r1')],
+      leg('t1', { location: 'Valence TGV', datetime: at(15, 11) }),
+      nowMs,
+      undefined,
+    );
+
+    expect(candidates.map((each) => each.id)).toEqual(['r1']);
+  });
+
+  it('does not offer a carpool that leaves after the guest wanted to be collected', () => {
+    const candidates = selectJoinableRides(
+      [carpool('r1', { meetDatetime: at(15, 18) })],
+      leg('t1', { coordinates: VALENCE, datetime: at(15, 11) }),
+      nowMs,
+      HOUSE,
+    );
+
+    expect(candidates).toEqual([]);
+  });
+
+  it('does not offer a carpool going the other way', () => {
+    const candidates = selectJoinableRides(
+      [carpool('r1', { direction: 'dropoff' })],
+      leg('t1', { coordinates: VALENCE, datetime: at(15, 11) }),
+      nowMs,
+      HOUSE,
+    );
+
+    expect(candidates).toEqual([]);
+  });
+});

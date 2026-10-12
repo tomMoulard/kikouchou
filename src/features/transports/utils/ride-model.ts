@@ -30,6 +30,7 @@ import {
   type PersonId,
   type Ride,
   type RideId,
+  type RideKind,
   type Transport,
   type TransportId,
   type Vehicle,
@@ -50,6 +51,27 @@ import {
  * the driver wants a coffee first is not wrong, and nothing here moves it.
  */
 export const RIDE_MATCH_WINDOW_MINUTES = 60;
+
+/**
+ * How long after a carpool sets off a passenger's stop may still be on its way.
+ *
+ * A carpool has no single meeting time: it leaves the driver's home at nine and
+ * collects Alice in Lyon at eleven and Tom in Valence at noon. The app has no
+ * routing service to say how long the road is, so a stop is flagged only when
+ * it is before the car leaves, or later than any plausible day of driving.
+ */
+export const CARPOOL_MAX_SPAN_HOURS = 12;
+
+/**
+ * Lead time of every carpool, whatever the ride stores.
+ *
+ * A carpool's {@link Ride.meetDatetime} is already when the car sets off, so
+ * nothing is subtracted from it. A stored value is ignored rather than read: a
+ * shuttle turned into a carpool keeps its old thirty minutes on the row, and
+ * reading it would put the "leave now" alert half an hour before the driver's
+ * own departure.
+ */
+export const CARPOOL_LEAD_TIME_MINUTES = 0;
 
 /** A leg is *late* relative to its ride when it lands after the window. */
 export type LegMismatch = 'before' | 'after';
@@ -86,6 +108,8 @@ export interface ResolvedRide {
    */
   readonly ride: Ride | undefined;
   readonly direction: Ride['direction'];
+  /** A shuttle from the house or a carpool along a route; never absent here. */
+  readonly kind: RideKind;
   readonly meetDatetime: string;
   /** The meeting instant in epoch ms, or null when it cannot be parsed. */
   readonly meetAtMs: number | null;
@@ -147,6 +171,28 @@ function minutesBetween(left: number | null, right: number | null): number | nul
 }
 
 /**
+ * Whether a leg this many minutes after the ride's meeting time still fits it.
+ *
+ * A shuttle meets everybody at one place, so the window is symmetric. A
+ * carpool collects people along a road whose length nobody typed, so a stop
+ * fits anywhere from shortly before the car sets off to
+ * {@link CARPOOL_MAX_SPAN_HOURS} after.
+ *
+ * @param offsetMinutes - Leg time minus ride meeting time, in minutes
+ * @param kind - The ride's kind
+ * @returns True when the leg fits the ride
+ */
+export function isWithinRideWindow(offsetMinutes: number, kind: RideKind): boolean {
+  if (kind === 'carpool') {
+    return (
+      offsetMinutes >= -RIDE_MATCH_WINDOW_MINUTES &&
+      offsetMinutes <= CARPOOL_MAX_SPAN_HOURS * 60
+    );
+  }
+  return Math.abs(offsetMinutes) <= RIDE_MATCH_WINDOW_MINUTES;
+}
+
+/**
  * Places one leg against its ride's meeting time.
  *
  * A leg nobody can place in time is never flagged: we cannot prove it does not
@@ -156,10 +202,11 @@ function resolveLeg(
   transport: Transport,
   personsById: ReadonlyMap<string, Person>,
   meetAtMs: number | null,
+  kind: RideKind,
 ): ResolvedLeg {
   const offset = minutesBetween(toTransportInstant(transport.datetime), meetAtMs);
 
-  if (offset === null || Math.abs(offset) <= RIDE_MATCH_WINDOW_MINUTES) {
+  if (offset === null || isWithinRideWindow(offset, kind)) {
     return {
       transport,
       person: personsById.get(transport.personId),
@@ -275,11 +322,18 @@ export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
   const resolved: ResolvedRide[] = [];
 
   for (const ride of input.rides) {
-    const meetAtMs = toTransportInstant(ride.meetDatetime),
-      leadTimeMinutes = ride.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES,
+    const kind = ride.kind ?? 'shuttle',
+      meetAtMs = toTransportInstant(ride.meetDatetime),
+      leadTimeMinutes =
+        kind === 'carpool'
+          ? CARPOOL_LEAD_TIME_MINUTES
+          : (ride.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES),
+      // A carpool's stops are ordered by when the car reaches them, which is
+      // the time each passenger gave for their own stop: the same order
+      // `sortLegs` already produces for a shuttle.
       legs = sortLegs(
         (legsByRideId.get(ride.id) ?? []).map((transport) =>
-          resolveLeg(transport, personsById, meetAtMs),
+          resolveLeg(transport, personsById, meetAtMs, kind),
         ),
       );
 
@@ -287,6 +341,7 @@ export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
       id: ride.id,
       ride,
       direction: ride.direction,
+      kind,
       meetDatetime: ride.meetDatetime,
       meetAtMs,
       location: ride.location,
@@ -316,6 +371,7 @@ export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
       id: transport.id as unknown as RideId,
       ride: undefined,
       direction: transport.type === 'arrival' ? 'pickup' : 'dropoff',
+      kind: 'shuttle',
       meetDatetime: transport.datetime,
       meetAtMs,
       location: transport.location,

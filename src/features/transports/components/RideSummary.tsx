@@ -146,7 +146,10 @@ const RideSummary = memo(function RideSummary({
           aria-hidden="true"
         />
         <span className="text-sm font-medium">
-          {isPickup ? '↓' : '↑'} {t(`rides.directions.${ride.direction}`)}
+          {isPickup ? '↓' : '↑'}{' '}
+          {ride.kind === 'carpool'
+            ? t(isPickup ? 'rides.carpoolDirections.pickup' : 'rides.carpoolDirections.dropoff')
+            : t(`rides.directions.${ride.direction}`)}
         </span>
         {ride.isSelfDriven ? (
           <Badge
@@ -161,14 +164,18 @@ const RideSummary = memo(function RideSummary({
       {/* When to be there */}
       <div className="flex flex-wrap items-center gap-2">
         <Clock className={iconClass} aria-hidden="true" />
-        <span className={textClass}>{t('rides.meetAt', { time: meetTime })}</span>
+        <span className={textClass}>
+          {ride.kind === 'carpool'
+            ? t('rides.departAt', { time: meetTime })
+            : t('rides.meetAt', { time: meetTime })}
+        </span>
         {meetDate ? (
           <span className="text-sm text-muted-foreground">{meetDate}</span>
         ) : null}
       </div>
 
       {/* When to set off */}
-      {leaveTime ? (
+      {leaveTime && ride.kind !== 'carpool' ? (
         <div className={cn(textClass, 'text-muted-foreground')}>
           {t('rides.leaveAt', { time: leaveTime })}
         </div>
@@ -179,11 +186,19 @@ const RideSummary = memo(function RideSummary({
         <div className="flex items-start gap-2">
           <MapPin className={cn(iconClass, 'mt-0.5')} aria-hidden="true" />
           <span className={textClass}>
-            <span className="text-muted-foreground">
-              {t('rides.meetingPoint', 'Meeting point')}
-              {': '}
-            </span>
-            {ride.location}
+            {ride.kind === 'carpool' ? (
+              t(isPickup ? 'rides.carpoolFrom' : 'rides.carpoolTo', {
+                location: ride.location,
+              })
+            ) : (
+              <>
+                <span className="text-muted-foreground">
+                  {t('rides.meetingPoint', 'Meeting point')}
+                  {': '}
+                </span>
+                {ride.location}
+              </>
+            )}
           </span>
         </div>
       ) : null}

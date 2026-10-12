@@ -93,6 +93,7 @@ import {
   type PersonId,
   type Ride,
   type RideDirection,
+  type RideKind,
   type RideFormData,
   type RideId,
   type RoomAssignmentId,
@@ -996,6 +997,7 @@ export function useTripActions(): UseTripActionsReturn {
 
               const rideData: RideFormData = {
                 direction: d.direction as RideDirection,
+                ...(d.kind !== undefined && { kind: d.kind as RideKind }),
                 meetDatetime,
                 location: d.location as string,
                 ...(d.leadTimeMinutes !== undefined && {
@@ -1071,6 +1073,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.direction !== undefined && {
                   direction: d.direction as RideDirection,
                 }),
+                ...(d.kind !== undefined && { kind: d.kind as RideKind }),
                 ...(d.location !== undefined && {
                   location: d.location as string,
                   // A new meeting point invalidates the pin resolved from the

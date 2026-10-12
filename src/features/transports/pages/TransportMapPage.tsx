@@ -674,12 +674,24 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
           number,
           number,
         ],
-        label: `${t('rides.meetingPoint', 'Meeting point')} · ${journey.location}`,
+        label:
+          journey.kind === 'carpool'
+            ? t(journey.direction === 'pickup' ? 'rides.carpoolFrom' : 'rides.carpoolTo', {
+                location: journey.location,
+              })
+            : `${t('rides.meetingPoint', 'Meeting point')} · ${journey.location}`,
         type: 'default',
         tooltipContent: (
           <div className="space-y-0.5">
             <div className="font-medium">
-              {t(`rides.directions.${journey.direction}`)} •{' '}
+              {journey.kind === 'carpool'
+                ? t(
+                    journey.direction === 'pickup'
+                      ? 'rides.carpoolDirections.pickup'
+                      : 'rides.carpoolDirections.dropoff',
+                  )
+                : t(`rides.directions.${journey.direction}`)}{' '}
+              •{' '}
               {t('rides.passengers', {
                 count: countRidePassengers(journey, headcountOf),
               })}

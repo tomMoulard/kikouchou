@@ -20,6 +20,10 @@
  *    `normaliseStation` — the same folding `groupPickupsByProximity` groups on,
  *    so a station the app offered to share a car for is a station it remembers.
  *
+ * A ride is a shuttle or a carpool (see `Ride.kind`). A carpool states when
+ * the car sets off and the far end of its route; it has no lead time, because
+ * its time already is the departure, so that field is hidden for it.
+ *
  * Passengers are not edited here. Membership lives on the leg
  * (`Transport.rideId`), which is what lets two guests join the same car while
  * both offline without either join being lost.
@@ -66,11 +70,13 @@ import {
   MAX_LEAD_TIME_MINUTES,
   MIN_LEAD_TIME_MINUTES,
   RIDE_DIRECTIONS,
+  RIDE_KINDS,
   type Person,
   type PersonId,
   type Ride,
   type RideDirection,
   type RideFormData,
+  type RideKind,
   type Vehicle,
   type VehicleId,
 } from '@/types';
@@ -127,6 +133,7 @@ interface FormErrors {
  * between controlled and uncontrolled.
  */
 interface FormState {
+  kind: RideKind;
   direction: RideDirection;
   meetDatetime: string;
   location: string;
@@ -150,6 +157,16 @@ const NO_SELECTION = '__none__',
   DIRECTION_LABEL_KEYS: Record<RideDirection, string> = {
     pickup: 'rides.directions.pickup',
     dropoff: 'rides.directions.dropoff',
+  },
+  /** Direction labels for a carpool, whose ends are a home and the house. */
+  CARPOOL_DIRECTION_LABEL_KEYS: Record<RideDirection, string> = {
+    pickup: 'rides.carpoolDirections.pickup',
+    dropoff: 'rides.carpoolDirections.dropoff',
+  },
+  /** Kind labels, spelled out for the same reason as the direction labels. */
+  KIND_LABEL_KEYS: Record<RideKind, string> = {
+    shuttle: 'rides.kinds.shuttle',
+    carpool: 'rides.kinds.carpool',
   },
   /** Stable identity for the default passenger list, so effects do not churn. */
   NO_PASSENGERS: readonly PersonId[] = [];
@@ -185,7 +202,9 @@ function rememberedLeadTime(
     bestLeadTime: number | undefined;
 
   for (const ride of rides) {
+    // A carpool's lead time is not a measure of the road to this place.
     if (
+      ride.kind === 'carpool' ||
       ride.leadTimeMinutes === undefined ||
       normaliseStation(ride.location) !== wanted
     ) {
@@ -244,6 +263,7 @@ function getInitialFormState(
   defaultDirection?: RideDirection,
 ): FormState {
   return {
+    kind: ride?.kind ?? 'shuttle',
     direction: ride?.direction ?? defaultDirection ?? 'pickup',
     meetDatetime: ride?.meetDatetime ? formatDatetimeLocal(ride.meetDatetime) : '',
     location: ride?.location ?? '',
@@ -314,6 +334,7 @@ const RideForm = memo(function RideForm({
 
   const isDirty = useMemo(
     () =>
+      formState.kind !== initialFormState.kind ||
       formState.direction !== initialFormState.direction ||
       formState.meetDatetime !== initialFormState.meetDatetime ||
       formState.location !== initialFormState.location ||
@@ -339,7 +360,8 @@ const RideForm = memo(function RideForm({
    * has not typed one of their own. Drives both the prefill and the hint that
    * explains where the number came from.
    */
-  const remembered = useMemo(
+  const isCarpool = formState.kind === 'carpool',
+    remembered = useMemo(
       () =>
         ride === undefined && !isLeadTimeTouched
           ? rememberedLeadTime(rides, formState.location)
@@ -400,7 +422,10 @@ const RideForm = memo(function RideForm({
   // Event Handlers
   // ============================================================================
 
-  const handleDirectionChange = useCallback((value: string) => {
+  const handleKindChange = useCallback((value: string) => {
+      setFormState((previous) => ({ ...previous, kind: value as RideKind }));
+    }, []),
+    handleDirectionChange = useCallback((value: string) => {
       setFormState((previous) => ({
         ...previous,
         direction: value as RideDirection,
@@ -505,7 +530,7 @@ const RideForm = memo(function RideForm({
       if (!location) {
         fieldErrors.location = t('common.required');
       }
-      if (leadTimeMinutes === null) {
+      if (formState.kind !== 'carpool' && leadTimeMinutes === null) {
         fieldErrors.leadTimeMinutes = t('rides.errors.invalidLeadTime', {
           min: MIN_LEAD_TIME_MINUTES,
           max: MAX_LEAD_TIME_MINUTES,
@@ -518,11 +543,15 @@ const RideForm = memo(function RideForm({
       }
 
       const data: RideFormData = {
+        kind: formState.kind,
         direction: formState.direction,
         meetDatetime,
         location,
         coordinates: formState.coordinates,
-        leadTimeMinutes: leadTimeMinutes ?? undefined,
+        // A carpool sets off at its own time: no lead time, so the stored
+        // one of a shuttle turned into a carpool does not linger.
+        leadTimeMinutes:
+          formState.kind === 'carpool' ? undefined : (leadTimeMinutes ?? undefined),
         driverId: formState.driverId || undefined,
         vehicleId: formState.vehicleId || undefined,
         notes: formState.notes.trim() || undefined,
@@ -559,7 +588,12 @@ const RideForm = memo(function RideForm({
   // Render
   // ============================================================================
 
-  const leadTimeDescribedBy =
+  const locationLabel = !isCarpool
+      ? t('rides.location')
+      : formState.direction === 'pickup'
+        ? t('rides.carpoolStart')
+        : t('rides.carpoolEnd'),
+    leadTimeDescribedBy =
     [
       errors.leadTimeMinutes ? 'ride-lead-time-error' : undefined,
       remembered === undefined ? undefined : 'ride-lead-time-hint',
@@ -569,6 +603,29 @@ const RideForm = memo(function RideForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {/* Shuttle or carpool */}
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium leading-none">{t('rides.kind')}</legend>
+        <RadioGroup
+          value={formState.kind}
+          onValueChange={handleKindChange}
+          disabled={isSubmitting}
+          className="flex flex-col gap-3 sm:flex-row sm:gap-6"
+        >
+          {RIDE_KINDS.map((kind) => (
+            <div key={kind} className="flex items-center gap-2">
+              <RadioGroupItem value={kind} id={`ride-kind-${kind}`} />
+              <Label htmlFor={`ride-kind-${kind}`} className="font-normal cursor-pointer">
+                {t(KIND_LABEL_KEYS[kind])}
+              </Label>
+            </div>
+          ))}
+        </RadioGroup>
+        {isCarpool && (
+          <p className="text-xs text-muted-foreground">{t('rides.carpoolHint')}</p>
+        )}
+      </fieldset>
+
       {/* Direction */}
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium leading-none">
@@ -590,7 +647,11 @@ const RideForm = memo(function RideForm({
                 htmlFor={`ride-direction-${direction}`}
                 className="font-normal cursor-pointer"
               >
-                {t(DIRECTION_LABEL_KEYS[direction])}
+                {t(
+                  isCarpool
+                    ? CARPOOL_DIRECTION_LABEL_KEYS[direction]
+                    : DIRECTION_LABEL_KEYS[direction],
+                )}
               </Label>
             </div>
           ))}
@@ -600,7 +661,7 @@ const RideForm = memo(function RideForm({
       {/* Meeting time */}
       <div className="space-y-2">
         <Label htmlFor="ride-meet-datetime">
-          {t('rides.meetDatetime')}
+          {isCarpool ? t('rides.carpoolDepartDatetime') : t('rides.meetDatetime')}
           <span className="text-destructive ml-1" aria-hidden="true">
             *
           </span>
@@ -625,7 +686,7 @@ const RideForm = memo(function RideForm({
       {/* Meeting point */}
       <div className="space-y-2">
         <Label htmlFor="ride-location">
-          {t('rides.location')}
+          {locationLabel}
           <span className="text-destructive ml-1" aria-hidden="true">
             *
           </span>
@@ -634,9 +695,13 @@ const RideForm = memo(function RideForm({
           id="ride-location"
           value={formState.location}
           onChange={handleLocationChange}
-          placeholder={t('rides.locationPlaceholder')}
+          placeholder={
+            isCarpool
+              ? t('rides.carpoolLocationPlaceholder')
+              : t('rides.locationPlaceholder')
+          }
           hasError={Boolean(errors.location)}
-          aria-label={t('rides.location')}
+          aria-label={locationLabel}
           aria-describedby={errors.location ? 'ride-location-error' : undefined}
           disabled={isSubmitting}
         />
@@ -647,36 +712,38 @@ const RideForm = memo(function RideForm({
         )}
       </div>
 
-      {/* Lead time */}
-      <div className="space-y-2">
-        <Label htmlFor="ride-lead-time">
-          {t('rides.leadTime', { count: leadTimeCount })}
-        </Label>
-        <Input
-          id="ride-lead-time"
-          type="number"
-          inputMode="numeric"
-          min={MIN_LEAD_TIME_MINUTES}
-          max={MAX_LEAD_TIME_MINUTES}
-          step={1}
-          value={formState.leadTimeMinutes}
-          onChange={handleLeadTimeChange}
-          aria-invalid={Boolean(errors.leadTimeMinutes)}
-          aria-describedby={leadTimeDescribedBy}
-          disabled={isSubmitting}
-          className="w-full sm:w-40"
-        />
-        {remembered !== undefined && (
-          <p id="ride-lead-time-hint" className="text-xs text-muted-foreground">
-            {t('rides.leadTimeRemembered', { location: formState.location.trim() })}
-          </p>
-        )}
-        {errors.leadTimeMinutes && (
-          <p id="ride-lead-time-error" className="text-sm text-destructive" role="alert">
-            {errors.leadTimeMinutes}
-          </p>
-        )}
-      </div>
+      {/* Lead time. A carpool's time already is its departure. */}
+      {!isCarpool && (
+        <div className="space-y-2">
+          <Label htmlFor="ride-lead-time">
+            {t('rides.leadTime', { count: leadTimeCount })}
+          </Label>
+          <Input
+            id="ride-lead-time"
+            type="number"
+            inputMode="numeric"
+            min={MIN_LEAD_TIME_MINUTES}
+            max={MAX_LEAD_TIME_MINUTES}
+            step={1}
+            value={formState.leadTimeMinutes}
+            onChange={handleLeadTimeChange}
+            aria-invalid={Boolean(errors.leadTimeMinutes)}
+            aria-describedby={leadTimeDescribedBy}
+            disabled={isSubmitting}
+            className="w-full sm:w-40"
+          />
+          {remembered !== undefined && (
+            <p id="ride-lead-time-hint" className="text-xs text-muted-foreground">
+              {t('rides.leadTimeRemembered', { location: formState.location.trim() })}
+            </p>
+          )}
+          {errors.leadTimeMinutes && (
+            <p id="ride-lead-time-error" className="text-sm text-destructive" role="alert">
+              {errors.leadTimeMinutes}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Driver — every guest, passengers included */}
       <div className="space-y-2">

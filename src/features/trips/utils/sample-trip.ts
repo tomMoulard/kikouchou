@@ -108,6 +108,7 @@ interface SampleTripCopy {
     readonly airport: string;
     readonly paris: string;
     readonly lyon: string;
+    readonly valence: string;
     readonly apt: string;
     readonly gordes: string;
     readonly lake: string;
@@ -122,11 +123,13 @@ interface SampleTripCopy {
     readonly stationPickup: string;
     readonly airportPickup: string;
     readonly stationDropoff: string;
+    readonly carpool: string;
   };
   readonly transports: {
     readonly samAlexArrival: string;
     readonly julesArrival: string;
     readonly martinsArrival: string;
+    readonly hugoArrival: string;
   };
   readonly activities: {
     readonly market: { readonly title: string; readonly notes: string };
@@ -169,6 +172,7 @@ const COORDINATES = {
   airport: { lat: 43.4393, lon: 5.2214 },
   paris: { lat: 48.8443, lon: 2.3744 },
   lyon: { lat: 45.7606, lon: 4.8594 },
+  valence: { lat: 44.9913, lon: 4.9786 },
   apt: { lat: 43.8764, lon: 5.3964 },
   gordes: { lat: 43.9114, lon: 5.2006 },
   lake: { lat: 43.9789, lon: 5.0558 },
@@ -226,6 +230,7 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       airport: 'Marseille Provence airport',
       paris: 'Paris Gare de Lyon',
       lyon: 'Lyon',
+      valence: 'Valence TGV station',
       apt: 'Apt market square',
       gordes: 'Gordes village',
       lake: 'Lac de l’Isle-sur-la-Sorgue',
@@ -248,11 +253,13 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       stationPickup: 'Meet at the station exit, by the taxi rank.',
       airportPickup: 'Arrivals hall, terminal 1.',
       stationDropoff: 'Leave at 9:15 to be early for the train.',
+      carpool: 'Coffee stop in Valence to collect Hugo.',
     },
     transports: {
       samAlexArrival: 'Change in Lille.',
       julesArrival: 'One checked bag.',
       martinsArrival: 'Stopping for lunch on the way.',
+      hugoArrival: 'Spends the week before with his grandmother in Valence.',
     },
     activities: {
       market: { title: 'Saturday market in Apt', notes: 'Bring baskets. We buy for two dinners.' },
@@ -311,6 +318,7 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       airport: 'Aéroport Marseille Provence',
       paris: 'Paris Gare de Lyon',
       lyon: 'Lyon',
+      valence: 'Gare de Valence TGV',
       apt: 'Place du marché, Apt',
       gordes: 'Village de Gordes',
       lake: 'Lac de l’Isle-sur-la-Sorgue',
@@ -333,11 +341,13 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       stationPickup: 'Rendez-vous à la sortie de la gare, près des taxis.',
       airportPickup: 'Hall des arrivées, terminal 1.',
       stationDropoff: 'Départ à 9 h 15 pour être en avance au train.',
+      carpool: 'Pause café à Valence pour récupérer Hugo.',
     },
     transports: {
       samAlexArrival: 'Correspondance à Lille.',
       julesArrival: 'Un bagage en soute.',
       martinsArrival: 'Pause déjeuner en route.',
+      hugoArrival: 'Passe la semaine d’avant chez sa grand-mère à Valence.',
     },
     activities: {
       market: { title: 'Marché du samedi à Apt', notes: 'Prendre les paniers. On achète pour deux dîners.' },
@@ -574,6 +584,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     stationPickup: createRideId(),
     airportPickup: createRideId(),
     stationDropoff: createRideId(),
+    carpool: createRideId(),
   } as const;
 
   const rides: Ride[] = [
@@ -612,6 +623,21 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       driverId: ids.camille,
       vehicleId: vehicleIds.estate,
       notes: copy.rides.stationDropoff,
+    },
+    {
+      // The Martins drive down from Lyon and collect Hugo on the way: a
+      // carpool, whose place is where the car sets off and whose stops are
+      // the passengers' own legs.
+      id: rideIds.carpool,
+      tripId,
+      direction: 'pickup',
+      kind: 'carpool',
+      meetDatetime: at(day(0), 12, 30),
+      location: copy.places.lyon,
+      coordinates: COORDINATES.lyon,
+      driverId: ids.martins,
+      vehicleId: vehicleIds.minivan,
+      notes: copy.rides.carpool,
     },
   ];
 
@@ -670,8 +696,22 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       startLocation: copy.places.lyon,
       startCoordinates: COORDINATES.lyon,
       transportMode: 'car',
+      rideId: rideIds.carpool,
       needsPickup: false,
       notes: copy.transports.martinsArrival,
+    },
+    {
+      id: createTransportId(),
+      tripId,
+      personId: ids.hugo,
+      type: 'arrival',
+      datetime: at(day(0), 14, 0),
+      location: copy.places.valence,
+      coordinates: COORDINATES.valence,
+      transportMode: 'car',
+      rideId: rideIds.carpool,
+      needsPickup: true,
+      notes: copy.transports.hugoArrival,
     },
     {
       id: createTransportId(),

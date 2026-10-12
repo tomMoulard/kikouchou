@@ -729,6 +729,7 @@ export async function createTestRide(
     meetDatetime: string;
     location: string;
     direction?: import('@/types').RideDirection;
+    kind?: import('@/types').RideKind;
     leadTimeMinutes?: number;
     driverId?: import('@/types').PersonId;
     vehicleId?: import('@/types').VehicleId;
@@ -738,6 +739,7 @@ export async function createTestRide(
     const { createRide } = await import('@/lib/db/repositories/ride-repository');
     const ride = await createRide(tripId, {
       direction: data.direction ?? 'pickup',
+      ...(data.kind !== undefined && { kind: data.kind }),
       meetDatetime: data.meetDatetime,
       location: data.location,
       leadTimeMinutes: data.leadTimeMinutes,

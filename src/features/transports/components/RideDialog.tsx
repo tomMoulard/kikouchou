@@ -23,7 +23,10 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RideForm } from '@/features/transports/components/RideForm';
-import { resolveRides } from '@/features/transports/utils/ride-model';
+import {
+  CARPOOL_LEAD_TIME_MINUTES,
+  resolveRides,
+} from '@/features/transports/utils/ride-model';
 import { useOfflineAwareNotify } from '@/hooks';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
@@ -181,7 +184,11 @@ const RideDialog = memo(function RideDialog({
         captureUsage('ride_saved', {
           operation: rideId ? 'updated' : 'created',
           direction: data.direction,
-          lead_time_minutes: data.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES,
+          kind: data.kind ?? 'shuttle',
+          lead_time_minutes:
+            data.kind === 'carpool'
+              ? CARPOOL_LEAD_TIME_MINUTES
+              : (data.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES),
           has_driver: data.driverId !== undefined,
           has_vehicle: data.vehicleId !== undefined,
           self_driven:

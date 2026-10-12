@@ -23,10 +23,15 @@
  */
 
 import {
+  isStopAlongRoute,
+  type RoutePoint,
+} from '@/features/transports/utils/carpool-route';
+import {
   type PickupGroup,
   sortTransportsByInstant,
   toTransportInstant,
 } from '@/features/transports/utils/pickup-utils';
+import { isWithinRideWindow } from '@/features/transports/utils/ride-model';
 import type {
   ISODateTimeString,
   Ride,
@@ -232,10 +237,13 @@ export function suggestRidesForGroup(
 /**
  * The rides one leg could still be added to.
  *
- * A car is joinable when it goes the same way, to the same place, and has not
- * left yet. The ride the leg already sits in is excluded — offering to add a
- * passenger to the car they are in is not an action, and taking the offer would
- * be a no-op write to the shared document.
+ * A shuttle is joinable when it goes the same way, to the same place, and has
+ * not left yet. A carpool is joinable when it goes the same way, has not left
+ * yet, reaches the guest's stop inside its own time window (see
+ * `isWithinRideWindow`), and passes near that stop (see `isStopAlongRoute`).
+ * The ride the leg already sits in is excluded: offering to add a passenger to
+ * the car they are in is not an action, and taking the offer would be a no-op
+ * write to the shared document.
  *
  * A ride whose meeting time cannot be read is excluded rather than kept: we
  * cannot prove it is still ahead, and putting a guest in a car that may already
@@ -244,27 +252,39 @@ export function suggestRidesForGroup(
  * @param rides - The trip's rides, from `RideContext`
  * @param transport - The leg looking for a car
  * @param nowMs - The reference instant, from `TransportContext.nowMs`
+ * @param house - The trip's coordinates, which a carpool's route ends or starts at
  * @returns Matching rides, earliest meeting time first
  */
 export function selectJoinableRides(
   rides: readonly Ride[],
   transport: Transport,
   nowMs: number,
+  house?: RoutePoint,
 ): readonly Ride[] {
   const direction = rideDirectionForLeg(transport),
-    station = normaliseStation(transport.location);
+    station = normaliseStation(transport.location),
+    legAtMs = toTransportInstant(transport.datetime);
 
   return rides
     .filter((ride) => {
       if (ride.direction !== direction || ride.id === transport.rideId) {
         return false;
       }
-      if (normaliseStation(ride.location) !== station) {
+
+      const meetAtMs = toTransportInstant(ride.meetDatetime);
+      if (meetAtMs === null || meetAtMs < nowMs) {
         return false;
       }
 
-      const meetAtMs = toTransportInstant(ride.meetDatetime);
-      return meetAtMs !== null && meetAtMs >= nowMs;
+      if (ride.kind === 'carpool') {
+        return (
+          legAtMs !== null &&
+          isWithinRideWindow(Math.round((legAtMs - meetAtMs) / 60_000), 'carpool') &&
+          isStopAlongRoute(transport.coordinates, ride.coordinates, house)
+        );
+      }
+
+      return normaliseStation(ride.location) === station;
     })
     .sort(
       (left, right) =>
