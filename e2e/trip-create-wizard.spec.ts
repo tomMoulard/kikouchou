@@ -1,12 +1,9 @@
 /**
- * @fileoverview The first trip, one question per screen — behind its flag.
+ * @fileoverview The first trip, one question per screen.
  *
  * The wizard replaces the one-page form on `/trips/new` for a device that
- * holds no trip yet, when the `first-trip-wizard` flag is on. These tests force
- * the flag through the local override `useFeatureFlag` honours, because the
- * e2e servers carry no PostHog key on purpose; every other spec in this
- * directory creates trips through the form, which is what a device without the
- * flag still gets.
+ * holds no trip yet. A device with a trip gets the form. Specs that need a
+ * trip and nothing more use `support/trip-create`.
  *
  * @module e2e/trip-create-wizard
  */
@@ -18,8 +15,6 @@ import { guestCards, roomCards } from './support/page-regions';
 // ============================================================================
 // Helpers
 // ============================================================================
-
-const FLAG_ON = `localStorage.setItem('kikouchou-flag:first-trip-wizard', 'on');`;
 
 /** Picks the 15th and the 22nd of the month the range picker opens on. */
 async function pickDates(page: Page): Promise<void> {
@@ -34,7 +29,6 @@ async function pickDates(page: Page): Promise<void> {
 
 test.describe('the first-trip wizard', () => {
   test('walks a first trip through one question per screen', async ({ page }) => {
-    await page.addInitScript(FLAG_ON);
     await page.goto('/trips/new');
 
     // One question on screen at a time, and Enter answers it.
@@ -91,7 +85,6 @@ test.describe('the first-trip wizard', () => {
   });
 
   test('keeps the guest field focused after the Add button', async ({ page, isMobile }) => {
-    await page.addInitScript(FLAG_ON);
     await page.goto('/trips/new');
     await page.getByLabel(/trip name/i).fill('Lake house');
     await page.keyboard.press('Enter');
@@ -117,7 +110,6 @@ test.describe('the first-trip wizard', () => {
   });
 
   test('is only ever for the first trip on a device', async ({ page }) => {
-    await page.addInitScript(FLAG_ON);
     await page.goto('/trips/new');
     await page.getByLabel(/trip name/i).fill('First');
     await page.keyboard.press('Enter');
@@ -129,15 +121,8 @@ test.describe('the first-trip wizard', () => {
     await page.getByRole('button', { name: /open the calendar/i }).click({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/calendar/, { timeout: 15_000 });
 
-    // A second trip gets the one-page form, flag or not.
+    // A second trip gets the one-page form.
     await page.goto('/trips/new');
-    await expect(page.locator('#trip-start-date')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/what is the trip called/i)).toHaveCount(0);
-  });
-
-  test('stays off without the flag', async ({ page }) => {
-    await page.goto('/trips/new');
-
     await expect(page.locator('#trip-start-date')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/what is the trip called/i)).toHaveCount(0);
   });
@@ -153,7 +138,6 @@ test.describe('the dates step on a phone', () => {
   test.use({ viewport: { width: 384, height: 697 } });
 
   test('opens the calendar centred, across the width of the screen', async ({ page }) => {
-    await page.addInitScript(FLAG_ON);
     await page.goto('/trips/new');
 
     await page.getByLabel(/trip name/i).fill('Lake house');

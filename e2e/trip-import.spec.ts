@@ -8,6 +8,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureDate } from './support/fixture-dates';
+import { seedTrip } from './support/seed';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -145,30 +146,16 @@ async function navigateToMonth(
 }
 
 /**
- * Creates a trip using the trip form.
+ * Seeds the trip that gets imported from.
+ *
+ * Straight into IndexedDB rather than through the UI: on an empty device
+ * `/trips/new` is the first-trip wizard, and the import these tests are about
+ * lives on the one-page form a later trip gets. A trip on the device is what
+ * puts the form on screen, so the seed is also the precondition.
  */
-async function createTrip(
-  page: Page,
-  tripData: {
-    name: string;
-    location?: string;
-    description?: string;
-    startDate: string;
-    endDate: string;
-  },
-): Promise<void> {
-  await page.getByLabel(/trip name/i).fill(tripData.name);
-  if (tripData.location) {
-    await page.locator('#trip-location').fill(tripData.location);
-  }
-  if (tripData.description) {
-    await page.locator('#trip-description').fill(tripData.description);
-  }
-  await page.locator('#trip-start-date').click();
-  await selectDate(page, tripData.startDate);
-  await page.locator('#trip-end-date').click();
-  await selectDate(page, tripData.endDate);
-  await page.getByRole('button', { name: /save/i }).click();
+async function seedOriginalTrip(page: Page): Promise<string> {
+  const { tripId } = await seedTrip(page, { ...ORIGINAL_TRIP });
+  return tripId;
 }
 
 /**
@@ -220,13 +207,8 @@ test.describe('Trip Import Feature', () => {
   });
 
   test('location autocomplete shows matching trips when typing', async ({ page }) => {
-    // Step 1: Create the first trip
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
-    await page.waitForURL(/\/trips\/new/);
-    await createTrip(page, ORIGINAL_TRIP);
-
-    // Wait for navigation to calendar
-    await page.waitForURL(/\/calendar/);
+    // Step 1: The first trip
+    await seedOriginalTrip(page);
 
     // Step 2: Navigate back to create another trip
     await page.goto('/trips');
@@ -244,11 +226,8 @@ test.describe('Trip Import Feature', () => {
   });
 
   test('importing a trip pre-fills location and description', async ({ page }) => {
-    // Step 1: Create the first trip with a description
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
-    await page.waitForURL(/\/trips\/new/);
-    await createTrip(page, ORIGINAL_TRIP);
-    await page.waitForURL(/\/calendar/);
+    // Step 1: The first trip, with a description
+    await seedOriginalTrip(page);
 
     // Step 2: Navigate to create another trip
     await page.goto('/trips');
@@ -282,11 +261,9 @@ test.describe('Trip Import Feature', () => {
   });
 
   test('importing a trip clones rooms to the new trip', async ({ page }) => {
-    // Step 1: Create the first trip
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
-    await page.waitForURL(/\/trips\/new/);
-    await createTrip(page, ORIGINAL_TRIP);
-    await page.waitForURL(/\/calendar/);
+    // Step 1: The first trip
+    const originalTripId = await seedOriginalTrip(page);
+    await page.goto(`/trips/${originalTripId}/calendar`);
 
     // Step 2: Add rooms to the first trip
     await addRooms(page, ROOMS);
@@ -339,11 +316,8 @@ test.describe('Trip Import Feature', () => {
   });
 
   test('can dismiss import and type a fresh location', async ({ page }) => {
-    // Step 1: Create a trip
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
-    await page.waitForURL(/\/trips\/new/);
-    await createTrip(page, ORIGINAL_TRIP);
-    await page.waitForURL(/\/calendar/);
+    // Step 1: A trip
+    await seedOriginalTrip(page);
 
     // Step 2: Navigate to create another trip
     await page.goto('/trips');

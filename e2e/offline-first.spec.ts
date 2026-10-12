@@ -24,17 +24,19 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { waitForPrecachedAppShell } from './support/service-worker';
+import { fillNewTrip } from './support/trip-create';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
 /**
- * The trip these tests create through the form.
+ * The trip these tests create through the UI.
  *
- * It carried a `startDate`/`endDate` pair pinned to July 2026 that nothing read
- * — `fillDates` below picks days out of the calendar directly. Two dead fixture
- * dates are still two dates that rot, and the next reader would reasonably
+ * It carried a `startDate`/`endDate` pair pinned to July 2026 that nothing
+ * read. `fillNewTrip` picks the 15th and the 22nd of the month the picker
+ * opens on, so no fixture date goes stale. Two dead fixture dates are still
+ * two dates that rot, and the next reader would reasonably
  * assume the trip has them, so they are gone rather than derived.
  */
 const TRIP = {
@@ -42,29 +44,12 @@ const TRIP = {
 } as const;
 
 /**
- * Picks a date in the trip form's calendar.
- *
- * Clicks the 15th and the 22nd of whatever month the picker opens on rather
- * than walking to a named one: this spec is about offline behaviour, and a
- * fragile date-picker walk would fail for reasons that have nothing to do with
- * the network. The picker opens on the current month with nothing selected, so
- * there is no fixture date here to go stale — the days are always this month's.
+ * Creates a trip from the trip list. The device is empty, so this is the
+ * first-trip wizard, and every write it makes goes to IndexedDB.
  */
-async function fillDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').click();
-  const startCell = page.getByRole('gridcell').filter({ hasText: /^15$/ }).first();
-  await startCell.click();
-
-  await page.locator('#trip-end-date').click();
-  const endCell = page.getByRole('gridcell').filter({ hasText: /^22$/ }).first();
-  await endCell.click();
-}
-
 async function createTripOffline(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: /new trip/i }).first().click();
-  await page.getByLabel(/trip name/i).fill(name);
-  await fillDates(page);
-  await page.getByRole('button', { name: /save/i }).click();
+  await fillNewTrip(page, name);
 }
 
 /**

@@ -18,6 +18,7 @@ import {
 } from './support/service-worker';
 import { waitForRoute } from './support/routes';
 import { stubExternalMapServices } from './support/external-services';
+import { fillNewTrip } from './support/trip-create';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -207,43 +208,16 @@ async function createTestTrip(page: Page): Promise<string> {
   await page.goto('/trips/new');
   await page.waitForLoadState('load');
 
-  // Fill trip form.
+  // No location, deliberately: the wizard's place step is skipped.
   //
-  // No location, deliberately. Nothing here asserts one — it was set and never
-  // read — and typing into that field opens a suggestion popper anchored over
-  // the date buttons below it, which then swallows the click on the day cell:
-  // "<span …>Location de matériel, Avenue Vulcain…</span> intercepts pointer
-  // events".
+  // Typing a location opens a suggestion popper, and the Nominatim stub above
+  // does not hold in *this* project. It is the production build, so a service
+  // worker controls the page, and `page.route` never sees a request the
+  // worker makes: the search goes to the live network and comes back with
+  // real places that cover whatever is under them.
   //
-  // The Nominatim stub above does not prevent that in *this* project. It is the
-  // production build, so a service worker controls the page, and `page.route`
-  // never sees a request the worker makes — the search goes to the live network
-  // and comes back with real places. Which is also why the failure only shows
-  // up once an earlier test has installed the worker.
-  await page.locator('#trip-name').fill('PWA Test Trip');
-
-  // Set start date
-  await page.locator('#trip-start-date').click();
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-
-  // Select a day in the current month
-  const calendar = page.locator('[data-slot="calendar"]').first();
-  const dayButton = calendar.locator('button').filter({ hasText: /^15$/ }).first();
-  await dayButton.click();
-
-  // Set end date
-  await page.locator('#trip-end-date').click();
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-
-  const endCalendar = page.locator('[data-slot="calendar"]').first();
-  const endDayButton = endCalendar.locator('button').filter({ hasText: /^20$/ }).first();
-  await endDayButton.click();
-
-  // Submit form
-  await page.getByRole('button', { name: /save|sauvegarder/i }).click();
-
-  // Wait for navigation
-  await page.waitForURL(/\/trips\/[a-zA-Z0-9_-]+\/(calendar)?/, { timeout: 10000 });
+  // The device is empty, so `/trips/new` is the first-trip wizard.
+  await fillNewTrip(page, 'PWA Test Trip');
 
   // Extract trip ID
   const url = page.url();

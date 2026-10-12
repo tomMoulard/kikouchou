@@ -24,7 +24,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 
 import { SupabaseStub, type StubUser } from './support/supabase-stub';
 import { fixtureDate } from './support/fixture-dates';
-import { clearTripOrganiser } from './support/trip-form';
+import { fillNewTrip } from './support/trip-create';
 
 // ============================================================================
 // Fixtures
@@ -41,7 +41,8 @@ const TRIP = { name: 'Shared Brittany' } as const;
  * Derived from today — see `support/fixture-dates`. These were pinned to July
  * 2026, which is behind us; a joined trip that has already happened is rendered
  * as a past trip, which is not the state any of these tests mean to assert.
- * Trips created through the form get their dates from `fillDates` instead.
+ * Trips created through the UI get the 15th and the 22nd of this month
+ * instead (`support/trip-create`).
  */
 const SEEDED_TRIP_DATES = {
   startDate: fixtureDate(15),
@@ -53,33 +54,20 @@ const SEEDED_TRIP_DATES = {
 // ============================================================================
 
 /**
- * Picks the 15th and 22nd in the trip form, as the offline spec does.
- *
- * Days of the month the picker opens on — always the current one — so there is
- * no fixture date here to go stale.
- */
-async function fillDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.locator('#trip-end-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
-}
-
-/**
  * Creates a trip with nobody on its guest list.
  *
- * Unlike the rest of the suite these tests are signed in, so the create form
- * pre-fills its first guest row from the account — which would put a guest
+ * The first trip on a device goes through the wizard, a later one through the
+ * form; `fillNewTrip` answers either.
+ *
+ * Unlike the rest of the suite these tests are signed in, so both screens
+ * pre-fill their first guest from the account, which would put a guest
  * named "owner" on every trip here, and leave the tests that add Alice and Bob
  * asserting against a roster they did not write. Each test says who is on its
  * trip, through `addGuest`.
  */
 async function createTrip(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: /new trip/i }).first().click();
-  await page.getByLabel(/trip name/i).fill(name);
-  await fillDates(page);
-  await clearTripOrganiser(page);
-  await page.getByRole('button', { name: /save/i }).click();
+  await fillNewTrip(page, name, { dropOrganiser: true });
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
 }
 

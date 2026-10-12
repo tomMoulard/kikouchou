@@ -13,6 +13,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureDate } from './support/fixture-dates';
 import { expectOsNotification, recordOsNotifications } from './support/os-notifications';
+import { seedTrip } from './support/seed';
+import { createTripThroughWizard, seedEarlierTrip } from './support/trip-create';
 import { addTripGuests, fillTripOrganiser, ORGANISER_NAME } from './support/trip-form';
 
 // ============================================================================
@@ -399,6 +401,15 @@ async function expectCalendarPage(page: Page, tripName: string): Promise<string>
 }
 
 /**
+ * Seeds `TEST_TRIP` straight into IndexedDB, for the tests about what happens
+ * to a trip after it exists. Creating it is the business of the tests above.
+ */
+async function seedTestTrip(page: Page): Promise<string> {
+  const { tripId } = await seedTrip(page, { ...TEST_TRIP });
+  return tripId;
+}
+
+/**
  * Asserts the trip form is rendered and empty-headed, not merely routed to.
  */
 async function expectTripFormPage(page: Page, heading: RegExp): Promise<void> {
@@ -453,12 +464,7 @@ test.describe('Trip Lifecycle', () => {
   // Test Case 1: Creates a new trip from empty state
   // ============================================================================
 
-  test('creates a new trip from empty state', async ({ page }) => {
-    // The creation is confirmed by an OS notification, which is not in the
-    // DOM. Install the recorder before the first navigation, while
-    // `window.Notification` can still be replaced.
-    await recordOsNotifications(page);
-
+  test('creates a first trip from empty state through the wizard', async ({ page }) => {
     // Navigate to the trips page
     await page.goto('/trips');
 
@@ -475,6 +481,42 @@ test.describe('Trip Lifecycle', () => {
     // page header and once in the `EmptyState` body — and both carry the
     // `trips.new` label, so an unqualified match is a strict-mode violation.
     // They are the same action, so either will do.
+    await page.getByRole('button', { name: /new trip/i }).first().click();
+
+    // A first trip is asked one question per screen, with no navigation
+    // beside it: no trip tab can open yet.
+    await expect(page).toHaveURL('/trips/new');
+    await expect(page.getByText(/what is the trip called/i)).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator('aside[aria-label="Main navigation"], nav[aria-label="Mobile navigation"]'),
+    ).toHaveCount(0);
+
+    await createTripThroughWizard(page, TEST_TRIP.name);
+    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
+
+    // Navigate back to trips list to verify the trip appears
+    await page.goto('/trips');
+    await page.waitForLoadState('load');
+    await expect(getTripCard(page, TEST_TRIP.name)).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /no trips/i }),
+    ).not.toBeVisible();
+
+    // The wizard picks the 15th and the 22nd of the month its picker opens on.
+    expect(await readTripDates(page, tripId)).toEqual({
+      startDate: fixtureDate(15, 0),
+      endDate: fixtureDate(22, 0),
+    });
+  });
+
+  test('creates a later trip through the one-page form', async ({ page }) => {
+    // The creation is confirmed by an OS notification, which is not in the
+    // DOM. Install the recorder before the first navigation, while
+    // `window.Notification` can still be replaced.
+    await recordOsNotifications(page);
+    await seedEarlierTrip(page);
+
+    await page.goto('/trips');
     await page.getByRole('button', { name: /new trip/i }).first().click();
 
     // Verify we're on the create trip page — and that the form is on it.
@@ -497,20 +539,9 @@ test.describe('Trip Lifecycle', () => {
 
     const tripId = tripIdFromCalendarUrl(page);
 
-    // Navigate back to trips list to verify the trip appears
     await page.goto('/trips');
-
-    // Wait for the trip list to load
     await page.waitForLoadState('load');
-
-    // Verify the trip is now in the list
-    // The trip cards are buttons with aria-label containing the trip name and location
     await expect(getTripCard(page, TEST_TRIP.name)).toBeVisible();
-
-    // Verify the empty state is no longer shown
-    await expect(
-      page.getByRole('heading', { name: /no trips/i }),
-    ).not.toBeVisible();
 
     // And verify the trip carries the dates the form was given.
     //
@@ -530,6 +561,7 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('creates the guests typed on the create form', async ({ page }) => {
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await expectTripFormPage(page, /new trip/i);
 
@@ -551,6 +583,7 @@ test.describe('Trip Lifecycle', () => {
   });
 
   test('creates a trip the organiser is not on', async ({ page }) => {
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await expectTripFormPage(page, /new trip/i);
 
@@ -575,12 +608,8 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('edits an existing trip', async ({ page }) => {
-    // First, create a trip to edit
-    await page.goto('/trips/new');
-    await createTrip(page, TEST_TRIP);
-
-    // Wait for navigation to calendar
-    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
+    // First, a trip to edit
+    const tripId = await seedTestTrip(page);
 
     // Navigate to the edit page
     await page.goto(`/trips/${tripId}/edit`);
@@ -645,12 +674,8 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('deletes a trip with confirmation', async ({ page }) => {
-    // First, create a trip to delete
-    await page.goto('/trips/new');
-    await createTrip(page, TEST_TRIP);
-
-    // Wait for navigation to calendar
-    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
+    // First, a trip to delete
+    const tripId = await seedTestTrip(page);
 
     // Navigate to the edit page (where delete button is)
     await page.goto(`/trips/${tripId}/edit`);
@@ -698,10 +723,9 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('navigates between trips', async ({ page }) => {
-    // Create the first trip
-    await page.goto('/trips/new');
-    await createTrip(page, TEST_TRIP);
-    const firstTripId = await expectCalendarPage(page, TEST_TRIP.name);
+    // The first trip. Seeded, so the second one below is created through the
+    // form rather than the first-trip wizard.
+    const firstTripId = await seedTestTrip(page);
 
     // Navigate back to trips list
     await page.goto('/trips');
@@ -745,7 +769,8 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('persists trip data across page reload', async ({ page }) => {
-    // Create a trip
+    // A trip, made through the form after an earlier one
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await createTrip(page, TEST_TRIP);
 
@@ -793,14 +818,14 @@ test.describe('Trip Lifecycle', () => {
     // Navigate to trips page
     await page.goto('/trips');
 
-    // Click new trip button from empty state
+    // Click new trip button from empty state: the first-trip wizard
     await page.getByRole('button', { name: /new trip/i }).first().click();
 
     // Fill in some data
     await page.getByLabel(/trip name/i).fill('Cancelled Trip');
 
-    // Click cancel
-    await page.getByRole('button', { name: /cancel/i }).click();
+    // Back on the first question is the wizard's cancel
+    await page.getByRole('button', { name: /^back$/i }).click();
 
     // Verify we returned to trips list — and that the list is on screen, not
     // merely in the address bar.
@@ -818,7 +843,8 @@ test.describe('Trip Lifecycle', () => {
   });
 
   test('validates required fields on trip creation', async ({ page }) => {
-    // Navigate to create trip page
+    // Navigate to create trip page, with an earlier trip so it is the form
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
 
     // Try to submit empty form
@@ -843,10 +869,8 @@ test.describe('Trip Lifecycle', () => {
   });
 
   test('cancels deletion when clicking cancel in dialog', async ({ page }) => {
-    // Create a trip
-    await page.goto('/trips/new');
-    await createTrip(page, TEST_TRIP);
-    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
+    // A trip
+    const tripId = await seedTestTrip(page);
 
     await page.goto(`/trips/${tripId}/edit`);
 

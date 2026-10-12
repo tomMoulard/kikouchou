@@ -17,6 +17,7 @@ import { roomCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
 import { seedRoom, seedTrip } from './support/seed';
 import { clearIndexedDB } from './support/storage';
+import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Helpers
@@ -81,6 +82,8 @@ test.describe('Rooms in bulk', () => {
   });
 
   test('types the whole house on the trip creation form', async ({ page }) => {
+    // A trip already on the device, so `/trips/new` is the one-page form.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await waitForRoute(page);
 
@@ -108,6 +111,7 @@ test.describe('Rooms in bulk', () => {
   });
 
   test('drops a room row that was added and left empty', async ({ page }) => {
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await waitForRoute(page);
 

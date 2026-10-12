@@ -24,6 +24,8 @@ export interface SeedTripOptions {
   readonly name: string;
   /** Free-text location. */
   readonly location?: string;
+  /** Free-text description, which an import copies with the location. */
+  readonly description?: string;
   /** ISO `yyyy-MM-dd`. */
   readonly startDate: string;
   /** ISO `yyyy-MM-dd`. */
@@ -88,6 +90,7 @@ export async function seedTrip(
     async ({
       name,
       location,
+      description,
       startDate,
       endDate,
       coordinates,
@@ -109,6 +112,7 @@ export async function seedTrip(
             shareId,
             name,
             ...(location === undefined ? {} : { location }),
+            ...(description === undefined ? {} : { description }),
             startDate,
             endDate,
             ...(coordinates === undefined ? {} : { coordinates }),

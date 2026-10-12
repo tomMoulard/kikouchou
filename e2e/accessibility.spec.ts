@@ -22,6 +22,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { clearIndexedDB } from './support/storage';
 import { waitForRoute } from './support/routes';
 import { seedPerson, seedRoom, seedTrip } from './support/seed';
+import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -758,6 +759,8 @@ test.describe('Form Label Associations', () => {
   // Test 8: Forms have associated labels
   // --------------------------------------------------------------------------
   test('trip form has properly associated labels', async ({ page }) => {
+    // A trip already on the device, so `/trips/new` is the one-page form.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
 
