@@ -59,6 +59,11 @@ vi.mock('@/contexts/RideContext', () => ({
   useRideContext: vi.fn(() => ({ rides: [] })),
 }));
 
+// The trip's coordinates bound which carpools a waiting guest is offered.
+vi.mock('@/contexts/TripContext', () => ({
+  useTripContext: vi.fn(() => ({ currentTrip: null })),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareNotify: vi.fn(() => ({ notifySuccess: vi.fn() })),
 }));
