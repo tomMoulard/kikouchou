@@ -56,11 +56,14 @@ export { useFeatureFlag, readFlagOverride, FLAG_OVERRIDE_PREFIX } from './useFea
 
 // Viewport shape — the breakpoints the layout itself draws
 export {
+  useCompactNavViewport,
   usePhoneViewport,
   useShortLandscapeViewport,
   useWideViewport,
+  COMPACT_NAV_MEDIA_QUERY,
   PHONE_MEDIA_QUERY,
   SHORT_LANDSCAPE_MEDIA_QUERY,
   WIDE_MEDIA_QUERY,
 } from './usePhoneViewport';
 export { useMediaQuery } from './useMediaQuery';
+export { useMobileNavPreferences, type MobileNavPreferences } from './useMobileNavPreferences';

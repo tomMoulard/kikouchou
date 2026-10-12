@@ -1558,6 +1558,31 @@
     }
   },
   "settings": {
+    "navBar": {
+      "title": "Navigation sur téléphone",
+      "description": "Choisissez les pages du séjour que votre téléphone affiche en bas de l’écran.",
+      "modeLabel": "Affichage",
+      "modes": {
+        "auto": "Automatique",
+        "bar": "Barre du bas",
+        "menu": "Bouton menu"
+      },
+      "modeHints": {
+        "auto": "La barre du bas, sauf sur un écran très étroit ou un téléphone tenu à l’horizontale, où un bouton menu en haut la remplace.",
+        "bar": "La barre du bas est toujours affichée.",
+        "menu": "Pas de barre du bas. Un bouton menu en haut ouvre toutes les pages."
+      },
+      "orderLabel": "Ordre",
+      "orderHint": "Faites glisser une page par sa poignée. Les quatre premières vont dans la barre du bas, les autres dans Plus.",
+      "inBar": "Dans la barre du bas",
+      "inMore": "Dans Plus",
+      "restore": "Rétablir l’ordre par défaut",
+      "moveHandle": "Déplacer {{page}}, position {{position}}",
+      "announceStart": "{{page}} saisi",
+      "announceOver": "{{page}} est en position {{position}} sur {{count}}",
+      "announceCancel": "Déplacement de {{page}} annulé",
+      "saveFailed": "Impossible d’enregistrer la navigation"
+    },
     "title": "Paramètres",
     "description": "Gérez vos préférences",
     "language": "Langue",

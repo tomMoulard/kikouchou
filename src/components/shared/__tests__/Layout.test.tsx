@@ -14,6 +14,8 @@ import type { ReactNode } from 'react';
 
 import { Layout } from '../Layout';
 import { useHideNavigation } from '@/contexts/NavigationVisibilityContext';
+import { db } from '@/lib/db';
+import { DEFAULT_SETTINGS } from '@/types';
 import { toLocalISODateString } from '@/lib/db/utils';
 import type { HexColor, ISODateString, Person, RoomAssignment, Trip } from '@/types';
 import { isoDate } from '@/test/utils';
@@ -1167,10 +1169,13 @@ describe('Layout', () => {
 
       renderLayoutAt('/trips');
 
-      // The trip list is a list: the nav bar is how you leave it, and hiding
-      // it would strand a short viewport on whichever page it landed on.
+      // The trip list is a list: the navigation is how you leave it, and
+      // hiding it would strand a short viewport on whichever page it landed
+      // on. Sideways, the `auto` mode trades the bar for the header's menu
+      // button, so that button is the way out here.
       expect(screen.queryByRole('banner')).toBeInTheDocument();
-      expect(getMobileNav()).toBeInTheDocument();
+      expect(getMobileNav()).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'common.menu' })).toBeInTheDocument();
     });
 
     it('treats a trailing slash as the same route', () => {
@@ -1214,6 +1219,21 @@ describe('Layout', () => {
       expect(screen.getByTestId('hiding-page')).toBeInTheDocument();
     });
 
+    it('drops the header menu button too when the bar is set to a menu', async () => {
+      await db.settings.put({ ...DEFAULT_SETTINGS, mobileNavMode: 'menu' });
+
+      renderLayoutAt('/trips/new', <HidingPage hidden />);
+
+      await vi.waitFor(async () => {
+        expect((await db.settings.get('settings'))?.mobileNavMode).toBe('menu');
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(screen.queryByRole('button', { name: 'common.menu' })).not.toBeInTheDocument();
+      expect(getMobileNav()).not.toBeInTheDocument();
+    });
+
     it('keeps the navigation when the page does not ask', () => {
       renderLayoutAt('/trips/new', <HidingPage hidden={false} />);
 
@@ -1234,6 +1254,170 @@ describe('Layout', () => {
       );
 
       expect(getMobileNav()).toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
+  // Phone Navigation Preferences
+  // ============================================================================
+
+  describe('Phone navigation preferences', () => {
+    /**
+     * Answers only the narrow-width half of the compact query.
+     */
+    function setNarrow(isNarrow: boolean): void {
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes('max-width: 359px') ? isNarrow : false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+    }
+
+    beforeEach(() => {
+      setNarrow(false);
+      mockUseTripContext.mockReturnValue({
+        currentTrip: mockTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    it('fills the bar with the first four pages of the stored order', async () => {
+      await db.settings.put({
+        ...DEFAULT_SETTINGS,
+        mobileNavOrder: ['transports', 'calendar', 'rooms', 'persons', 'money', 'activities', 'analytics', 'edit'],
+      });
+
+      renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+
+      const mobileNav = getMobileNav() as HTMLElement;
+      await within(mobileNav).findByText('nav.transports');
+      const labels = within(mobileNav)
+        .getAllByRole('link')
+        .map((link) => link.textContent);
+      expect(labels).toEqual(['nav.transports', 'nav.calendar', 'nav.rooms', 'nav.persons']);
+    });
+
+    it('moves the page the bar gave up into the "More" sheet', async () => {
+      const user = userEvent.setup();
+      await db.settings.put({
+        ...DEFAULT_SETTINGS,
+        mobileNavOrder: ['transports', 'calendar', 'rooms', 'persons', 'money', 'activities', 'analytics', 'edit'],
+      });
+
+      renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+      const mobileNav = getMobileNav() as HTMLElement;
+      await within(mobileNav).findByText('nav.transports');
+      await user.click(within(mobileNav).getByRole('button', { name: 'nav.more' }));
+
+      const sheet = await screen.findByRole('navigation', { name: 'nav.moreNavigation' });
+      expect(within(sheet).getByText('nav.money')).toBeInTheDocument();
+      expect(within(sheet).queryByText('nav.transports')).not.toBeInTheDocument();
+    });
+
+    it('keeps the default bar for a device that never chose', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+
+      const labels = within(getMobileNav() as HTMLElement)
+        .getAllByRole('link')
+        .map((link) => link.textContent);
+      expect(labels).toEqual(['nav.calendar', 'nav.rooms', 'nav.persons', 'nav.money']);
+      expect(screen.queryByRole('button', { name: 'common.menu' })).not.toBeInTheDocument();
+      expect(document.documentElement.dataset.navBar).toBeUndefined();
+    });
+
+    it('swaps the bar for a header menu that lists every page in menu mode', async () => {
+      const user = userEvent.setup();
+      await db.settings.put({ ...DEFAULT_SETTINGS, mobileNavMode: 'menu' });
+
+      renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+
+      const menuButton = await screen.findByRole('button', { name: 'common.menu' });
+      expect(getMobileNav()).not.toBeInTheDocument();
+      expect(document.documentElement.dataset.navBar).toBe('hidden');
+
+      await user.click(menuButton);
+
+      const sheet = await screen.findByRole('navigation', { name: 'nav.moreNavigation' });
+      for (const label of [
+        'nav.calendar',
+        'nav.rooms',
+        'nav.persons',
+        'nav.money',
+        'nav.activities',
+        'nav.transports',
+        'nav.tripAnalytics',
+        'nav.tripSettings',
+        'nav.settings',
+      ]) {
+        expect(within(sheet).getByText(label)).toBeInTheDocument();
+      }
+      expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('navigates from the header menu and closes it', async () => {
+      const user = userEvent.setup();
+      await db.settings.put({ ...DEFAULT_SETTINGS, mobileNavMode: 'menu' });
+
+      render(
+        <MemoryRouter initialEntries={[`/trips/${mockTrip.id}/calendar`]}>
+          <Layout>
+            <LocationProbe />
+          </Layout>
+        </MemoryRouter>,
+      );
+
+      await user.click(await screen.findByRole('button', { name: 'common.menu' }));
+      const sheet = await screen.findByRole('navigation', { name: 'nav.moreNavigation' });
+      await user.click(within(sheet).getByText('nav.transports'));
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId('location-probe')).toHaveTextContent(
+          `/trips/${mockTrip.id}/transports`,
+        );
+      });
+    });
+
+    it('uses the header menu on a very narrow screen in auto mode', () => {
+      setNarrow(true);
+
+      renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+
+      expect(getMobileNav()).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'common.menu' })).toBeInTheDocument();
+    });
+
+    it('keeps the bar on a very narrow screen when the user asked for it', async () => {
+      setNarrow(true);
+      await db.settings.put({ ...DEFAULT_SETTINGS, mobileNavMode: 'bar' });
+
+      renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+
+      await vi.waitFor(() => {
+        expect(getMobileNav()).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: 'common.menu' })).not.toBeInTheDocument();
+    });
+
+    it('takes the root marker away when the layout unmounts', async () => {
+      await db.settings.put({ ...DEFAULT_SETTINGS, mobileNavMode: 'menu' });
+
+      const { unmount } = renderLayoutAt(`/trips/${mockTrip.id}/calendar`);
+      await screen.findByRole('button', { name: 'common.menu' });
+      unmount();
+
+      expect(document.documentElement.dataset.navBar).toBeUndefined();
     });
   });
 });

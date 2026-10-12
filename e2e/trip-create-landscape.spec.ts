@@ -99,8 +99,11 @@ test.describe('creating a trip on a phone held sideways', () => {
     await page.goto('/trips');
     await waitForRoute(page);
 
-    // The trip list is a list, and the bar is how a phone leaves it.
+    // The trip list is a list, and the navigation is how a phone leaves it.
+    // Sideways, the automatic mode trades the 64px bar for the header's menu
+    // button, so the button is the way out and the bar is gone.
     await expect(page.getByRole('banner')).toHaveCount(1);
-    await expect(bottomBar(page)).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^menu$/i })).toBeVisible();
+    await expect(bottomBar(page)).toHaveCount(0);
   });
 });

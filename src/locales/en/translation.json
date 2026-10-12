@@ -1558,6 +1558,31 @@
     }
   },
   "settings": {
+    "navBar": {
+      "title": "Phone navigation",
+      "description": "Choose which trip pages your phone shows at the bottom of the screen.",
+      "modeLabel": "Display",
+      "modes": {
+        "auto": "Automatic",
+        "bar": "Bottom bar",
+        "menu": "Menu button"
+      },
+      "modeHints": {
+        "auto": "The bottom bar, except on a very narrow screen or a phone held sideways, where a menu button at the top replaces it.",
+        "bar": "The bottom bar is always shown.",
+        "menu": "No bottom bar. A menu button at the top opens every page."
+      },
+      "orderLabel": "Order",
+      "orderHint": "Drag a page by its handle. The first four go in the bottom bar, the others in More.",
+      "inBar": "In the bottom bar",
+      "inMore": "In More",
+      "restore": "Restore the default order",
+      "moveHandle": "Move {{page}}, position {{position}}",
+      "announceStart": "Picked up {{page}}",
+      "announceOver": "{{page}} is at position {{position}} of {{count}}",
+      "announceCancel": "Move of {{page}} cancelled",
+      "saveFailed": "Could not save the navigation"
+    },
     "title": "Settings",
     "description": "Manage your app preferences",
     "language": "Language",

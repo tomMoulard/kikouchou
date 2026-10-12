@@ -188,6 +188,9 @@ export default defineConfig([
       '**/UpcomingPickups.tsx',
       '**/TransportListPage.tsx',
       '**/TripCard.tsx',
+      // dnd-kit sortable list: the compiler cannot prove the memos over the
+      // pending order and `t` safe, though every dependency is listed.
+      '**/NavBarSettings.tsx',
     ],
     rules: {
       'react-hooks/preserve-manual-memoization': 'off',
