@@ -10,15 +10,13 @@ import { useTranslation } from 'react-i18next';
 import { TriangleAlert } from 'lucide-react';
 
 import { TimelineOffscreenArrows } from '@/components/shared/TimelineOffscreenArrows';
-import { TimelineScaleControls } from '@/components/shared/TimelineScaleControls';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
-import { useTimelineAxis } from '@/components/shared/useTimelineAxis';
 import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
 import { timelineAssignmentBarStyle, TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
-import { type TimelineColumn, resolveColumnRange } from '@/lib/utils/timeline-scale';
+import { type TimelineColumn, columnsFromDays, resolveColumnRange } from '@/lib/utils/timeline-scale';
 import { buildDayColumns, toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString, Person, Room, RoomAssignment, RoomId, Transport, Trip } from '@/types';
 import { DroppableRoom } from '@/features/rooms/components/DroppableRoom';
@@ -182,9 +180,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
 
   const personsById = useMemo(() => new Map<string, Person>(persons.map((p) => [p.id, p])), [persons]);
 
-  // The trip's days, and the axis whatever scale the reader picked makes of
-  // them. Shared with the guest calendar through `useTimelineAxis`, so the two
-  // timelines offer the same zooms and mean the same thing by each of them.
+  // The trip's days, one column each, as on the guest calendar.
   // Read once on mount when the caller does not say: a marker that re-read the
   // clock on every render would move the axis under the reader.
   const [mountedAt] = useState(() => new Date());
@@ -196,12 +192,10 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   );
   const tripDayKeys = useMemo(() => toDayKeys(tripDays), [tripDays]);
 
-  const axis = useTimelineAxis({
-    days: tripDays,
-    dayKeys: tripDayKeys,
-    dateLocale,
-    today: nowInstant,
-  });
+  const columns = useMemo(
+    () => columnsFromDays(tripDays, tripDayKeys, dateLocale),
+    [tripDays, tripDayKeys, dateLocale],
+  );
 
   const model = useMemo(
     () =>
@@ -214,9 +208,9 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
         unknownLabel: t('common.unknown'),
         arrivals,
         departures,
-        columns: axis.columns,
+        columns,
       }),
-    [trip, range, rooms, assignments, arrivals, departures, personsById, axis.columns, t],
+    [trip, range, rooms, assignments, arrivals, departures, personsById, columns, t],
   );
 
   // Lanes describe the *layout* (how many bars stack in a row); they say nothing
@@ -253,8 +247,8 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   // One row for everyone still without a bed, packed into lanes exactly like a
   // room's — guests who overlap stack instead of drawing over each other.
   const unassignedLanes = useMemo(
-    () => allocateTimelineLanes(buildUnassignedSegments(unassignedGuests, axis.columns)),
-    [unassignedGuests, axis.columns],
+    () => allocateTimelineLanes(buildUnassignedSegments(unassignedGuests, columns)),
+    [unassignedGuests, columns],
   );
   const unassignedLaneCount = unassignedLanes.reduce(
     (max, lane) => Math.max(max, lane.laneIndex + 1),
@@ -270,15 +264,10 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
       dayKeys={model.dayKeys}
       columns={model.columns}
       dateLocale={dateLocale}
-      preferredColumnWidthPx={axis.preferredColumnWidthPx}
       todayKey={todayKey}
       now={nowInstant}
-      recenterToken={axis.recenterToken}
       nowLabel={t('common.currentTime', 'Current time')}
       scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
-      toolbar={
-        <TimelineScaleControls value={axis.scale} onChange={axis.setScale} onNow={axis.goToNow} />
-      }
     >
       {(viewport) => {
         const {

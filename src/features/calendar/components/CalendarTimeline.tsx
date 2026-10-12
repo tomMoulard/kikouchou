@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import { Calendar as CalendarIcon, Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/EmptyState';
-import { TimelineScaleControls } from '@/components/shared/TimelineScaleControls';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
 import {
@@ -17,7 +16,7 @@ import {
   collectActivityDayKeys,
 } from '@/features/activities/utils/activity-timeline-utils';
 import { toLocalISODateString } from '@/lib/db/utils';
-import { useTimelineAxis } from '@/components/shared/useTimelineAxis';
+import { columnsFromDays } from '@/lib/utils/timeline-scale';
 import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString } from '@/types';
 import type { CalendarTimelineProps } from '../types';
@@ -83,13 +82,10 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
   // One axis for both halves of the timeline. Building it here rather than
   // inside each model is what guarantees the guest rows and the activity bands
   // line up: they are not two axes that agree, they are the same axis.
-  const axis = useTimelineAxis({
-    days: tripDays,
-    dayKeys: tripDayKeys,
-    dateLocale: props.dateLocale,
-    today: props.today,
-  });
-  const columns = axis.columns;
+  const columns = useMemo(
+    () => columnsFromDays(tripDays, tripDayKeys, props.dateLocale),
+    [tripDays, tripDayKeys, props.dateLocale],
+  );
 
   const model = useMemo(
     () =>
@@ -203,17 +199,12 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       dayKeys={model.dayKeys}
       columns={model.columns}
       dateLocale={props.dateLocale}
-      preferredColumnWidthPx={axis.preferredColumnWidthPx}
       todayKey={todayKey}
       now={props.today}
-      recenterToken={axis.recenterToken}
       tripRange={tripRange}
       outsideTripLabel={t('calendar.outsideTripDates', 'Outside the trip dates')}
       nowLabel={t('common.currentTime', 'Current time')}
       scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
-      toolbar={
-        <TimelineScaleControls value={axis.scale} onChange={axis.setScale} onNow={axis.goToNow} />
-      }
       renderDayMeta={renderDayHeadcount}
     >
       {(viewport) => (

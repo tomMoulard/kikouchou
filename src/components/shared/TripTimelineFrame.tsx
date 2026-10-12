@@ -133,14 +133,6 @@ export interface TripTimelineFrameProps {
    */
   readonly now?: Date;
   /**
-   * Bumped by the caller to send the axis back to now.
-   *
-   * The frame centres itself once per trip and viewport and then leaves the
-   * reader's scroll position alone — so a "now" button needs a way to ask for
-   * another centring without changing anything else. Any new value does it.
-   */
-  readonly recenterToken?: number;
-  /**
    * The trip's own dates, when the axis is allowed to run past them.
    *
    * The axis covers every event the timeline draws, which can be a flight the
@@ -162,8 +154,6 @@ export interface TripTimelineFrameProps {
    * timeline rather than the control, so pass it.
    */
   readonly scrollbarLabel?: string;
-  /** Controls rendered above the timeline, such as the scale dropdown. */
-  readonly toolbar?: ReactNode;
   /**
    * Optional extra content rendered under each day number in the header
    * (e.g. the number of people on site that night).
@@ -188,12 +178,10 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
   preferredColumnWidthPx,
   todayKey,
   now,
-  recenterToken,
   tripRange,
   outsideTripLabel,
   nowLabel,
   scrollbarLabel,
-  toolbar,
   renderDayMeta,
   children,
 }: TripTimelineFrameProps): ReactElement {
@@ -526,7 +514,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       return;
     }
 
-    const centreFor = `${centreColumnIndex}|${dayCount}|${viewportWidth}|${recenterToken ?? 0}`;
+    const centreFor = `${centreColumnIndex}|${dayCount}|${viewportWidth}`;
     if (centredForRef.current === centreFor) {
       return;
     }
@@ -548,7 +536,6 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     dayCount,
     viewportWidth,
     canvasWidth,
-    recenterToken,
     publishVisibleRange,
   ]);
 
@@ -570,11 +557,6 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 
   return (
     <div role="region" aria-label={ariaLabel} className="w-full min-w-0 border rounded-lg overflow-hidden">
-      {toolbar !== undefined && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-muted bg-background px-3 py-2">
-          {toolbar}
-        </div>
-      )}
       {/*
         `tabIndex={0}` makes the scroll container reachable by keyboard.
         Without it a keyboard-only user could not scroll the timeline at all

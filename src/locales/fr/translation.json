@@ -29,17 +29,7 @@
     "time": "Heure",
     "pickDate": "Choisir une date",
     "scrollTimeline": "Faire défiler la frise",
-    "now": "Maintenant",
-    "currentTime": "Heure actuelle",
-    "timelineScale": "Échelle de la frise",
-    "timelineScales": {
-      "hours": "Heures (15 min)",
-      "day": "Journée (1 heure)",
-      "week": "Semaine (1 jour)",
-      "month": "Séjour (1 jour)",
-      "year": "Année (1 semaine)",
-      "fiveYears": "5 ans (1 mois)"
-    }
+    "currentTime": "Heure actuelle"
   },
   "nav": {
     "calendar": "Calendrier",

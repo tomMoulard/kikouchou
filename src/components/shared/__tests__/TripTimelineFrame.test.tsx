@@ -403,14 +403,4 @@ describe('TripTimelineFrame', () => {
 
     expect(container.querySelectorAll('[data-weekend="true"]')).toHaveLength(2);
   });
-
-  it('renders toolbar content above the timeline', () => {
-    render(
-      <TripTimelineFrame {...defaultProps} toolbar={<button type="button">Now</button>}>
-        {() => null}
-      </TripTimelineFrame>,
-    );
-
-    expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
-  });
 });

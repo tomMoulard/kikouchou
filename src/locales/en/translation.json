@@ -29,17 +29,7 @@
     "time": "Time",
     "pickDate": "Pick a date",
     "scrollTimeline": "Scroll the timeline",
-    "now": "Now",
-    "currentTime": "Current time",
-    "timelineScale": "Timeline scale",
-    "timelineScales": {
-      "hours": "Hours (15 min)",
-      "day": "Day (1 hour)",
-      "week": "Week (1 day)",
-      "month": "Trip (1 day)",
-      "year": "Year (1 week)",
-      "fiveYears": "5 years (1 month)"
-    }
+    "currentTime": "Current time"
   },
   "nav": {
     "calendar": "Calendar",
