@@ -364,4 +364,42 @@ describe('InstallPrompt', () => {
       expect(vi.mocked(notify.success)).not.toHaveBeenCalled();
     });
   });
+
+  describe('while a trip is being created', () => {
+    it('stays hidden on the trip creation form', async () => {
+      mockCanInstall.mockReturnValue(true);
+      const { container } = render(<InstallPrompt suppressed />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(5000); });
+      expect(container.innerHTML).toBe('');
+    });
+
+    it('hides at once when the form opens over a visible card', async () => {
+      mockCanInstall.mockReturnValue(true);
+      const { rerender } = render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(screen.getByRole('region')).toBeInTheDocument();
+
+      rerender(<InstallPrompt suppressed />);
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+    });
+
+    it('comes back after the usual delay once the form is left', async () => {
+      mockCanInstall.mockReturnValue(true);
+      const { rerender } = render(<InstallPrompt suppressed />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(5000); });
+
+      rerender(<InstallPrompt />);
+      // Not on the very frame the trip page appears: the delay starts again.
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(screen.getByRole('region')).toBeInTheDocument();
+    });
+
+    it('does not write a dismissal', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt suppressed />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(5000); });
+      expect(localStorage.getItem(DISMISSAL_KEY)).toBeNull();
+    });
+  });
 });
