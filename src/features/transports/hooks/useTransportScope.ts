@@ -17,6 +17,14 @@
  *   a device that does not know who it is would hide every row and read as data
  *   loss, so the scope is clamped to `all` until an identity resolves — which
  *   also covers the beat before `useTripIdentity` has finished looking.
+ * - **Absent a choice, "only mine" needs something to be mine.** A guest with
+ *   no leg and no car on the trip would open on an empty page, so the default
+ *   is `all` for them. A `?scope=mine` in the URL is still honoured: that is a
+ *   choice, and the page says why it is empty.
+ * - **A leg that needs a driver is everybody's business.** It stays in the
+ *   `mine` scope whoever's leg it is, because the guest reading the page is a
+ *   candidate driver. The selection is `selectPickupsNeedingDriver`, the same
+ *   one the "needs a driver" panel counts.
  *
  * @module features/transports/hooks/useTransportScope
  */
@@ -24,7 +32,11 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { resolveRides } from '@/features/transports/utils/ride-model';
+import { selectPickupsNeedingDriver } from '@/features/transports/utils/pickup-utils';
+import {
+  rideConcernsPerson,
+  resolveRides,
+} from '@/features/transports/utils/ride-model';
 import {
   parseTransportScope,
   selectTransportsConcerning,
@@ -35,7 +47,7 @@ import { useTripIdentity } from '@/hooks';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
-import type { PersonId, Transport } from '@/types';
+import type { PersonId, Transport, TransportId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -63,6 +75,12 @@ export interface UseTransportScopeResult<TTransport extends Transport> {
    * under it.
    */
   readonly myPersonId: PersonId | undefined;
+  /**
+   * The upcoming legs nobody is driving yet. The `mine` scope keeps them, and
+   * a view that scopes things other than rows (the map's rendez-vous markers)
+   * keeps the cars that carry them.
+   */
+  readonly needsDriverIds: ReadonlySet<TransportId>;
   /** The rows to render, already filtered. */
   readonly visibleTransports: readonly TTransport[];
   /** How many of the caller's rows the scope is hiding right now. */
@@ -97,16 +115,15 @@ export function useTransportScope<TTransport extends Transport>(
   const [searchParams, setSearchParams] = useSearchParams();
   const { myPersonId, isResolved } = useTripIdentity();
   const { persons } = usePersonContext();
-  const { rides, vehicles } = useRideContext();
-  const { arrivals, departures } = useTransportContext();
+  const { rides, vehicles, isLoading: isRidesLoading } = useRideContext();
+  const {
+    arrivals,
+    departures,
+    upcomingPickups,
+    isLoading: isTransportsLoading,
+  } = useTransportContext();
 
   const canFilter = isResolved && myPersonId !== undefined;
-
-  // Absent means "only mine" for somebody the app can name, and "everyone" for
-  // everybody else — the answer that never hides a row nobody can get back.
-  const scope: TransportScope = canFilter
-    ? parseTransportScope(searchParams.get(TRANSPORT_SCOPE_PARAM), 'mine')
-    : 'all';
 
   const journeys = useMemo(
     () =>
@@ -119,13 +136,54 @@ export function useTransportScope<TTransport extends Transport>(
     [arrivals, departures, rides, vehicles, persons],
   );
 
-  const visibleTransports = useMemo(
+  // Asked of the whole trip, like the journeys: a guest whose only leg has no
+  // coordinates still has travel, and the map must open on the same scope as
+  // the list. Counted as "has travel" while either table is loading, so the
+  // page does not open on everyone and then jump to mine when the rows land.
+  const hasOwnTravel = useMemo(
     () =>
-      scope === 'mine' && myPersonId !== undefined
-        ? selectTransportsConcerning(candidates, journeys, myPersonId)
-        : candidates,
-    [candidates, journeys, myPersonId, scope],
+      myPersonId !== undefined &&
+      (isTransportsLoading ||
+        isRidesLoading ||
+        arrivals.some((transport) => transport.personId === myPersonId) ||
+        departures.some((transport) => transport.personId === myPersonId) ||
+        journeys.some((journey) => rideConcernsPerson(journey, myPersonId))),
+    [arrivals, departures, isRidesLoading, isTransportsLoading, journeys, myPersonId],
   );
+
+  // Absent means "only mine" for somebody the app can name who has travel on
+  // the trip, and "everyone" for everybody else: the answer that never opens
+  // on an empty page.
+  const scope: TransportScope = canFilter
+    ? parseTransportScope(
+        searchParams.get(TRANSPORT_SCOPE_PARAM),
+        hasOwnTravel ? 'mine' : 'all',
+      )
+    : 'all';
+
+  const needsDriverIds = useMemo(
+    () =>
+      new Set(
+        selectPickupsNeedingDriver(upcomingPickups, rides).map(
+          (transport) => transport.id,
+        ),
+      ),
+    [upcomingPickups, rides],
+  );
+
+  const visibleTransports = useMemo(() => {
+    if (scope !== 'mine' || myPersonId === undefined) {
+      return candidates;
+    }
+    const concerning = new Set(
+      selectTransportsConcerning(candidates, journeys, myPersonId).map(
+        (transport) => transport.id,
+      ),
+    );
+    return candidates.filter(
+      (transport) => concerning.has(transport.id) || needsDriverIds.has(transport.id),
+    );
+  }, [candidates, journeys, myPersonId, needsDriverIds, scope]);
 
   const setScope = useCallback(
     (next: TransportScope): void => {
@@ -142,6 +200,7 @@ export function useTransportScope<TTransport extends Transport>(
     scope,
     canFilter,
     myPersonId,
+    needsDriverIds,
     visibleTransports,
     hiddenCount: candidates.length - visibleTransports.length,
     setScope,

@@ -28,6 +28,7 @@ import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Locale } from 'date-fns';
 import {
+  AlertTriangle,
   ArrowDownToLine,
   ArrowUpFromLine,
   Car,
@@ -520,7 +521,19 @@ const RideCard = memo(function RideCard({
             button sits on this line rather than with the card's actions
             because it answers the sentence beside it. */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <User className="size-4 shrink-0" aria-hidden="true" />
+          {/* A car nobody drives carries the same alert as a leg that needs a
+              driver, on every transport view. */}
+          {hasDriver ? (
+            <User className="size-4 shrink-0" aria-hidden="true" />
+          ) : (
+            <AlertTriangle
+              className={cn(
+                'size-4 shrink-0',
+                statusVariants({ tone: 'warning', emphasis: 'text' }),
+              )}
+              aria-hidden="true"
+            />
+          )}
           {namesAChauffeur && journey.driver !== undefined ? (
             <>
               <span>{t('rides.driver')}:</span>

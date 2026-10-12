@@ -6,8 +6,10 @@
  * - the scope is clamped to `all` whenever nobody is identified, **including**
  *   the beat before the identity has resolved, so a navigation never flashes an
  *   empty list and a shared `?scope=mine` link never blanks a stranger's page;
- * - the default is `mine` for somebody the app can name, which is the whole
- *   point of the feature;
+ * - the default is `mine` for somebody the app can name who has travel on the
+ *   trip, and `all` for somebody who has none, who would otherwise open on an
+ *   empty page;
+ * - a leg that still needs a driver stays in `mine`, whoever's leg it is;
  * - the cars are resolved from every transport on the trip, not from the rows
  *   the caller happens to be showing — the map hands it a coordinate-filtered
  *   list, and resolving from that would drop the caller's own leg out of the
@@ -124,10 +126,13 @@ beforeEach(() => {
   vi.mocked(useRideContext).mockReturnValue({
     rides: [RIDE],
     vehicles: [],
+    isLoading: false,
   } as unknown as ReturnType<typeof useRideContext>);
   vi.mocked(useTransportContext).mockReturnValue({
     arrivals: ALL_TRANSPORTS,
     departures: [],
+    upcomingPickups: [],
+    isLoading: false,
   } as unknown as ReturnType<typeof useTransportContext>);
   mockIdentity(TOM_ID);
 });
@@ -203,10 +208,13 @@ describe('useTransportScope', () => {
     vi.mocked(useRideContext).mockReturnValue({
       rides: [{ ...RIDE, driverId: undefined }],
       vehicles: [],
+      isLoading: false,
     } as unknown as ReturnType<typeof useRideContext>);
     vi.mocked(useTransportContext).mockReturnValue({
       arrivals: [{ ...MY_LEG, rideId: RIDE_ID }, THEIR_LEG, IN_MY_CAR],
       departures: [],
+      upcomingPickups: [],
+      isLoading: false,
     } as unknown as ReturnType<typeof useTransportContext>);
 
     const { result } = renderScope(pinnedOnly);
@@ -215,5 +223,63 @@ describe('useTransportScope', () => {
       't-alice-car',
     ]);
     expect(result.current.hiddenCount).toBe(1);
+  });
+
+  it('defaults to "all" when nothing on the trip concerns the guest', () => {
+    // Bob has no leg and drives no car. "Only mine" would open on an empty
+    // page, so the page opens on everyone instead.
+    mockIdentity('person-bob' as PersonId);
+
+    const { result } = renderScope();
+
+    expect(result.current.scope).toBe('all');
+    expect(result.current.canFilter).toBe(true);
+    expect(result.current.visibleTransports).toHaveLength(3);
+  });
+
+  it('still honours an explicit ?scope=mine for a guest with no travel', () => {
+    mockIdentity('person-bob' as PersonId);
+
+    const { result } = renderScope(ALL_TRANSPORTS, '/t?scope=mine');
+
+    expect(result.current.scope).toBe('mine');
+    expect(result.current.visibleTransports).toHaveLength(0);
+  });
+
+  it('defaults to "mine" while the rows are still loading', () => {
+    // Opening on everyone and jumping to mine when the rows land would move
+    // the page under the guest's finger.
+    mockIdentity('person-bob' as PersonId);
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: true,
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    const { result } = renderScope([]);
+
+    expect(result.current.scope).toBe('mine');
+  });
+
+  it('keeps a leg that needs a driver in "mine", whoever it belongs to', () => {
+    // Alice's leg has no car. Tom is a candidate driver, so he sees it.
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: ALL_TRANSPORTS,
+      departures: [],
+      upcomingPickups: [THEIR_LEG],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    const { result } = renderScope();
+
+    expect(result.current.scope).toBe('mine');
+    expect(result.current.visibleTransports.map((row) => row.id)).toEqual([
+      't-tom',
+      't-alice',
+      't-alice-car',
+    ]);
+    expect(result.current.needsDriverIds.has('t-alice' as TransportId)).toBe(true);
+    expect(result.current.hiddenCount).toBe(0);
   });
 });

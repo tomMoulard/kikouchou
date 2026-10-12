@@ -350,13 +350,26 @@ describe('TransportListPage', () => {
     expect(screen.getByText('transports.empty')).toBeInTheDocument();
   });
 
-  it('says the filter is empty, not the trip, when "mine" hides everything', () => {
-    // A guest with no leg of their own on a trip that is fully planned. "No
-    // travel plans yet" would be false here, and false in the direction that
-    // reads as data loss.
+  it('opens on everyone when nothing on the trip concerns the guest', () => {
+    // "Only mine" would be an empty page for a guest with no leg and no car.
     mockIdentity('person-2' as Person['id']);
 
     render(<TransportListPage />, { withProviders: false });
+
+    expect(screen.queryByText('transports.scope.empty')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('article').length).toBeGreaterThan(0);
+  });
+
+  it('says the filter is empty, not the trip, when "mine" hides everything', () => {
+    // A guest with no leg of their own on a trip that is fully planned, who
+    // asked for "only mine". "No travel plans yet" would be false here, and
+    // false in the direction that reads as data loss.
+    mockIdentity('person-2' as Person['id']);
+
+    render(<TransportListPage />, {
+      withProviders: false,
+      initialRoute: '/trips/trip-1/transports?scope=mine',
+    });
 
     expect(screen.getByText('transports.scope.empty')).toBeInTheDocument();
     expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();

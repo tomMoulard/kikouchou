@@ -58,6 +58,7 @@ import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
 import { type Locale, format, parseISO } from 'date-fns';
 import {
+  AlertTriangle,
   ArrowDownToLine,
   ArrowUpFromLine,
   CarFront,
@@ -593,8 +594,9 @@ const TransportCard = memo(function TransportCard({
             {showNeedsPickupBadge && (
               <Badge
                 variant="outline"
-                className={cn('shrink-0', statusVariants({ tone: 'warning' }))}
+                className={cn('shrink-0 gap-1', statusVariants({ tone: 'warning' }))}
               >
+                <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
                 {t('transports.needsPickup')}
               </Badge>
             )}
