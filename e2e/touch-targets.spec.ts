@@ -20,6 +20,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { seedPerson, seedTransport, seedTrip } from './support/seed';
 import { waitForRoute } from './support/routes';
 import { clearIndexedDB } from './support/storage';
+import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Constants
@@ -358,6 +359,8 @@ test.describe('Touch targets on mobile', () => {
 
   test("the date picker's month arrows are at least 44px square", async ({ page }) => {
     await clearIndexedDB(page);
+    // A trip already on the device, so `/trips/new` is the one-page form.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await waitForRoute(page);
 
@@ -456,6 +459,8 @@ test.describe('Desktop density is unchanged', () => {
 
   test('the date picker stays compact past the md breakpoint', async ({ page }) => {
     await clearIndexedDB(page);
+    // A trip already on the device, so `/trips/new` is the one-page form.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await waitForRoute(page);
 

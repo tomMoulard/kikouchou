@@ -23,8 +23,11 @@ import { waitForRoute } from './support/routes';
 // Fixtures
 // ============================================================================
 
-/** The app's language detection can land on either locale; match both. */
-const TRIP_NAME = /trip name|nom du voyage/i;
+/**
+ * The app's language detection can land on either locale; match both. The
+ * first-trip wizard says "séjour" where the form says "voyage".
+ */
+const TRIP_NAME = /trip name|nom du voyage|nom du séjour/i;
 
 /** The module of the create page, as the dev server and a build both name it. */
 const CREATE_PAGE_CHUNK = /TripCreatePage[^/]*\.(tsx|js)(\?|$)/;

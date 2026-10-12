@@ -13,6 +13,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
 import { stubExternalMapServices } from './support/external-services';
+import { fillNewTrip } from './support/trip-create';
 import {
   waitForActivatedServiceWorker,
   waitForPrecachedAppShell,
@@ -20,35 +21,14 @@ import {
 
 /**
  * Creates a trip through the UI and returns its id.
+ *
+ * The device is empty, so `/trips/new` is the first-trip wizard.
  */
 async function createTestTrip(page: Page, name: string): Promise<string> {
   await page.goto('/trips/new');
   await page.waitForLoadState('load');
 
-  await page.locator('#trip-name').fill(name);
-
-  await page.locator('#trip-start-date').click();
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-  await page
-    .locator('[data-slot="calendar"]')
-    .first()
-    .locator('button')
-    .filter({ hasText: /^15$/ })
-    .first()
-    .click();
-
-  await page.locator('#trip-end-date').click();
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-  await page
-    .locator('[data-slot="calendar"]')
-    .first()
-    .locator('button')
-    .filter({ hasText: /^22$/ })
-    .first()
-    .click();
-
-  await page.getByRole('button', { name: /save|sauvegarder/i }).click();
-  await page.waitForURL(/\/trips\/[a-zA-Z0-9_-]+\/(calendar)?/, { timeout: 10_000 });
+  await fillNewTrip(page, name);
 
   const tripId = /\/trips\/([a-zA-Z0-9_-]+)/.exec(page.url())?.[1] ?? '';
   expect(tripId).toBeTruthy();

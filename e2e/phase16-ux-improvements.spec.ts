@@ -14,6 +14,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForRoute } from './support/routes';
 import { roomCards } from './support/page-regions';
+import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Database Helpers
@@ -576,7 +577,9 @@ test.describe('Trip Creation with New UI', () => {
   });
 
   test('trip form includes description field', async ({ page }) => {
-    // Navigate directly to trip creation page
+    // Navigate directly to trip creation page. A trip already on the device,
+    // so it is the one-page form rather than the first-trip wizard.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
     await waitForRoute(page);
@@ -591,7 +594,9 @@ test.describe('Trip Creation with New UI', () => {
   });
 
   test('trip form has location input', async ({ page }) => {
-    // Navigate directly to trip creation page
+    // Navigate directly to trip creation page. A trip already on the device,
+    // so it is the one-page form rather than the first-trip wizard.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
     await waitForRoute(page);
@@ -602,7 +607,9 @@ test.describe('Trip Creation with New UI', () => {
   });
 
   test('trip form has date range picker', async ({ page }) => {
-    // Navigate directly to trip creation page
+    // Navigate directly to trip creation page. A trip already on the device,
+    // so it is the one-page form rather than the first-trip wizard.
+    await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
     await waitForRoute(page);

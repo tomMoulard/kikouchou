@@ -18,7 +18,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 
 import { SupabaseStub, type StubUser } from './support/supabase-stub';
 import { fixtureDate } from './support/fixture-dates';
-import { clearTripOrganiser } from './support/trip-form';
+import { fillNewTrip } from './support/trip-create';
 
 // ============================================================================
 // Fixtures
@@ -33,19 +33,9 @@ const TRIP = { name: 'Shared Brittany' } as const;
 // Helpers
 // ============================================================================
 
-async function fillDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.locator('#trip-end-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
-}
-
 async function createTrip(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: /new trip/i }).first().click();
-  await page.getByLabel(/trip name/i).fill(name);
-  await fillDates(page);
-  await clearTripOrganiser(page);
-  await page.getByRole('button', { name: /save/i }).click();
+  await fillNewTrip(page, name, { dropOrganiser: true });
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
 }
 

@@ -53,7 +53,9 @@ test.describe('First-run landing', () => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/trips\/new$/);
 
-    await page.getByRole('button', { name: /cancel/iu }).click();
+    // A first launch gets the first-trip wizard, and Back on its first
+    // question is the way out.
+    await page.getByRole('button', { name: /^(back|retour)$/iu }).click();
 
     await expect(page).toHaveURL(/\/trips$/);
     await expect(page.getByText('No trips yet')).toBeVisible();

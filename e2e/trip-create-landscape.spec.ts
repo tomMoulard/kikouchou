@@ -18,6 +18,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { waitForRoute } from './support/routes';
+import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Fixtures
@@ -29,8 +30,11 @@ const LANDSCAPE = { width: 750, height: 402 } as const;
 /** The same phone upright, where the shell has the height it needs. */
 const PORTRAIT = { width: 402, height: 750 } as const;
 
-/** The app's language detection can land on either locale; match both. */
-const TRIP_NAME = /trip name|nom du voyage/i;
+/**
+ * The app's language detection can land on either locale; match both. The
+ * form says "voyage" and the first-trip wizard says "séjour".
+ */
+const TRIP_NAME = /trip name|nom du voyage|nom du séjour/i;
 
 /** The fixed bottom navigation bar, which has no role of its own. */
 function bottomBar(page: Page) {
@@ -42,6 +46,7 @@ function bottomBar(page: Page) {
 // ============================================================================
 
 test.describe('creating a trip on a phone held sideways', () => {
+  // An empty device, so this is the first-trip wizard: the first visit.
   test('drops the shell and leaves the form the whole screen', async ({ page }) => {
     await page.setViewportSize(LANDSCAPE);
     await page.goto('/trips/new');
@@ -65,12 +70,28 @@ test.describe('creating a trip on a phone held sideways', () => {
   });
 
   test('puts the shell back the moment the phone is upright', async ({ page }) => {
+    // A trip already on the device, so this is the one-page form, which keeps
+    // the bottom bar when there is room for it.
+    await seedEarlierTrip(page);
     await page.setViewportSize(PORTRAIT);
     await page.goto('/trips/new');
     await waitForRoute(page);
 
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(bottomBar(page)).toHaveCount(1);
+  });
+
+  test('keeps the header but not the bottom bar beside the first-trip wizard', async ({
+    page,
+  }) => {
+    await page.setViewportSize(PORTRAIT);
+    await page.goto('/trips/new');
+    await waitForRoute(page);
+
+    // On a first visit no trip tab can open, so the bar has nowhere to go.
+    await expect(page.getByLabel(TRIP_NAME).first()).toBeVisible();
+    await expect(page.getByRole('banner')).toHaveCount(1);
+    await expect(bottomBar(page)).toHaveCount(0);
   });
 
   test('keeps the shell on the other routes at the same viewport', async ({ page }) => {

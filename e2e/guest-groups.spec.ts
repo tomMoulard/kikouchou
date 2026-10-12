@@ -16,6 +16,7 @@ import { fixtureDate } from './support/fixture-dates';
 import { guestCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
 import { seedGuestGroup, seedTrip } from './support/seed';
+import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Helpers
@@ -263,6 +264,8 @@ test.describe('Guest groups', () => {
       name: FAMILY.name,
       members: [{ name: 'Tom + Léa', headcount: 2 }, { name: 'Alice' }],
     });
+    // A trip already on the device, so `/trips/new` is the one-page form.
+    await seedEarlierTrip(page);
 
     await page.goto('/trips/new');
     await waitForRoute(page);
