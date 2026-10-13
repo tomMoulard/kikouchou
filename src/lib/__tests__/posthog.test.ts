@@ -386,6 +386,111 @@ describe('redactAndMark', () => {
 });
 
 // ============================================================================
+// Foreign exceptions
+// ============================================================================
+
+/**
+ * The exceptions `before_send` drops: thrown by code that is not this app's,
+ * in a browser this app does not control, and unfixable from here. Each is an
+ * active PostHog issue that no change to the app could close.
+ */
+describe('redactAndMark with an exception the app did not throw', () => {
+  /** An `$exception` event as posthog-js hands it to `before_send`. */
+  function foreign(list: unknown): CaptureResult {
+    return {
+      uuid: '01a091ea-7f76-79d3-8f33-70daf1ca074c',
+      event: '$exception',
+      properties: { $exception_list: list, $current_url: 'https://app.kikouchou.app/trips' },
+    } as CaptureResult;
+  }
+
+  it.each([
+    [
+      // 01a10ced: Meta's in-app browser bridge, after the native side is gone.
+      "Meta's in-app browser bridge",
+      [
+        {
+          type: 'Error',
+          value: 'Error invoking postMessage: Java object is gone',
+          stacktrace: {
+            frames: [
+              { function: 'sendDataToNative', filename: 'iabjs://navigation_performance_logger_android' },
+            ],
+          },
+        },
+      ],
+    ],
+    [
+      // The same bridge, with posthog-js reading no frames at all.
+      'an Android webview bridge with no frames',
+      [{ type: 'Error', value: 'Error invoking postMessage: Java object is gone' }],
+    ],
+    [
+      // 01a0a5d4: a cross-origin script the browser would not describe.
+      'an opaque cross-origin error',
+      [{ type: 'Error', value: 'Script error.' }],
+    ],
+    [
+      // 01a120eb: Instagram's iOS webview script, run inside the page.
+      "an in-app browser's iOS bridge",
+      [
+        {
+          type: 'TypeError',
+          value: "undefined is not an object (evaluating 'window.webkit.messageHandlers')",
+          stacktrace: { frames: [{ filename: 'https://kikouchou.app/', lineno: 1, colno: 3759 }] },
+        },
+      ],
+    ],
+    [
+      // 01a11652: a script some Android browser injects, calling its own global.
+      "a browser's injected script",
+      [{ type: 'ReferenceError', value: 'xbrowser is not defined' }],
+    ],
+  ])('drops %s', async (_name, list) => {
+    const { redactAndMark } = await importPosthog();
+
+    expect(redactAndMark(foreign(list))).toBeNull();
+  });
+
+  it('keeps an error of our own that happens to read "Script error."', async () => {
+    const { redactAndMark } = await importPosthog();
+    const event = foreign([
+      {
+        type: 'Error',
+        value: 'Script error.',
+        stacktrace: { frames: [{ filename: 'app.js', function: 'save', in_app: true }] },
+      },
+    ]);
+
+    expect(redactAndMark(event)).toBe(event);
+  });
+
+  it('keeps an ordinary exception', async () => {
+    const { redactAndMark } = await importPosthog();
+    const event = foreign([{ type: 'TypeError', value: 'x is undefined' }]);
+
+    expect(redactAndMark(event)).toBe(event);
+  });
+
+  it('keeps a chained exception whose readable half is ours', async () => {
+    const { redactAndMark } = await importPosthog();
+    const event = foreign([
+      { type: 'Error', value: 'Script error.' },
+      { type: 'TypeError', value: 'x is undefined', stacktrace: { frames: [{ filename: 'app.js' }] } },
+    ]);
+
+    expect(redactAndMark(event)).toBe(event);
+  });
+
+  it('keeps every event that is not an exception', async () => {
+    const { redactAndMark } = await importPosthog();
+    const event = { uuid: 'u', event: '$pageview', properties: {} } as CaptureResult;
+
+    expect(redactAndMark(event)).toBe(event);
+  });
+});
+
+// ============================================================================
 // readableExternalScript
 // ============================================================================
 

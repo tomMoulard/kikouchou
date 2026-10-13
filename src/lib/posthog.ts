@@ -419,8 +419,10 @@ export function exceptionDebugContext(list: unknown): Record<string, unknown> {
  *
  * What remains is genuinely outside the app: a browser extension's content
  * script, or an in-app webview injecting its own JavaScript. No code in this
- * repository can stop those from throwing, so the honest handling is to keep
- * reporting them and make them tractable, which is what the two properties do.
+ * repository can stop those from throwing. This function only marks them,
+ * which is what the two properties do; {@link redactAndMark} then drops what
+ * {@link isForeignException} reads from those marks, so they stop filing
+ * issues nobody here can close.
  * `opaque_cross_origin` makes them addressable in any insight or filter, and
  * the fingerprint collapses them into one named issue instead of leaving them
  * to blur into whatever else PostHog decides they resemble.
@@ -566,7 +568,9 @@ const URL_PROPERTIES = [
  * Strips credentials out of every URL on an event, then hands it on.
  *
  * Wraps {@link markOpaqueExceptions} rather than replacing it: `before_send`
- * takes one function, and both jobs have to happen on every event.
+ * takes one function, and both jobs have to happen on every event. Then drops
+ * an exception {@link isForeignException} says the app did not throw — the
+ * one case where this returns `null` for an event it was given.
  */
 export function redactAndMark(event: CaptureResult | null): CaptureResult | null {
   if (event?.properties) {
@@ -586,7 +590,63 @@ export function redactAndMark(event: CaptureResult | null): CaptureResult | null
     }
   }
 
-  return markOpaqueExceptions(event);
+  const marked = markOpaqueExceptions(event);
+  return isForeignException(marked) ? null : marked;
+}
+
+/**
+ * Messages only a script riding along with the page throws.
+ *
+ * Nothing in this repository names either global. `window.webkit` is the
+ * bridge an iOS in-app browser injects (PostHog issue `01a120eb`, Instagram);
+ * `xbrowser` is a global some Android browser's injected script expects
+ * (`01a11652`). Matched on the message because neither comes with a frame that
+ * could be told apart from the page: the webview attributes its script to the
+ * document URL.
+ */
+const FOREIGN_EXCEPTION_MESSAGES: readonly RegExp[] = [
+  /\bwindow\.webkit\.messageHandlers\b/,
+  /\bxbrowser is not defined\b/,
+];
+
+/**
+ * Whether an exception was thrown by somebody else's code, so that sending it
+ * would only file noise nobody here can act on.
+ *
+ * Three kinds, each an issue that no change to the app could close:
+ *
+ * - an in-app browser's own bridge failing ("Java object is gone",
+ *   `injected_bridge` set by {@link exceptionDebugContext}; `01a10ced`);
+ * - an opaque "Script error." with no frames (`opaque_cross_origin`;
+ *   `01a0a5d4`). The app's bundle and every script posthog-js injects are
+ *   loaded `crossorigin`, so their errors arrive readable and never land here;
+ * - a message from {@link FOREIGN_EXCEPTION_MESSAGES}, on every entry.
+ *
+ * Reads the properties {@link markOpaqueExceptions} has just set, so it runs
+ * after it. An exception with one readable entry of ours is kept.
+ *
+ * Exported for tests.
+ */
+export function isForeignException(event: CaptureResult | null): boolean {
+  if (!event || event.event !== '$exception' || !event.properties) {
+    return false;
+  }
+  const properties = event.properties;
+  if (properties['injected_bridge'] === 'meta_iab' || properties['injected_bridge'] === 'android_webview') {
+    return true;
+  }
+  if (properties['opaque_cross_origin'] === true) {
+    return true;
+  }
+  const list: unknown = properties['$exception_list'];
+  return (
+    Array.isArray(list) &&
+    list.length > 0 &&
+    list.every((entry: unknown) => {
+      const value = typeof entry === 'object' && entry !== null ? (entry as ExceptionListEntry).value : undefined;
+      return typeof value === 'string' && FOREIGN_EXCEPTION_MESSAGES.some((pattern) => pattern.test(value));
+    })
+  );
 }
 
 // ============================================================================
