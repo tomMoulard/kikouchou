@@ -13,7 +13,7 @@
  *
  * @module components/shared/__tests__/MapMarker.test
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@/test/utils';
 
 import { MapMarker, type MapMarkerData, type MapMarkerType } from '@/components/shared/MapMarker';
@@ -762,6 +762,47 @@ describe('MapMarker colour sanitisation', () => {
 
     expect(html).not.toContain('style=');
     expect(html).toContain('bg-departure');
+  });
+});
+
+// ============================================================================
+// Older engines
+// ============================================================================
+
+/**
+ * PostHog issue `01a1121b`: Chrome 92 on Android has no `Object.hasOwn` (it
+ * shipped in 93), and resolving the marker type threw on every render.
+ */
+describe('MapMarker on an engine without Object.hasOwn', () => {
+  // jsdom calls `Object.hasOwn` itself, so it cannot simply be deleted. The
+  // stand-in throws what Chrome 92 threw, but only for the marker's own lookup
+  // table, which is the one object with all four marker types as keys.
+  beforeEach(() => {
+    const realHasOwn = Object.hasOwn;
+    vi.spyOn(Object, 'hasOwn').mockImplementation((target: object, key: PropertyKey) => {
+      if (['trip', 'transport', 'pickup', 'default'].every((type) => type in target)) {
+        throw new TypeError('Object.hasOwn is not a function');
+      }
+      return realHasOwn(target, key);
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders a known type', () => {
+    const html = renderedIconHtml(createTestMarker({ type: 'transport' }));
+
+    expect(html).toContain('data-marker-type="transport"');
+  });
+
+  it('still falls back to the default type for an unknown one', () => {
+    const html = renderedIconHtml(
+      createTestMarker({ type: 'ferry' as MapMarkerData['type'] }),
+    );
+
+    expect(html).toContain('data-marker-type="default"');
   });
 });
 

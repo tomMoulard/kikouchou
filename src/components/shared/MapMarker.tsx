@@ -146,7 +146,11 @@ const MARKER_BASE_CLASSES =
  * reaches the markup.
  */
 function resolveMarkerType(type: MapMarkerType): MapMarkerType {
-  return Object.hasOwn(MARKER_TYPE_CLASSES, type) ? type : 'default';
+  // `hasOwnProperty.call`, not `Object.hasOwn`: Chrome only shipped the latter
+  // in 93, and on Chrome 92 for Android every marker threw "Object.hasOwn is
+  // not a function", taking the trip list's map previews down with it
+  // (PostHog issue `01a1121b`).
+  return Object.prototype.hasOwnProperty.call(MARKER_TYPE_CLASSES, type) ? type : 'default';
 }
 
 /**
