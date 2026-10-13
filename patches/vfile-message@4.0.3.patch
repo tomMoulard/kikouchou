@@ -1,0 +1,47 @@
+diff --git a/lib/index.js b/lib/index.js
+index b51817e..b892ed1 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -299,16 +299,29 @@ export class VFileMessage extends Error {
+   }
+ }
+ 
+-VFileMessage.prototype.file = ''
+-VFileMessage.prototype.name = ''
+-VFileMessage.prototype.reason = ''
+-VFileMessage.prototype.message = ''
+-VFileMessage.prototype.stack = ''
+-VFileMessage.prototype.column = undefined
+-VFileMessage.prototype.line = undefined
+-VFileMessage.prototype.ancestors = undefined
+-VFileMessage.prototype.cause = undefined
+-VFileMessage.prototype.fatal = undefined
+-VFileMessage.prototype.place = undefined
+-VFileMessage.prototype.ruleId = undefined
+-VFileMessage.prototype.source = undefined
++// Patched (kikouchou): defined rather than assigned. An assignment is refused
++// when `Error.prototype` carries a read-only property of the same name, as it
++// does once SES `lockdown()` has frozen the intrinsics, and the whole module
++// then fails to load with "Cannot assign to read only property 'stack'".
++for (const [key, value] of [
++  ['file', ''],
++  ['name', ''],
++  ['reason', ''],
++  ['message', ''],
++  ['stack', ''],
++  ['column', undefined],
++  ['line', undefined],
++  ['ancestors', undefined],
++  ['cause', undefined],
++  ['fatal', undefined],
++  ['place', undefined],
++  ['ruleId', undefined],
++  ['source', undefined]
++]) {
++  Object.defineProperty(VFileMessage.prototype, key, {
++    configurable: true,
++    enumerable: true,
++    value,
++    writable: true
++  })
++}
