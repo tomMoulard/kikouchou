@@ -10,11 +10,10 @@
  * @module features/settings/components/NotificationSettings
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bell, BellRing } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -23,6 +22,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useTripContext } from '@/contexts/TripContext';
 import {
   getNotificationState,
@@ -37,31 +38,20 @@ import {
 import { notify } from '@/lib/notifications';
 import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 /**
- * How each state is badged.
+ * The states in which the switch cannot do anything, and is greyed out.
  *
- * A `Record` keyed by the union rather than a chain of ternaries, so adding a
- * state to `NOTIFICATION_STATES` is a type error here until it gets a badge.
- *
- * `denied` is `outline` rather than `destructive`: nothing is broken and
- * nothing was destroyed — the user, or their browser, said no. The explanation
- * underneath is what carries the meaning, which is also what keeps colour from
- * being the only signal.
+ * `denied` is terminal — no API can undo it, the browser's own site settings
+ * can — and `unsupported` is a browser with no notifications at all. The
+ * explanation underneath says which, so the grey is never the only signal.
  */
-const STATE_BADGE_VARIANTS: Record<
-  NotificationState,
-  'default' | 'secondary' | 'outline'
-> = {
-  unsupported: 'outline',
-  default: 'secondary',
-  granted: 'default',
-  denied: 'outline',
-};
+const UNAVAILABLE_STATES: ReadonlySet<NotificationState> = new Set(['denied', 'unsupported']);
 
 // ============================================================================
 // Component
@@ -90,6 +80,9 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
       currentTrip !== null ? getReminderState(currentTrip.id) : null,
     [isTurningOff, setIsTurningOff] = useState(false),
     [turnedOffTripId, setTurnedOffTripId] = useState<string | null>(null),
+    /** Set when the user tries to switch off a permission only the browser can take back. */
+    [showTurnOffHint, setShowTurnOffHint] = useState(false),
+    switchId = useId(),
     isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -134,9 +127,21 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
     }
   }, []);
 
-  const handleEnableClick = useCallback((): void => {
-    void handleEnable();
-  }, [handleEnable]);
+  /**
+   * Off to on asks for permission, from this click and from nowhere else. On to
+   * off cannot be done from the page — no API revokes a granted permission — so
+   * the switch stays on and says where it is done instead.
+   */
+  const handleCheckedChange = useCallback(
+    (checked: boolean): void => {
+      if (checked) {
+        void handleEnable();
+        return;
+      }
+      setShowTurnOffHint(true);
+    },
+    [handleEnable],
+  );
 
   const handleTurnOffReminders = useCallback(async (): Promise<void> => {
     if (currentTrip === null) {
@@ -226,13 +231,41 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm text-muted-foreground">
+          <Label
+            htmlFor={switchId}
+            className={cn(
+              'text-sm font-normal text-muted-foreground',
+              UNAVAILABLE_STATES.has(state) && 'opacity-50',
+            )}
+          >
             {t('notifications.statusLabel', 'On this device')}
-          </span>
-          <Badge variant={STATE_BADGE_VARIANTS[state]}>
-            {t(`notifications.states.${state}`, state)}
-          </Badge>
+          </Label>
+          <div className="flex items-center gap-2">
+            {/* The state in words beside the switch: "Blocked" and "Not
+                available" are not the same grey, and colour alone says neither. */}
+            <span className="text-xs text-muted-foreground" aria-hidden="true">
+              {isAsking
+                ? t('notifications.enabling', 'Waiting for your answer…')
+                : t(`notifications.states.${state}`, state)}
+            </span>
+            <Switch
+              id={switchId}
+              checked={state === 'granted'}
+              disabled={UNAVAILABLE_STATES.has(state) || isAsking}
+              onCheckedChange={handleCheckedChange}
+              aria-label={t('notifications.title', 'Ride alerts')}
+            />
+          </div>
         </div>
+
+        {state === 'granted' && showTurnOffHint && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {t(
+              'notifications.turnOffHint',
+              'Only your browser can turn ride alerts off. Block notifications for Kikouchou in your browser or system settings.',
+            )}
+          </p>
+        )}
 
         {state === 'granted' && (
           <p className="text-sm text-muted-foreground">
@@ -272,19 +305,6 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
             'For the runs you drive, open a trip’s transport page and choose “Add my runs to my calendar”. The phone’s own calendar then rings on time, with Kikouchou closed.',
           )}
         </p>
-
-        {state === 'default' && (
-          <Button
-            onClick={handleEnableClick}
-            disabled={isAsking}
-            className="w-full sm:w-auto"
-          >
-            <Bell className="mr-2 size-4" aria-hidden="true" />
-            {isAsking
-              ? t('notifications.enabling', 'Waiting for your answer…')
-              : t('notifications.enable', 'Turn on ride alerts')}
-          </Button>
-        )}
 
         {currentTrip !== null && effectiveReminderState !== null && (
           <div
