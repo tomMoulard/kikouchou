@@ -9,7 +9,7 @@
  *
  * @module lib/db/__tests__/reopen.test
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { type Mock, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isTransientIndexedDbError, retryAfterReopen } from '../reopen';
 
@@ -22,8 +22,11 @@ function webkitInternalError(): Error {
   return error;
 }
 
-function fakeDatabase(): { close: ReturnType<typeof vi.fn>; open: ReturnType<typeof vi.fn> } {
-  return { close: vi.fn(), open: vi.fn(async () => undefined) };
+function fakeDatabase(): {
+  close: Mock<() => void>;
+  open: Mock<() => Promise<undefined>>;
+} {
+  return { close: vi.fn<() => void>(), open: vi.fn(async () => undefined) };
 }
 
 afterEach(() => {
