@@ -10,7 +10,8 @@
 import { describe, it, expect } from 'vitest';
 
 import { db } from '@/lib/db/database';
-import { isNetworkFailureMessage, syncGuestGroups } from '@/lib/sync/guest-groups';
+import { isClockSkewMessage,
+  isNetworkFailureMessage, syncGuestGroups } from '@/lib/sync/guest-groups';
 import type { GuestGroup, GuestGroupId, GuestGroupMemberId, HexColor } from '@/types';
 
 // ============================================================================
@@ -510,6 +511,38 @@ describe('when the server cannot be reached', () => {
       reason: 'server',
     });
   });
+});
+
+/**
+ * PostHog issue `01a0e1ad`: PostgREST refuses a token whose `iat` is ahead of
+ * its own clock with "JWT issued at future". Every occurrence was a device
+ * whose clock runs fast — nothing the server or this code can fix, and the
+ * next refresh after the clock catches up succeeds.
+ */
+describe('when the device clock is ahead of the server', () => {
+  it('says so, so that the caller can leave it out of error tracking', async () => {
+    const { client } = fakeClient([], { selectError: 'JWT issued at future' });
+
+    expect(await syncGuestGroups(client, USER_ID)).toEqual({
+      status: 'error',
+      message: 'JWT issued at future',
+      reason: 'clock',
+    });
+  });
+
+  it.each(['JWT issued at future', 'jwt issued at future'])(
+    'reads "%s" as clock skew',
+    (message) => {
+      expect(isClockSkewMessage(message)).toBe(true);
+    },
+  );
+
+  it.each(['JWT expired', 'permission denied for table guest_groups'])(
+    'does not read "%s" as clock skew',
+    (message) => {
+      expect(isClockSkewMessage(message)).toBe(false);
+    },
+  );
 });
 
 describe('when the request never reached the server', () => {

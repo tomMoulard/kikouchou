@@ -93,10 +93,11 @@ export type GuestGroupSyncResult =
       readonly message: string;
       /**
        * `network` when the request never reached the server, which is the
-       * device going offline or a connection dropping mid-request. `server`
-       * for everything the server itself refused or failed.
+       * device going offline or a connection dropping mid-request. `clock`
+       * when the server refused the token because the device clock is ahead
+       * of it. `server` for everything else the server refused or failed.
        */
-      readonly reason: 'network' | 'server';
+      readonly reason: 'network' | 'clock' | 'server';
     };
 
 // ============================================================================
@@ -415,7 +416,11 @@ export async function syncGuestGroups(
     return {
       status: 'error',
       message,
-      reason: isNetworkFailureMessage(message) ? 'network' : 'server',
+      reason: isNetworkFailureMessage(message)
+        ? 'network'
+        : isClockSkewMessage(message)
+          ? 'clock'
+          : 'server',
     };
   }
 }
@@ -436,4 +441,20 @@ export function isNetworkFailureMessage(message: string): boolean {
   return /^(TypeError: )?(Failed to fetch|Load failed|NetworkError when attempting to fetch resource)|^AbortError: /i.test(
     message,
   );
+}
+
+/**
+ * Whether a sync error is the server refusing a token minted in its future.
+ *
+ * Supabase signs the access token with the device's idea of "now" for `iat`,
+ * and PostgREST rejects one whose `iat` is ahead of its own clock with
+ * "JWT issued at future". Every occurrence in PostHog issue `01a0e1ad` was a
+ * device whose clock runs fast: nothing the server or this code can repair,
+ * and a later attempt succeeds once the clock and the token agree.
+ *
+ * @param message - The error message the sync produced
+ * @returns True when the device clock is ahead of the server's
+ */
+export function isClockSkewMessage(message: string): boolean {
+  return /\bJWT issued at future\b/i.test(message);
 }
