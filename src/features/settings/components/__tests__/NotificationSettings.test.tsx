@@ -106,12 +106,17 @@ describe('NotificationSettings', () => {
 
     expect(screen.getByText('notifications.states.default')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /notifications\.enable/ }));
+    const toggle = screen.getByRole('switch', { name: 'notifications.title' });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeEnabled();
+
+    await user.click(toggle);
 
     expect(stub.requestPermission).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(screen.getByText('notifications.states.granted')).toBeInTheDocument();
     });
+    expect(screen.getByRole('switch', { name: 'notifications.title' })).toBeChecked();
   });
 
   it('explains a denial instead of offering a retry', async () => {
@@ -124,11 +129,11 @@ describe('NotificationSettings', () => {
 
     expect(screen.getByText('notifications.states.denied')).toBeInTheDocument();
     expect(screen.getByText('notifications.deniedHint')).toBeInTheDocument();
-    // A retry button would look broken: browsers reject a request made after a
-    // denial immediately and silently. There must not be one.
-    expect(
-      screen.queryByRole('button', { name: /notifications\.enable/ }),
-    ).not.toBeInTheDocument();
+    // A live switch would look broken: browsers reject a request made after a
+    // denial immediately and silently. It is there, off, and greyed out.
+    const toggle = screen.getByRole('switch', { name: 'notifications.title' });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeDisabled();
     expect(stub.requestPermission).not.toHaveBeenCalled();
   });
 
@@ -141,9 +146,9 @@ describe('NotificationSettings', () => {
       screen.getByText('notifications.states.unsupported'),
     ).toBeInTheDocument();
     expect(screen.getByText('notifications.unsupportedHint')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /notifications\.enable/ }),
-    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole('switch', { name: 'notifications.title' });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeDisabled();
   });
 
   it('admits the best-effort delivery once alerts are on', () => {
@@ -153,9 +158,23 @@ describe('NotificationSettings', () => {
 
     expect(screen.getByText('notifications.states.granted')).toBeInTheDocument();
     expect(screen.getByText('notifications.bestEffort')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /notifications\.enable/ }),
-    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole('switch', { name: 'notifications.title' });
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+  });
+
+  it('stays on, and says where to turn it off, when switched off', async () => {
+    // No API revokes a granted permission. The switch cannot pretend to.
+    const user = userEvent.setup();
+    installNotification({ permission: 'granted' });
+
+    render(<NotificationSettings />, { withProviders: false });
+    expect(screen.queryByText('notifications.turnOffHint')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('switch', { name: 'notifications.title' }));
+
+    expect(screen.getByRole('switch', { name: 'notifications.title' })).toBeChecked();
+    expect(screen.getByText('notifications.turnOffHint')).toBeInTheDocument();
   });
 
   it('says nothing about trip reminders when no trip is on screen', () => {
