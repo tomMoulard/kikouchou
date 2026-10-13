@@ -201,14 +201,21 @@ function deliverFromPage(body: string): boolean {
  */
 async function deliverFromServiceWorker(body: string): Promise<boolean> {
   const registration = await navigator.serviceWorker?.getRegistration();
-  if (!registration) {
+  // A registration whose worker is still installing has nothing to show the
+  // notification with: Chrome rejects with "No active registration available"
+  // (PostHog issue `01a11333`). It is a moment in the worker's life, not a
+  // fault, so it is the same answer as having no worker at all.
+  if (!registration?.active) {
     return false;
   }
 
   try {
     await registration.showNotification(APP_NAME, notificationOptions(body));
   } catch (error) {
-    console.error('[notifications] service worker delivery failed:', error);
+    // A warning, not an error: a confirmation that did not reach the shade
+    // costs nothing, and `capture_console_errors` would file a `console.error`
+    // here as an unhandled exception.
+    console.warn('[notifications] service worker delivery failed:', error);
     return false;
   }
 

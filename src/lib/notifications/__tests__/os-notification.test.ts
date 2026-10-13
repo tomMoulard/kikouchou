@@ -95,16 +95,25 @@ function stubNotificationApi(
   return { requestPermission };
 }
 
-/** Installs a `navigator.serviceWorker` with one registration, or none. */
-function stubServiceWorker(registration: unknown): {
+/**
+ * Installs a `navigator.serviceWorker` with one registration, or none.
+ *
+ * The registration has an active worker unless `active: null` says otherwise,
+ * and `showNotification` resolves unless one is passed in.
+ */
+function stubServiceWorker(
+  registration: { active?: unknown; showNotification?: ReturnType<typeof vi.fn> } | null,
+): {
   showNotification: ReturnType<typeof vi.fn>;
 } {
-  const showNotification = vi.fn(async () => undefined);
+  const showNotification =
+    registration?.showNotification ?? vi.fn(async () => undefined);
   const value =
     registration === null
       ? { getRegistration: async () => undefined }
       : {
           getRegistration: async () => ({
+            active: 'active' in registration ? registration.active : {},
             showNotification,
             getNotifications: async () => [],
           }),
@@ -339,6 +348,50 @@ describe('os-notification', () => {
       expect(showNotification).toHaveBeenCalledWith(
         'Kikouchou',
         expect.objectContaining({ body: 'Room created successfully' }),
+      );
+    });
+
+    /**
+     * PostHog issue `01a11333`: a registration whose worker is still installing
+     * has nothing to show the notification with, and Chrome rejects with
+     * "No active registration available". That is a moment in the worker's
+     * life, not a fault, and the `console.error` it used to produce reached
+     * error tracking through `capture_console_errors`.
+     */
+    it('skips a registration that has no active worker yet, without an error', async () => {
+      stubNotificationApi('granted', { constructorThrows: true });
+      const showNotification = vi.fn(async () => {
+        throw new TypeError(
+          "Failed to execute 'showNotification' on 'ServiceWorkerRegistration': No active registration available on the ServiceWorkerRegistration.",
+        );
+      });
+      stubServiceWorker({ active: null, showNotification });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const { showOsNotification } = await loadModule();
+
+      await expect(showOsNotification('Room created successfully')).resolves.toBe(
+        false,
+      );
+      expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it('warns rather than errors when the worker refuses to show one', async () => {
+      stubNotificationApi('granted', { constructorThrows: true });
+      const showNotification = vi.fn(async () => {
+        throw new TypeError('No notification permission has been granted for this origin.');
+      });
+      stubServiceWorker({ showNotification });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const { showOsNotification } = await loadModule();
+
+      await expect(showOsNotification('Room created successfully')).resolves.toBe(
+        false,
+      );
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[notifications] service worker delivery failed:',
+        expect.any(TypeError),
       );
     });
 
