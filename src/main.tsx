@@ -29,6 +29,7 @@ import {
 } from '@/features/trips/utils/seed-sample-trip';
 
 import { ensureSettings } from '@/lib/db';
+import { retryAfterReopen } from '@/lib/db/reopen';
 import '@/lib/posthog';
 // Beside lib/posthog, and for the same reason it is imported here rather than
 // pasted into index.html: the module decides whether to load at all, so a dev
@@ -111,7 +112,10 @@ async function initializeApp(): Promise<void> {
             console.error('Failed to seed the sample trip:', error);
           })
         : Promise.resolve()
-      ).then(() => ensureSettings()),
+      )
+        // iOS Safari can hand the page a dead IndexedDB connection; one reopen
+        // cures it (PostHog issue 01a13061).
+        .then(() => retryAfterReopen(ensureSettings)),
       new Promise<void>((resolve) => {
         setTimeout(resolve, DB_READY_TIMEOUT_MS);
       }),
