@@ -134,7 +134,9 @@ export function GuestGroupSync({ children }: GuestGroupSyncProps): ReactElement 
         // A request that never reached the server is not reported. The rest of
         // lib/sync treats a lost connection as a warning, and this one sent
         // every dropped request to Error tracking (issue 01a0e1ad), where it
-        // said nothing about the sync.
+        // said nothing about the sync. Nor is a token refused because the
+        // device clock runs ahead of the server's ("JWT issued at future",
+        // the same issue): that is the device's clock, not the sync.
         console.warn('[guest-groups] sync failed:', result.message);
         if (result.reason === 'server') {
           reportError(new Error(result.message ?? 'guest group sync failed'), {

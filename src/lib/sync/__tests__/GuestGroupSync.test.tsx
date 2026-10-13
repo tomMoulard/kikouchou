@@ -73,6 +73,24 @@ describe('GuestGroupSync', () => {
     expect(mockedReport).not.toHaveBeenCalled();
   });
 
+  it('warns, and reports nothing, when the device clock is ahead of the server', async () => {
+    mockedSync.mockResolvedValue({
+      status: 'error',
+      message: 'JWT issued at future',
+      reason: 'clock',
+    });
+
+    render(<GuestGroupSync>{null}</GuestGroupSync>);
+
+    await waitFor(() => {
+      expect(console.warn).toHaveBeenCalledWith(
+        '[guest-groups] sync failed:',
+        'JWT issued at future',
+      );
+    });
+    expect(mockedReport).not.toHaveBeenCalled();
+  });
+
   it('reports a sync that the server refused', async () => {
     mockedSync.mockResolvedValue({
       status: 'error',
