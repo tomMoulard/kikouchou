@@ -60,3 +60,8 @@ public/og-card.png
 # ignored layout test writes.
 server/share-preview/target/
 server/share-preview/sample-card.png
+
+# Stryker mutation testing: the sandbox copy of the repo it works in, and the
+# reports and incremental state `bun run test:mutation` writes.
+.stryker-tmp/
+reports/

@@ -9,7 +9,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import kikouchou from './eslint-rules/index.js'
 
 export default defineConfig([
-  globalIgnores(['.worktrees', 
+  globalIgnores(['.worktrees', '.stryker-tmp', 'reports', 
     'dist',
     'coverage',
     'playwright-report',
