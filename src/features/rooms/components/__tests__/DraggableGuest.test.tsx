@@ -1,0 +1,211 @@
+/**
+ * Tests for DraggableGuest.
+ *
+ * @module features/rooms/components/__tests__/DraggableGuest.test
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import { DraggableGuest } from '../DraggableGuest';
+import type { HexColor, Person, PersonId, RoomId, TripId } from '@/types';
+
+// dnd-kit needs a DndContext; the drag mechanics are not what these assert.
+// `attributes` mirrors what the real hook puts on the node — the pill is a
+// plain div, so `role`/`tabIndex` coming from dnd-kit is what makes it
+// reachable, and a stub that dropped them would hide a regression in that.
+vi.mock('@dnd-kit/core', () => ({
+  useDraggable: () => ({
+    attributes: {
+      role: 'button',
+      tabIndex: 0,
+      'aria-disabled': false,
+      'aria-roledescription': 'draggable',
+    },
+    listeners: {},
+    setNodeRef: vi.fn(),
+    transform: null,
+    isDragging: false,
+  }),
+}));
+
+vi.mock('@/components/shared/PersonBadge', () => ({
+  PersonBadge: ({ person }: { person: Person }) => (
+    <span data-testid="person-badge">{person.name}</span>
+  ),
+}));
+
+/**
+ * The bar drawn around a chip's drag handle.
+ *
+ * The handle carries the drag and the accessible name; the bar around it
+ * carries the shape and the position, and the menu trigger is the handle's
+ * sibling inside it — a button nested in the handle's own `role="button"`
+ * would not be reliably reachable.
+ */
+function barAround(handle: HTMLElement): HTMLElement {
+  const bar = handle.closest('[data-unhoused="true"]');
+  if (!(bar instanceof HTMLElement)) {
+    throw new Error('the drag handle is not inside an unhoused bar');
+  }
+  return bar;
+}
+
+const person: Person = {
+  id: 'p1' as PersonId,
+  tripId: 'trip-1' as TripId,
+  name: 'Marc',
+  color: '#ec4899' as HexColor,
+};
+
+describe('DraggableGuest', () => {
+  describe('badge mode', () => {
+    it('renders the person badge', () => {
+      render(<DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" />);
+
+      expect(screen.getByTestId('person-badge')).toHaveTextContent('Marc');
+    });
+  });
+
+  describe('bar mode', () => {
+    it('names the guest inside the bar', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
+      );
+
+      // The old treatment was an empty dashed box with the name elsewhere.
+      expect(screen.getByRole('button', { name: 'Marc' })).toHaveTextContent('Marc');
+    });
+
+    // Same shape and place as a booked room's pill so the two read against each
+    // other, but an outline rather than a filled block: this guest has no bed,
+    // so the bar is a request and not a booking.
+    it('draws an outline rather than the solid block a booking gets', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
+      );
+
+      const bar = barAround(screen.getByRole('button', { name: 'Marc' }));
+      expect(bar).toHaveClass('border-dashed');
+    });
+
+    it('keeps the guest colour on the outline rather than filling with it', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
+      );
+
+      const bar = barAround(screen.getByRole('button', { name: 'Marc' }));
+      expect(bar.style.borderColor).not.toBe('');
+      // A wash, not the flat colour — a filled bar would read as booked.
+      expect(bar.style.backgroundColor).not.toBe('rgb(236, 72, 153)');
+    });
+
+    it('positions the bar from the style it is handed', () => {
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          style={{ left: '10px', width: '120px', top: '2px' }}
+        />,
+      );
+
+      const bar = barAround(screen.getByRole('button', { name: 'Marc' }));
+      expect(bar.style.left).toBe('10px');
+      expect(bar.style.width).toBe('120px');
+    });
+
+    it('does not render a badge in bar mode', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
+      );
+
+      expect(screen.queryByTestId('person-badge')).not.toBeInTheDocument();
+    });
+  });
+
+  // A drag is the only way to house a guest today, which leaves out every
+  // keyboard and every screen reader. The menu is the pointer-free path, and a
+  // tap has to reach it too.
+  describe('room menu', () => {
+    const rooms = [
+      { id: 'r1' as RoomId, name: 'Master', availableSpots: 2 },
+      { id: 'r2' as RoomId, name: 'Attic', availableSpots: 0 },
+    ];
+
+    it('houses the guest in the room picked from the menu', async () => {
+      const user = userEvent.setup();
+      const onAssignRoom = vi.fn();
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          assignableRooms={rooms}
+          onAssignRoom={onAssignRoom}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: 'rooms.assignMenu.trigger' }),
+      );
+      await user.click(screen.getByRole('menuitem', { name: /Master/ }));
+
+      expect(onAssignRoom).toHaveBeenCalledWith('r1');
+    });
+
+    it('opens the same menu when the bar itself is tapped', async () => {
+      const user = userEvent.setup();
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          assignableRooms={rooms}
+          onAssignRoom={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Marc' }));
+
+      expect(screen.getByRole('menuitem', { name: /Master/ })).toBeInTheDocument();
+    });
+
+    // A drop on a full room is allowed and warned about afterwards, so the menu
+    // must not be stricter than the drag it replaces.
+    it('offers a full room, marked as full', async () => {
+      const user = userEvent.setup();
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          assignableRooms={rooms}
+          onAssignRoom={vi.fn()}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: 'rooms.assignMenu.trigger' }),
+      );
+      const attic = screen.getByRole('menuitem', { name: /Attic/ });
+
+      expect(attic).toHaveTextContent('rooms.full');
+      expect(attic).not.toHaveAttribute('data-disabled');
+    });
+
+    it('shows no menu when there is no room to offer', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
+      );
+
+      expect(
+        screen.queryByRole('button', { name: 'rooms.assignMenu.trigger' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+});

@@ -1,0 +1,76 @@
+/**
+ * @fileoverview Tests for the trip nav items and the stored order they follow.
+ *
+ * @module components/shared/__tests__/nav-items.test
+ */
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  DEFAULT_MOBILE_NAV_MODE,
+  TRIP_NAV_ITEMS,
+  resolveMobileNavMode,
+  resolveMobileNavOrder,
+  tripNavItemsInOrder,
+} from '../nav-items';
+import { MOBILE_NAV_PAGES } from '@/types';
+
+describe('TRIP_NAV_ITEMS', () => {
+  it('lists every page the bar can hold, in the default order', () => {
+    expect(TRIP_NAV_ITEMS.map((item) => item.pathSuffix)).toEqual([...MOBILE_NAV_PAGES]);
+  });
+});
+
+describe('resolveMobileNavOrder', () => {
+  it('returns the default order when nothing is stored', () => {
+    expect(resolveMobileNavOrder(undefined)).toEqual([...MOBILE_NAV_PAGES]);
+  });
+
+  it('keeps a complete stored order as it is', () => {
+    const stored = ['money', 'transports', 'calendar', 'rooms', 'persons', 'activities', 'analytics', 'edit'];
+    expect(resolveMobileNavOrder(stored)).toEqual(stored);
+  });
+
+  it('drops pages it does not know and values that are not pages', () => {
+    expect(resolveMobileNavOrder(['vehicles', 42, null, 'money'])[0]).toBe('money');
+    expect(resolveMobileNavOrder(['vehicles', 42, null, 'money'])).not.toContain('vehicles');
+  });
+
+  it('keeps the first place of a repeated page', () => {
+    const order = resolveMobileNavOrder(['money', 'calendar', 'money']);
+    expect(order.slice(0, 2)).toEqual(['money', 'calendar']);
+    expect(order.filter((page) => page === 'money')).toHaveLength(1);
+  });
+
+  it('appends a page missing from an older order in its default position', () => {
+    expect(resolveMobileNavOrder(['transports', 'money'])).toEqual([
+      'transports',
+      'money',
+      'calendar',
+      'rooms',
+      'persons',
+      'activities',
+      'analytics',
+      'edit',
+    ]);
+  });
+});
+
+describe('resolveMobileNavMode', () => {
+  it.each(['auto', 'bar', 'menu'] as const)('keeps %s', (mode) => {
+    expect(resolveMobileNavMode(mode)).toBe(mode);
+  });
+
+  it.each([undefined, 'sidebar', 3])('falls back to the default for %s', (stored) => {
+    expect(resolveMobileNavMode(stored)).toBe(DEFAULT_MOBILE_NAV_MODE);
+  });
+});
+
+describe('tripNavItemsInOrder', () => {
+  it('returns the items in the order of the pages', () => {
+    expect(tripNavItemsInOrder(['edit', 'calendar']).map((item) => item.labelKey)).toEqual([
+      'nav.tripSettings',
+      'nav.calendar',
+    ]);
+  });
+});

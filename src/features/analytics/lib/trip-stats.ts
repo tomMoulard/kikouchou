@@ -1,0 +1,440 @@
+/**
+ * @fileoverview The single Dexie read behind both analytics pages.
+ *
+ * `/trips/:tripId/analytics` and `/analytics` used to count the same rows two
+ * different ways: the trip page read through `PersonContext` / `RoomContext` /
+ * `AssignmentContext` / `TransportContext`, which are scoped to
+ * `TripContext.currentTrip`, while the all-trips page read Dexie directly. The
+ * contexts lag the URL during a trip switch — `setCurrentTrip` resolves, the
+ * live queries re-subscribe, and until the new result arrives the contexts
+ * still hand out the previous trip's rows — so walking between the two pages
+ * could show two different totals for the same data.
+ *
+ * Both pages now call {@link loadTripStats}, keyed on the trip id they are
+ * actually reporting on, so the numbers cannot disagree. The index ranges below
+ * deliberately mirror the ones the contexts use, so an analytics total also
+ * matches what the Guests / Rooms / Transport pages list.
+ *
+ * @module features/analytics/lib/trip-stats
+ */
+
+import {
+  type SpendTimeline,
+  buildSpendTimeline,
+} from '@/features/analytics/lib/spend-timeline';
+import { computeBalances } from '@/features/money/lib/balances';
+import { loadTripNightSplit } from '@/features/money/lib/night-split';
+import {
+  isTransportUpcoming,
+  selectPickupsNeedingDriver,
+  toTransportInstant,
+} from '@/features/transports/utils/pickup-utils';
+import { resolveRides } from '@/features/transports/utils/ride-model';
+import { db } from '@/lib/db/database';
+import { getPersonHeadcount, normalizeCurrency } from '@/types';
+import type { CurrencyCode, ISODateTimeString, Transport, TripId } from '@/types';
+
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+/**
+ * Every number either analytics page shows for one trip, from one read.
+ *
+ * `guestCount` and `headcount` are deliberately both here: a guest row can
+ * stand for a couple or a family, so "how many rows the Guests page lists" and
+ * "how many people are coming" are different numbers and the UI must not call
+ * them both "Guests".
+ */
+export interface TripStats {
+  /** The trip these numbers describe. */
+  readonly tripId: TripId;
+  /** Guest rows — what `/trips/:tripId/persons` lists. */
+  readonly guestCount: number;
+  /** Real people, summing every guest row's headcount. */
+  readonly headcount: number;
+  /** Rooms in the trip. */
+  readonly roomCount: number;
+  /** Room assignments in the trip. */
+  readonly assignmentCount: number;
+  /** Transports of type `arrival`. */
+  readonly arrivalCount: number;
+  /** Transports of any other type. */
+  readonly departureCount: number;
+  /** All transports — always `arrivalCount + departureCount`. */
+  readonly transportCount: number;
+  /**
+   * Car journeys the trip holds, as `resolveRides()` reads them.
+   *
+   * Not `db.rides.count()`. A leg carrying a bare `driverId` and no ride is a
+   * one-passenger journey to every transport surface, so counting the table
+   * would report zero where the list draws one.
+   */
+  readonly rideCount: number;
+  /** Cars available to the trip. */
+  readonly vehicleCount: number;
+  /**
+   * Upcoming transports flagged `needsPickup` that nobody is driving yet.
+   *
+   * "Nobody is driving" now spans three arrangements — no ride at all, a ride
+   * with no driver, and no legacy `driverId` — which is why the count is taken
+   * from `selectPickupsNeedingDriver` with the trip's rides rather than
+   * recomputed here.
+   */
+  readonly pickupsNeedingDriver: number;
+  /** Money lines the trip holds — what `/trips/:tripId/money` lists. */
+  readonly expenseCount: number;
+  /**
+   * What the trip actually cost: every expense, less every income.
+   *
+   * Transfers are deliberately not in it. A guest paying another back moves
+   * money inside the group without the group spending anything, so counting it
+   * would make settling up look like spending.
+   */
+  readonly spendTotal: number;
+  /**
+   * How much is still owed, across everybody who owes anything.
+   *
+   * The sum of the positive balances, which is the same number as the sum of
+   * the negative ones: it is what the settling payments add up to, and it is
+   * zero exactly when the group is level.
+   */
+  readonly unsettledTotal: number;
+  /**
+   * The currency the two figures above are in, as the trip declares it.
+   *
+   * Carried on the stats rather than read again by the page: a total labelled
+   * in the wrong currency is worse than one with no label at all, and the page
+   * that shows several trips at once has to be able to see that they disagree.
+   */
+  readonly currency: CurrencyCode;
+  /**
+   * The same spending, bucketed by calendar, for the chart under the cards.
+   *
+   * `null` when no money line carries a usable date: a chart of nothing is a
+   * blank rectangle the reader has to interpret, so the page leaves it out.
+   * Built from the very lines `spendTotal` is summed from, so the bars always
+   * add up to the card above them.
+   */
+  readonly spendTimeline: SpendTimeline | null;
+}
+
+/**
+ * {@link TripStats} summed across trips, for the all-trips page.
+ *
+ * The timeline is deliberately not in it. Trips can be kept in different
+ * currencies and run in different years, so one series across all of them would
+ * draw francs and euros on one axis with empty months between two holidays.
+ */
+export type TripStatsTotals = Omit<TripStats, 'tripId' | 'spendTimeline'>;
+
+/**
+ * The outcome of an analytics read.
+ *
+ * `useLiveQuery` re-throws a rejected querier during render, which hands the
+ * failure to the route's `ErrorBoundary` and replaces the whole page. Analytics
+ * pages want the in-page `ErrorDisplay` every other list page uses, so the
+ * queriers resolve with this instead of rejecting.
+ */
+export interface AnalyticsResult<TData> {
+  /** The data, or `null` when the read failed. */
+  readonly data: TData | null;
+  /** The failure, or `null` when the read succeeded. */
+  readonly error: Error | null;
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Upper bound for a string component of a compound index range.
+ * Matches the bound the contexts use, so the ranges select the same rows.
+ */
+const MAX_STRING_KEY = '\uffff';
+
+// ============================================================================
+// Reads
+// ============================================================================
+
+/**
+ * Counts everything the analytics pages show for one trip.
+ *
+ * @param tripId - The trip to count, taken from the URL rather than from
+ *   `currentTrip`, so the page always reports the trip it claims to.
+ * @param now - ISO timestamp that separates upcoming pickups from past ones.
+ * @returns The trip's counts.
+ *
+ * @example
+ * ```ts
+ * const stats = await loadTripStats(tripId, new Date().toISOString());
+ * stats.transportCount === stats.arrivalCount + stats.departureCount; // always
+ * ```
+ */
+export async function loadTripStats(
+  tripId: TripId,
+  now: ISODateTimeString,
+): Promise<TripStats> {
+  const [
+    persons,
+    roomCount,
+    assignmentCount,
+    transports,
+    rides,
+    vehicles,
+    trip,
+    expenses,
+    nightSplit,
+  ] = await Promise.all([
+      // Same compound ranges as PersonContext / RoomContext /
+      // AssignmentContext / TransportContext, so the analytics totals match the
+      // feature pages exactly.
+      db.persons
+        .where('[tripId+name]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      db.rooms
+        .where('[tripId+order]')
+        .between([tripId, 0], [tripId, Infinity])
+        .count(),
+      db.roomAssignments
+        .where('[tripId+startDate]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .count(),
+      db.transports
+        .where('[tripId+datetime]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // Read whole rather than counted: "still needs a driver" depends on which
+      // rides have one, not on how many there are.
+      db.rides
+        .where('[tripId+meetDatetime]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // Read whole for the same reason: a journey's car is part of what
+      // `resolveRides()` resolves, and the count falls out of the array.
+      db.vehicles.where('tripId').equals(tripId).toArray(),
+      // The trip row itself, for the currency its money figures are in.
+      db.trips.get(tripId),
+      // Read whole rather than counted: what the trip cost and what is still
+      // owed both need the lines themselves.
+      db.expenses
+        .where('[tripId+date]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // A line split by nights needs the night counts to divide by, and that
+      // arithmetic lives in the money feature rather than being repeated here.
+      loadTripNightSplit(tripId),
+    ]);
+
+  const personNights = new Map(
+    (nightSplit?.guests ?? []).map((guest) => [guest.personId, guest.personNights]),
+  );
+
+  // "Count people, not rows" — a guest row can stand for several real people.
+  let headcount = 0;
+  for (const person of persons) {
+    headcount += getPersonHeadcount(person);
+  }
+
+  // One reference instant for the whole read, so two transports cannot be
+  // measured against two different "now"s.
+  const nowMs = toTransportInstant(now) ?? Date.now();
+
+  let arrivalCount = 0;
+  let departureCount = 0;
+  const upcomingPickups: Transport[] = [];
+  for (const transport of transports) {
+    if (transport.type === 'arrival') {
+      arrivalCount += 1;
+    } else {
+      departureCount += 1;
+    }
+    // Rebuilds `TransportContext.upcomingPickups` exactly: same predicate, same
+    // instant-based comparison. Comparing the ISO strings, as this used to,
+    // mis-reads any row written with a UTC offset instead of a `Z`.
+    if (transport.needsPickup && isTransportUpcoming(transport.datetime, nowMs)) {
+      upcomingPickups.push(transport);
+    }
+  }
+
+  // The shared selection the pickup alert panel and the transport list's alert
+  // gate use, so the badge here cannot report a number the panel contradicts.
+  const pickupsNeedingDriver = selectPickupsNeedingDriver(
+    upcomingPickups,
+    rides,
+  ).length;
+
+  // Journeys, not `rides` rows. `resolveRides()` is the single shape every
+  // transport surface consumes, and it reads a leg carrying a bare `driverId`
+  // and no ride as a one-passenger journey of its own — the shape the share
+  // wizard writes when a guest says they will have a car. Counting the table
+  // instead would report zero car journeys on a trip whose transport list is
+  // drawing three of them, which is exactly the divergence this module exists
+  // to remove.
+  const rideCount = resolveRides({ transports, rides, vehicles, persons }).length;
+
+  // Money. The kinds are signed the way the balances read them: an expense is
+  // what the trip cost, an income gives some of it back, and a transfer is the
+  // group moving its own money around.
+  let spendTotal = 0;
+  for (const expense of expenses) {
+    if (expense.kind === 'expense') {
+      spendTotal += Math.round(expense.amount * 100);
+    } else if (expense.kind === 'income') {
+      spendTotal -= Math.round(expense.amount * 100);
+    }
+  }
+
+  let unsettledCents = 0;
+  for (const balance of computeBalances(expenses, personNights)) {
+    if (balance.balance > 0) {
+      unsettledCents += Math.round(balance.balance * 100);
+    }
+  }
+
+  return {
+    tripId,
+    guestCount: persons.length,
+    headcount,
+    roomCount,
+    assignmentCount,
+    arrivalCount,
+    departureCount,
+    transportCount: transports.length,
+    rideCount,
+    vehicleCount: vehicles.length,
+    pickupsNeedingDriver,
+    expenseCount: expenses.length,
+    spendTotal: spendTotal / 100,
+    unsettledTotal: unsettledCents / 100,
+    currency: normalizeCurrency(trip?.currency),
+    spendTimeline: buildSpendTimeline(expenses),
+  };
+}
+
+/**
+ * Runs an analytics read and turns a failure into a value instead of a throw.
+ *
+ * @param label - What was being read, for the console line.
+ * @param read - The read to run.
+ * @returns The data, or the error that stopped it.
+ */
+export async function readAnalytics<TData>(
+  label: string,
+  read: () => Promise<TData>,
+): Promise<AnalyticsResult<TData>> {
+  try {
+    return { data: await read(), error: null };
+  } catch (error) {
+    console.error(`Failed to ${label}:`, error);
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error(`Failed to ${label}`),
+    };
+  }
+}
+
+// ============================================================================
+// Derivations
+// ============================================================================
+
+/**
+ * Sums per-trip stats into the all-trips totals.
+ *
+ * @param rows - Per-trip stats.
+ * @returns The totals, all zero for an empty list.
+ */
+export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
+  return rows.reduce<TripStatsTotals>(
+    (totals, row) => ({
+      guestCount: totals.guestCount + row.guestCount,
+      headcount: totals.headcount + row.headcount,
+      roomCount: totals.roomCount + row.roomCount,
+      assignmentCount: totals.assignmentCount + row.assignmentCount,
+      arrivalCount: totals.arrivalCount + row.arrivalCount,
+      departureCount: totals.departureCount + row.departureCount,
+      transportCount: totals.transportCount + row.transportCount,
+      rideCount: totals.rideCount + row.rideCount,
+      vehicleCount: totals.vehicleCount + row.vehicleCount,
+      pickupsNeedingDriver:
+        totals.pickupsNeedingDriver + row.pickupsNeedingDriver,
+      expenseCount: totals.expenseCount + row.expenseCount,
+      // Cents, then back: a page of trips summed as floats drifts, and the
+      // total is money the reader compares against their own arithmetic.
+      spendTotal:
+        (Math.round(totals.spendTotal * 100) + Math.round(row.spendTotal * 100)) / 100,
+      unsettledTotal:
+        (Math.round(totals.unsettledTotal * 100) +
+          Math.round(row.unsettledTotal * 100)) /
+        100,
+      // Adding two currencies gives a number in neither of them. The rows are
+      // still summed — the reader asked for a total and a blank is not one —
+      // but the total stops claiming a currency as soon as two trips disagree,
+      // so nothing labels it with a symbol it does not have.
+      currency:
+        totals.currency === '' || totals.currency === row.currency
+          ? row.currency
+          : MIXED_CURRENCIES,
+    }),
+    {
+      guestCount: 0,
+      headcount: 0,
+      roomCount: 0,
+      assignmentCount: 0,
+      arrivalCount: 0,
+      departureCount: 0,
+      transportCount: 0,
+      rideCount: 0,
+      vehicleCount: 0,
+      pickupsNeedingDriver: 0,
+      expenseCount: 0,
+      spendTotal: 0,
+      unsettledTotal: 0,
+      currency: '',
+    },
+  );
+}
+
+/**
+ * What {@link sumTripStats} reports as the currency when the trips disagree.
+ *
+ * Deliberately not a real code: the caller has to notice it rather than format
+ * a euro total of euros and Swiss francs.
+ */
+export const MIXED_CURRENCIES = 'MIXED';
+
+/**
+ * Whether a trip has nothing to summarise yet.
+ *
+ * A grid of zeros reads like a load failure; the page shows an empty state
+ * instead. The condition lists every count that is read from a table of its
+ * own — guests, rooms, assignments, transports, rides and vehicles — and
+ * nothing else. The rest of {@link TripStats} is derived from those reads
+ * (`headcount` from the guest rows, `arrivalCount` / `departureCount` /
+ * `pickupsNeedingDriver` from the transports), so a derived figure cannot be
+ * non-zero while its source is zero and adding it here would say nothing.
+ *
+ * Money lines belong in it for the same reason as rides and cars: the deposit
+ * on the house is paid long before anybody has a train time, so a trip holding
+ * one expense and nothing else has something to show.
+ *
+ * Rides and vehicles belong in the list for the opposite reason: they are
+ * genuinely independent. Cars are entered before anybody's train times are
+ * known, so a trip holding two cars and nothing else would otherwise be told
+ * it has nothing to add up on a page that was about to show it a 2.
+ *
+ * @param stats - The trip's stats.
+ * @returns True when the trip holds none of the six.
+ */
+export function isTripStatsEmpty(stats: TripStats): boolean {
+  return (
+    stats.guestCount === 0 &&
+    stats.roomCount === 0 &&
+    stats.assignmentCount === 0 &&
+    stats.transportCount === 0 &&
+    stats.rideCount === 0 &&
+    stats.vehicleCount === 0 &&
+    stats.expenseCount === 0
+  );
+}
