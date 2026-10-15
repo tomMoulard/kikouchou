@@ -28,6 +28,11 @@ bun run test:coverage         # Coverage + thresholds — this is what CI runs, 
 bun run test src/features/trips/components/__tests__/TripForm.test.tsx  # Single file
 bun run test -t "TripForm"    # Pattern match (vitest has no --grep)
 
+# Mutation tests (Stryker, local only, never fails on the score)
+bun run test:mutation                                  # All of src/: many hours, see below
+bun run test:mutation --mutate src/lib/db/utils.ts     # One file or glob: minutes
+bun run test:mutation --force                          # Ignore the incremental results
+
 # E2E tests (Playwright)
 bun run test:e2e              # Headless, on Playwright's pinned Chromium (as CI)
 bun run test:e2e:chrome       # Same, on the machine's installed Chrome (see below)
@@ -1197,6 +1202,29 @@ the metric that fell instead of hiding it in a table.
 - `bun run test:coverage` is about 4x slower than `test:run`, so `validate`
   still uses `test:run`. Run the coverage command before you push a change that
   deletes tests or adds untested branches.
+
+**Mutation testing: local, report only.** Coverage tells you that a test ran a
+line. A mutation test tells you if a test fails when that line is wrong.
+Stryker (`stryker.config.mjs`) makes one small change to the source at a time,
+for example `<` to `<=`, and runs the tests that reach it. A mutant that no
+test fails on is a "survivor": code that the suite runs but does not check.
+
+- No CI job runs it, and `thresholds.break` is null. Set a break threshold
+  after the first full run gives a real score.
+- It mutates the same files as coverage, minus the generated `src/gen` and
+  `database.types.ts`.
+- Each run starts with one full pass of the related tests to record which test
+  reaches which mutant. That pass took 2 minutes on 2026-10-15. After it,
+  `src/lib/db/utils.ts` took 2 more minutes for 77 mutants. At that rate, all
+  of `src/` takes many hours. Use `--mutate` on the files you changed.
+- Results stay in `reports/mutation/stryker-incremental.json`. The next run
+  tests only the mutants whose code or tests changed.
+- Static mutants (code that runs only when a module loads) are skipped, because
+  each one needs a new process and the whole suite. Add
+  `--ignoreStatic false` with a narrow `--mutate` to test them.
+- A `Timeout` counts as killed. A mutated component often makes a test wait on
+  text that never appears, until the 10s `testTimeout`.
+- Open `reports/mutation/index.html` to see each survivor in its source.
 
 **E2E tests** — `e2e/{feature}.spec.ts`; use `@playwright/test`; `@axe-core/playwright` available for a11y checks.
 
