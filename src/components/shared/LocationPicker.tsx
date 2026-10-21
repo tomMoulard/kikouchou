@@ -256,6 +256,16 @@ export const LocationPicker = memo(function LocationPicker({
    */
   const optionCount = results.length + (typedValue.length > 0 ? 1 : 0);
 
+  /**
+   * Whether the listbox is in the document.
+   *
+   * `isOpen` alone can be true over nothing: a query of spaces opens the
+   * dropdown for its "no locations found" line, which is not a listbox.
+   * `aria-expanded` reads this rather than `isOpen`, so it never claims a list
+   * that is not there.
+   */
+  const isListboxShown = isOpen && optionCount > 0;
+
   const handleSelect = useCallback(
     (place: GeocodingPlace) => {
       // Saved here, not after a confirm step: picking the place is the answer.
@@ -288,13 +298,16 @@ export const LocationPicker = memo(function LocationPicker({
   );
 
   const handleClear = useCallback(() => {
+    // Focus first. The input's focus handler still holds the options of the
+    // text being cleared and opens the list for them; run after the resets
+    // below, it reopened the list over an empty field.
+    inputRef.current?.focus();
     setInputValue('');
     setResults([]);
     setIsOpen(false);
     setHighlightedIndex(-1);
     setPinnedPlace(null);
     onChange('', undefined);
-    inputRef.current?.focus();
   }, [onChange]);
 
   /**
@@ -419,7 +432,7 @@ export const LocationPicker = memo(function LocationPicker({
           type="text"
           role="combobox"
           aria-label={ariaLabel ?? defaultAriaLabel}
-          aria-expanded={isOpen}
+          aria-expanded={isListboxShown}
           aria-controls={listboxId}
           aria-autocomplete="list"
           aria-activedescendant={
@@ -471,7 +484,7 @@ export const LocationPicker = memo(function LocationPicker({
       )}
 
       {/* Results dropdown */}
-      {isOpen && optionCount > 0 && (
+      {isListboxShown && (
         <ul
           ref={listRef}
           id={listboxId}

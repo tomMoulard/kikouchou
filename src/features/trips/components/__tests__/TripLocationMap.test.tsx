@@ -6,8 +6,8 @@
  *
  * @module features/trips/components/__tests__/TripLocationMap.test
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TripLocationMap } from '../TripLocationMap';
@@ -414,5 +414,82 @@ describe('TripLocationMap Directions', () => {
     );
     expect(within(dialog).getByRole('button', { name: /map\.openInMaps/ })).toBeInTheDocument();
     open.mockRestore();
+  });
+
+  it('opens the point in the map app in a new tab, cut off from this one', async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(<TripLocationMap {...defaultProps} />);
+
+    await user.click(getPreviewButton());
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /map\.openInMaps/ }));
+
+    expect(open).toHaveBeenCalledWith(
+      'https://www.google.com/maps/search/?api=1&query=48.8566,2.3522',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    open.mockRestore();
+  });
+});
+
+describe('TripLocationMap Copy Address', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'execCommand');
+  });
+
+  async function openDialog(user: ReturnType<typeof userEvent.setup>) {
+    render(<TripLocationMap {...defaultProps} />);
+    await user.click(getPreviewButton());
+    return screen.findByRole('dialog');
+  }
+
+  it('copies the place name, says so, then goes back after two seconds', async () => {
+    const user = userEvent.setup();
+    const dialog = await openDialog(user);
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+
+    await user.click(within(dialog).getByRole('button', { name: /map\.copyAddress/ }));
+
+    expect(await navigator.clipboard.readText()).toBe('Beach House, Brittany');
+    expect(
+      await within(dialog).findByRole('button', { name: /map\.addressCopied/ }),
+    ).toBeInTheDocument();
+
+    // The confirmation is put back on a two-second timer; run it by hand.
+    const revert = timers.mock.calls.find((call) => call[1] === 2000)?.[0];
+    expect(revert).toBeTypeOf('function');
+    act(() => {
+      (revert as () => void)();
+    });
+    expect(within(dialog).getByRole('button', { name: /map\.copyAddress/ })).toBeInTheDocument();
+  });
+
+  it('copies through a hidden field where the clipboard API is refused', async () => {
+    const user = userEvent.setup();
+    const dialog = await openDialog(user);
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('insecure context'));
+    let copied: string | undefined;
+    const execCommand = vi.fn((command: string) => {
+      // What is selected in the page at the moment of the copy is what gets copied.
+      const field = document.querySelector('textarea');
+      copied =
+        command === 'copy' && field
+          ? field.value.slice(field.selectionStart, field.selectionEnd)
+          : undefined;
+      return true;
+    });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+
+    await user.click(within(dialog).getByRole('button', { name: /map\.copyAddress/ }));
+
+    await waitFor(() => {
+      expect(execCommand).toHaveBeenCalledWith('copy');
+    });
+    expect(copied).toBe('Beach House, Brittany');
+    // The field is gone again once it has done its job.
+    expect(document.querySelector('textarea')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: /map\.addressCopied/ })).toBeInTheDocument();
   });
 });

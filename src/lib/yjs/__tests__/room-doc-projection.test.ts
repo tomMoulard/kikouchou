@@ -292,3 +292,89 @@ describe('activities crossing the trust boundary', () => {
     expect(activity?.notes).toHaveLength(MAX_LENGTHS.activityNotes);
   });
 });
+
+describe('assignments and activities, field by field', () => {
+  it.each([
+    ['an empty guest reference', { personId: '' }],
+    ['a guest reference that is not a string', { personId: 7 }],
+    ['a room reference that is not a string', { roomId: 7 }],
+  ])('drops an assignment with %s', async (_label, patch) => {
+    const tripId = await makeTrip();
+    await project(tripId, 'roomAssignments', { ...VALID_ASSIGNMENT, ...patch });
+
+    expect(await db.roomAssignments.get('a1')).toBeUndefined();
+  });
+
+  it('keeps an end, an all-day flag and an organizer the document holds', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'activities', {
+      ...VALID_ACTIVITY,
+      endDatetime: '2026-08-02T12:00:00.000Z',
+      allDay: true,
+      organizerId: 'p1',
+    });
+
+    expect(await db.activities.get('act1')).toMatchObject({
+      endDatetime: '2026-08-02T12:00:00.000Z',
+      allDay: true,
+      organizerId: 'p1',
+    });
+  });
+
+  it('reads an all-day flag that is not true as false', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'activities', { ...VALID_ACTIVITY, allDay: 'yes' });
+
+    expect((await db.activities.get('act1'))?.allDay).toBe(false);
+  });
+
+  it('keeps only the participant ids that are non-empty strings', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'activities', {
+      ...VALID_ACTIVITY,
+      participantIds: ['p1', '', 7, 'p2'],
+    });
+
+    expect((await db.activities.get('act1'))?.participantIds).toEqual(['p1', 'p2']);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['not a string', 7],
+  ])('forgets an organizer that is %s', async (_label, organizerId) => {
+    const tripId = await makeTrip();
+    await project(tripId, 'activities', { ...VALID_ACTIVITY, organizerId });
+
+    expect(await db.activities.get('act1')).not.toHaveProperty('organizerId');
+  });
+});
+
+describe('rooms, assignments and activities: what else is dropped or kept', () => {
+  it('drops a room whose order is not a finite number', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'rooms', { ...VALID_ROOM, order: Number.NaN });
+
+    expect(await db.rooms.get('r1')).toBeUndefined();
+  });
+
+  it('keeps an icon this build knows', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'rooms', { ...VALID_ROOM, icon: 'bed-double' });
+
+    expect((await db.rooms.get('r1'))?.icon).toBe('bed-double');
+  });
+
+  it('keeps the readable assignments and activities beside the unreadable ones', async () => {
+    const tripId = await makeTrip();
+    const doc = makeDoc();
+    upsertDocEntity(doc, 'roomAssignments', VALID_ASSIGNMENT);
+    upsertDocEntity(doc, 'roomAssignments', { ...VALID_ASSIGNMENT, id: 'a2', startDate: 'soon' });
+    upsertDocEntity(doc, 'activities', VALID_ACTIVITY);
+    upsertDocEntity(doc, 'activities', { ...VALID_ACTIVITY, id: 'act2', startDatetime: 'soon' });
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.roomAssignments.where('tripId').equals(tripId).toArray()).map((a) => a.id)).toEqual(['a1']);
+    expect((await db.activities.where('tripId').equals(tripId).toArray()).map((a) => a.id)).toEqual(['act1']);
+  });
+});

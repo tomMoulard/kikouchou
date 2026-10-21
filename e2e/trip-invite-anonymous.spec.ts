@@ -391,7 +391,13 @@ test.describe('a viewer who signs in', () => {
       })
       .toBe(1);
     // Alice was picked while signed out; the roster row carries that claim.
-    expect(stub.members.find((member) => member.user_id === GUEST.id)?.person_id).toBeTruthy();
+    // The claim is a second request after the redeem that wrote the row, so
+    // wait for it rather than read the row once the moment it appears.
+    await expect
+      .poll(() => stub.members.find((member) => member.user_id === GUEST.id)?.person_id ?? null, {
+        timeout: 30_000,
+      })
+      .toBeTruthy();
 
     // The card is gone and the controls are back.
     await expect(guestPage.getByTestId('viewer-unlock-card')).toHaveCount(0, {

@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
+import { tripDay } from '@/features/rooms/__tests__/fixture-days';
 import {
   calculateUnassignedDates,
   groupUnassignedNightsIntoStays,
@@ -181,5 +182,71 @@ describe('groupUnassignedNightsIntoStays', () => {
     expect(
       groupUnassignedNightsIntoStays(['2026-09-02', 'not-a-date', '2026-09-03']),
     ).toEqual([{ startDate: '2026-09-02', endDate: '2026-09-04' }]);
+  });
+});
+
+describe('calculateUnassignedDates, the booked span and its edges', () => {
+  const early = makeAssignment(tripDay(2), tripDay(4));
+  const late = makeAssignment(tripDay(5), tripDay(8));
+
+  it.each([
+    ['earliest first', [early, late]],
+    ['latest first', [late, early]],
+  ])('measures an undated guest from the first booking to the last, %s', (_name, bookings) => {
+    const result = calculateUnassignedDates(
+      makePerson(),
+      [],
+      [],
+      bookings,
+      tripWindow(tripDay(1), tripDay(10)),
+    );
+
+    // Booked 2nd to 4th and 5th to 8th: only the night of the 4th is open.
+    expect(result).toEqual({
+      startDate: tripDay(2),
+      endDate: tripDay(8),
+      unassignedDates: [tripDay(4)],
+    });
+  });
+
+  it('knows nothing about a guest with an arrival and no end in sight', () => {
+    expect(
+      calculateUnassignedDates(
+        makePerson({ stayStartDate: tripDay(2) }),
+        [],
+        [],
+        [],
+        { startDate: undefined, endDate: undefined },
+      ),
+    ).toBeNull();
+  });
+
+  it('counts a one-night booking as covering its night', () => {
+    const result = calculateUnassignedDates(
+      makePerson({
+        stayStartDate: tripDay(2),
+        stayEndDate: tripDay(4),
+      }),
+      [],
+      [],
+      [makeAssignment(tripDay(2), tripDay(3))],
+      tripWindow(tripDay(1), tripDay(10)),
+    );
+
+    expect(result?.unassignedDates).toEqual([tripDay(3)]);
+  });
+});
+
+describe('calculateUnassignedDates, a booking that holds no night', () => {
+  it('covers nothing with a same-day booking', () => {
+    const result = calculateUnassignedDates(
+      makePerson({ stayStartDate: tripDay(2), stayEndDate: tripDay(5) }),
+      [],
+      [],
+      [makeAssignment(tripDay(3), tripDay(3))],
+      tripWindow(tripDay(1), tripDay(10)),
+    );
+
+    expect(result?.unassignedDates).toEqual([tripDay(2), tripDay(3), tripDay(4)]);
   });
 });

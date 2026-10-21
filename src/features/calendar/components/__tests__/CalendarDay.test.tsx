@@ -4,10 +4,15 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { fireEvent, render, screen } from '@/test/utils';
 import { CalendarDay } from '../CalendarDay';
-import type { CalendarDayProps, CalendarEvent, CalendarTransport } from '../../types';
-import type { HexColor, ISODateString, ISODateTimeString, PersonId, RoomAssignmentId, RoomId, TransportId, TripId } from '@/types';
+import type {
+  CalendarActivity,
+  CalendarDayProps,
+  CalendarEvent,
+  CalendarTransport,
+} from '../../types';
+import type { ActivityId, HexColor, ISODateString, ISODateTimeString, PersonId, RoomAssignmentId, RoomId, TransportId, TripId } from '@/types';
 
 // ============================================================================
 // Helpers
@@ -79,6 +84,29 @@ function makeDefaultProps(overrides: Partial<CalendarDayProps> = {}): CalendarDa
 // ============================================================================
 // Tests
 // ============================================================================
+
+
+/**
+ * The errors an event handler threw while `act` ran.
+ *
+ * jsdom catches an exception thrown by a listener and reports it on `window`
+ * rather than rethrowing it from `dispatchEvent`, so `expect(...).not.toThrow()`
+ * would pass whatever the handler did.
+ */
+function errorsDuring(act: () => void): unknown[] {
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent): void => {
+    errors.push(event.error);
+    event.preventDefault();
+  };
+  window.addEventListener('error', onError);
+  try {
+    act();
+  } finally {
+    window.removeEventListener('error', onError);
+  }
+  return errors;
+}
 
 describe('CalendarDay', () => {
   it('renders the day number', () => {
@@ -266,5 +294,340 @@ describe('CalendarDay outside the current month', () => {
     );
 
     expect(screen.getByText('Alice - Room 1')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// What a cell holds, and what it tells a screen reader
+// ============================================================================
+
+describe('CalendarDay contents', () => {
+  function makeActivity(id: string, title: string): CalendarActivity {
+    return {
+      activity: {
+        id: id as ActivityId,
+        tripId: 'trip-1' as TripId,
+        title,
+        category: 'meal',
+        startDatetime: '2026-07-15T12:00:00',
+        allDay: false,
+        participantIds: [],
+      },
+      color: '#e11d48' as HexColor,
+      isSpanStart: true,
+      isSpanEnd: true,
+    };
+  }
+
+  /** The content area's children, top to bottom, as labels or `·` for a spacer. */
+  function rowsOf(cell: HTMLElement): string[] {
+    return Array.from(cell.children[1]!.children).map((element) =>
+      element.getAttribute('aria-hidden') === 'true'
+        ? '·'
+        : (element.getAttribute('aria-label') ?? element.textContent ?? ''),
+    );
+  }
+
+  function summaryText(): string | null {
+    const id = screen.getByRole('gridcell').getAttribute('aria-describedby');
+    return id === null ? null : (document.getElementById(id)?.textContent ?? null);
+  }
+
+  it('names the cell after its full date', () => {
+    render(<CalendarDay {...makeDefaultProps()} />, { withProviders: false });
+
+    expect(screen.getByRole('gridcell')).toHaveAttribute('aria-label', 'Wednesday, July 15th, 2026');
+  });
+
+  it('draws an in-trip day on the plain background, with a readable number', () => {
+    render(<CalendarDay {...makeDefaultProps()} />, { withProviders: false });
+
+    const cell = screen.getByRole('gridcell');
+    expect(cell).toHaveClass(
+      'bg-background',
+      'min-h-[80px]',
+      'p-1',
+      'flex',
+      'flex-col',
+      'border-t',
+      'focus-visible:ring-2',
+    );
+    expect(cell).not.toHaveClass('bg-muted/30');
+    expect(cell).not.toHaveClass('bg-muted/50');
+    expect(screen.getByText('15')).toHaveClass('text-sm', 'font-medium', 'size-6', 'rounded-full');
+    // Nothing to say about an ordinary day.
+    expect(cell).not.toHaveAttribute('aria-describedby');
+    expect(document.getElementById('2026-07-15-summary')).toBeNull();
+  });
+
+  it('greys a day of the month outside the trip, and says why', () => {
+    render(<CalendarDay {...makeDefaultProps({ isWithinTrip: false })} />, {
+      withProviders: false,
+    });
+
+    expect(screen.getByRole('gridcell')).toHaveClass('bg-muted/50');
+    expect(summaryText()).toBe('calendar.outsideTripDates');
+  });
+
+  it('greys a day of another month only once', () => {
+    render(
+      <CalendarDay {...makeDefaultProps({ isCurrentMonth: false, isWithinTrip: false })} />,
+      { withProviders: false },
+    );
+
+    const cell = screen.getByRole('gridcell');
+    expect(cell).toHaveClass('bg-muted/30');
+    expect(cell).not.toHaveClass('bg-muted/50');
+    expect(summaryText()).toBe('calendar.outsideCurrentMonth');
+  });
+
+  it('circles today and says so first', () => {
+    render(
+      <CalendarDay
+        {...makeDefaultProps({ isToday: true, headcount: { guests: 1, people: 2 } })}
+      />,
+      { withProviders: false },
+    );
+
+    const dayNumber = screen.getByText('15');
+    expect(dayNumber).toHaveClass('bg-primary', 'text-primary-foreground');
+    expect(dayNumber).not.toHaveClass('text-foreground');
+    expect(summaryText()).toBe('calendar.today. calendar.peopleOnSite');
+  });
+
+  it('shows how many people sleep there', () => {
+    render(<CalendarDay {...makeDefaultProps({ headcount: { guests: 2, people: 3 } })} />, {
+      withProviders: false,
+    });
+
+    const headcount = screen.getByTestId('day-headcount-2026-07-15');
+    expect(headcount).toHaveTextContent('3');
+    expect(headcount).toHaveAttribute('title', 'calendar.peopleOnSite');
+    expect(headcount).toHaveAttribute('aria-hidden', 'true');
+    expect(headcount).toHaveClass('absolute', 'right-0', 'text-xs');
+  });
+
+  it('shows no headcount on a day nobody sleeps there', () => {
+    render(<CalendarDay {...makeDefaultProps({ headcount: { guests: 0, people: 0 } })} />, {
+      withProviders: false,
+    });
+
+    expect(screen.queryByTestId('day-headcount-2026-07-15')).not.toBeInTheDocument();
+  });
+
+  it('shows two activities and two legs, and counts what does not fit', () => {
+    render(
+      <CalendarDay
+        {...makeDefaultProps({
+          activities: [
+            makeActivity('a1', 'Breakfast'),
+            makeActivity('a2', 'Lunch'),
+            makeActivity('a3', 'Dinner'),
+          ],
+          transports: [
+            makeTransport(),
+            makeTransport({
+              transport: { ...makeTransport().transport, id: 't2' as TransportId },
+              personName: 'Bob',
+            }),
+            makeTransport({
+              transport: { ...makeTransport().transport, id: 't3' as TransportId },
+              personName: 'Carol',
+            }),
+          ],
+          events: [makeEvent({ slotIndex: 3 })],
+        })}
+      />,
+      { withProviders: false },
+    );
+
+    expect(screen.getByText('Breakfast')).toBeInTheDocument();
+    expect(screen.getByText('Lunch')).toBeInTheDocument();
+    expect(screen.queryByText('Dinner')).not.toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('Carol')).not.toBeInTheDocument();
+    const overflow = screen.getByText('+3').parentElement;
+    expect(overflow).toHaveClass('text-xs', 'text-muted-foreground', 'text-center');
+    expect(overflow).toHaveTextContent('+3calendar.moreItemsHidden');
+    expect(summaryText()).toBe('calendar.moreItemsHidden');
+  });
+
+  it('keeps a stay in its lane with a spacer above it', () => {
+    const { container } = render(
+      <CalendarDay {...makeDefaultProps({ events: [makeEvent({ slotIndex: 1 })] })} />,
+      { withProviders: false },
+    );
+
+    expect(rowsOf(screen.getByRole('gridcell'))).toEqual(['·', 'Alice - Room 1']);
+    expect(container.querySelector('[aria-hidden="true"].h-\\[28px\\]')).toBeInTheDocument();
+  });
+
+  it('lays out every lane up to the highest one in the day', () => {
+    render(
+      <CalendarDay
+        {...makeDefaultProps({
+          events: [
+            makeEvent({ slotIndex: 0, spanId: 'a1' }),
+            makeEvent({ slotIndex: 2, spanId: 'a3', label: 'Carol - Room 3' }),
+          ],
+        })}
+      />,
+      { withProviders: false },
+    );
+
+    expect(rowsOf(screen.getByRole('gridcell'))).toEqual(['Alice - Room 1', '·', 'Carol - Room 3']);
+  });
+
+  it('gives each pill and spacer a key of its own', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <CalendarDay
+        {...makeDefaultProps({
+          events: [
+            makeEvent({ slotIndex: 0, spanId: 'a1' }),
+            makeEvent({ slotIndex: 1, spanId: 'a2', label: 'Bob - Room 2' }),
+          ],
+        })}
+      />,
+      { withProviders: false },
+    );
+
+    const duplicateKeys = consoleError.mock.calls.filter((call) =>
+      String(call[0]).includes('same key'),
+    );
+    expect(duplicateKeys).toEqual([]);
+    consoleError.mockRestore();
+  });
+
+  it('hands key presses and its node to the grid', () => {
+    const onDayKeyDown = vi.fn();
+    const dayRef = vi.fn();
+    const { unmount } = render(
+      <CalendarDay {...makeDefaultProps({ onDayKeyDown, dayRef })} />,
+      { withProviders: false },
+    );
+
+    const cell = screen.getByRole('gridcell');
+    expect(dayRef).toHaveBeenCalledWith('2026-07-15', cell);
+
+    fireEvent.keyDown(cell, { key: 'ArrowRight' });
+    expect(onDayKeyDown).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'ArrowRight' }),
+      '2026-07-15',
+    );
+
+    unmount();
+    expect(dayRef).toHaveBeenLastCalledWith('2026-07-15', null);
+  });
+
+  it('draws no lanes on a day with no stays', () => {
+    render(<CalendarDay {...makeDefaultProps()} />, { withProviders: false });
+
+    expect(rowsOf(screen.getByRole('gridcell'))).toEqual([]);
+  });
+
+  it('finds the highest lane whatever order the stays come in', () => {
+    render(
+      <CalendarDay
+        {...makeDefaultProps({
+          events: [
+            makeEvent({ slotIndex: 2, spanId: 'a3', label: 'Carol - Room 3' }),
+            makeEvent({ slotIndex: 0, spanId: 'a1' }),
+          ],
+        })}
+      />,
+      { withProviders: false },
+    );
+
+    const rows = rowsOf(screen.getByRole('gridcell'));
+    expect(rows).toHaveLength(3);
+    expect(rows[2]).toBe('Carol - Room 3');
+  });
+
+  it('keeps the spacers to the lanes a day can show', () => {
+    render(<CalendarDay {...makeDefaultProps({ events: [makeEvent({ slotIndex: 3 })] })} />, {
+      withProviders: false,
+    });
+
+    // Lane 3 is past the last one drawn, so the day shows three spacers and
+    // the count.
+    expect(rowsOf(screen.getByRole('gridcell'))).toEqual(['·', '·', '·', '+1calendar.moreItemsHidden']);
+  });
+
+  it('gives each spacer a key of its own', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<CalendarDay {...makeDefaultProps({ events: [makeEvent({ slotIndex: 2 })] })} />, {
+      withProviders: false,
+    });
+
+    expect(
+      consoleError.mock.calls.filter((call) => String(call[0]).includes('same key')),
+    ).toEqual([]);
+    consoleError.mockRestore();
+  });
+
+  it('hides the visible overflow count from screen readers, which hear the sentence', () => {
+    render(<CalendarDay {...makeDefaultProps({ events: [makeEvent({ slotIndex: 3 })] })} />, {
+      withProviders: false,
+    });
+
+    expect(screen.getByText('+1')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('takes key presses without a handler', () => {
+    render(<CalendarDay {...makeDefaultProps()} />, { withProviders: false });
+
+    expect(errorsDuring(() => fireEvent.keyDown(screen.getByRole('gridcell'), { key: 'a' }))).toEqual(
+      [],
+    );
+  });
+
+  it('follows its props when the page re-renders it', () => {
+    const firstFocus = vi.fn();
+    const secondFocus = vi.fn();
+    const firstKeyDown = vi.fn();
+    const secondKeyDown = vi.fn();
+    const firstRef = vi.fn();
+    const secondRef = vi.fn();
+    const { rerender } = render(
+      <CalendarDay
+        {...makeDefaultProps({
+          tabIndex: 0,
+          onDayFocus: firstFocus,
+          onDayKeyDown: firstKeyDown,
+          dayRef: firstRef,
+          events: [makeEvent({ slotIndex: 0 })],
+        })}
+      />,
+      { withProviders: false },
+    );
+
+    rerender(
+      <CalendarDay
+        {...makeDefaultProps({
+          tabIndex: 0,
+          isToday: true,
+          onDayFocus: secondFocus,
+          onDayKeyDown: secondKeyDown,
+          dayRef: secondRef,
+          events: [
+            makeEvent({ slotIndex: 0, spanId: 'a1' }),
+            makeEvent({ slotIndex: 1, spanId: 'a2', label: 'Bob - Room 2' }),
+          ],
+        })}
+      />,
+    );
+
+    const cell = screen.getByRole('gridcell');
+    expect(rowsOf(cell)).toEqual(['Alice - Room 1', 'Bob - Room 2']);
+    expect(summaryText()).toBe('calendar.today');
+    expect(secondRef).toHaveBeenCalledWith('2026-07-15', cell);
+
+    cell.focus();
+    fireEvent.keyDown(cell, { key: 'ArrowRight' });
+    expect(secondFocus).toHaveBeenCalledWith('2026-07-15');
+    expect(secondKeyDown).toHaveBeenCalled();
+    expect(firstFocus).not.toHaveBeenCalled();
+    expect(firstKeyDown).not.toHaveBeenCalled();
   });
 });

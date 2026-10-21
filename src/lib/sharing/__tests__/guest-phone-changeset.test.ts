@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
-import { hexColor, isoDate } from '@/test/utils';
+import { hexColor, installTestLocalStorage, isoDate } from '@/test/utils';
 import type { Person, Trip } from '@/types';
 
 const isGuestPhoneSharingEnabled = vi.fn(() => false);
@@ -22,7 +22,7 @@ vi.mock('@/lib/flags', () => ({
   isGuestPhoneSharingEnabled: () => isGuestPhoneSharingEnabled(),
 }));
 
-import { buildHostChangeset } from '@/lib/sharing/export-service';
+import { buildChangeset, buildHostChangeset, saveBaseline } from '@/lib/sharing/export-service';
 import { applyMerge } from '@/lib/sharing/merge-applicator';
 
 // ============================================================================
@@ -93,6 +93,40 @@ describe('buildHostChangeset', () => {
     await buildHostChangeset(trip);
 
     expect((await db.persons.get(guest.id))?.phone).toBe('+33 6 12 34 56 78');
+  });
+});
+
+describe('buildChangeset', () => {
+  async function guestChangeset() {
+    installTestLocalStorage();
+    const trip = await makeTrip();
+    const guest = await createPerson(trip.id, {
+      name: 'Mary',
+      color: hexColor('#3b82f6'),
+      phone: '+33 6 12 34 56 78',
+    });
+    saveBaseline({
+      tripId: trip.id,
+      shareId: trip.shareId,
+      personId: guest.id,
+      importedAt: 1,
+      snapshot: { personIds: [guest.id], assignmentIds: [], transportIds: [] },
+    });
+    return buildChangeset(trip.id, trip.shareId, guest.id);
+  }
+
+  it('leaves the guest phone out while sharing is off', async () => {
+    const changeset = await guestChangeset();
+
+    expect(changeset?.modified.persons[0]?.phone).toBeUndefined();
+  });
+
+  it('carries the guest phone while sharing is on', async () => {
+    isGuestPhoneSharingEnabled.mockReturnValue(true);
+
+    const changeset = await guestChangeset();
+
+    expect(changeset?.modified.persons[0]?.phone).toBe('+33 6 12 34 56 78');
   });
 });
 

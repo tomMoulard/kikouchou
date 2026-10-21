@@ -41,6 +41,9 @@ const SOURCE_ROOMS = [
   { id: 'r2', tripId: SOURCE_TRIP.id, name: 'Blue Room', capacity: 3, order: 1 },
 ] as unknown as Room[];
 
+/** The trip the stub hands over; a test may swap it for another. */
+const importSource = vi.hoisted(() => ({ trip: undefined as unknown as Trip }));
+
 // ============================================================================
 // Mocks
 // ============================================================================
@@ -53,11 +56,13 @@ vi.mock('@/features/trips/components/LocationAutocomplete', async (importOrigina
     LocationAutocomplete: ({
       id,
       value,
+      coordinates,
       onChange,
       onImportTrip,
     }: {
       id: string;
       value: string;
+      coordinates?: { lat: number; lon: number };
       onChange: (value: string, coordinates?: { lat: number; lon: number }) => void;
       onImportTrip?: (data: { trip: Trip; rooms: readonly Room[] }) => void;
     }) => (
@@ -65,13 +70,14 @@ vi.mock('@/features/trips/components/LocationAutocomplete', async (importOrigina
         <input
           id={id}
           data-testid="location-input"
+          data-pin={coordinates ? `${coordinates.lat},${coordinates.lon}` : 'none'}
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
         <button
           type="button"
           data-testid="import-trip"
-          onClick={() => onImportTrip?.({ trip: SOURCE_TRIP, rooms: SOURCE_ROOMS })}
+          onClick={() => onImportTrip?.({ trip: importSource.trip, rooms: SOURCE_ROOMS })}
         >
           import
         </button>
@@ -105,6 +111,7 @@ function renderForm(props: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  importSource.trip = SOURCE_TRIP;
 });
 
 // ============================================================================
@@ -157,4 +164,142 @@ describe('TripForm — importing an earlier trip', () => {
     // the other half of the same expression.
     expect(screen.queryByText(/1 room\b/)).not.toBeInTheDocument();
   });
+
+  it('takes the pin of the trip it imports the place from', async () => {
+    const { user } = renderForm();
+
+    await user.click(screen.getByTestId('import-trip'));
+
+    expect(screen.getByTestId('location-input')).toHaveAttribute('data-pin', '47.66,-2.76');
+  });
+
+  it('fills a description that holds only spaces', async () => {
+    const { user } = renderForm();
+
+    const description = screen.getByLabelText(/trips.description/);
+    await user.type(description, '   ');
+    await user.click(screen.getByTestId('import-trip'));
+
+    expect(description).toHaveValue('The usual house');
+  });
+
+  it('imports without a listener for the import source', async () => {
+    const { user } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    await user.click(screen.getByTestId('import-trip'));
+
+    expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
+  });
+
+  it('drops the import when it is handed another trip', async () => {
+    const { user, rerender } = renderForm();
+    await user.click(screen.getByTestId('import-trip'));
+    expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
+
+    rerender(<TripForm trip={EDITED_TRIP} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the typed place when the imported trip has none', async () => {
+    importSource.trip = { ...SOURCE_TRIP, location: undefined, coordinates: undefined };
+    const { user } = renderForm();
+    await user.type(screen.getByTestId('location-input'), 'Quimper');
+
+    await user.click(screen.getByTestId('import-trip'));
+
+    expect(screen.getByTestId('location-input')).toHaveValue('Quimper');
+  });
+
+  it('saves the typed place when the imported trip has none', async () => {
+    importSource.trip = { ...SOURCE_TRIP, location: undefined, coordinates: undefined };
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <TripForm trip={EDITED_TRIP} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.clear(screen.getByTestId('location-input'));
+    await user.type(screen.getByTestId('location-input'), 'Quimper');
+
+    await user.click(screen.getByTestId('import-trip'));
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ location: 'Quimper' }));
+    });
+  });
+
+  it('reports the import, and its removal, to the listener it has now', async () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { user, rerender } = renderForm({ onImportSourceChange: first });
+    rerender(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onImportSourceChange={latest} />);
+
+    await user.click(screen.getByTestId('import-trip'));
+    await user.click(screen.getByRole('button', { name: 'trips.removeImport' }));
+
+    expect(latest.mock.calls).toEqual([[SOURCE_TRIP.id], [null]]);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('takes an import back without a listener for it', async () => {
+    const { user } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+      withProviders: false,
+    });
+    await user.click(screen.getByTestId('import-trip'));
+
+    await user.click(screen.getByRole('button', { name: 'trips.removeImport' }));
+
+    expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
+  });
+
+  describe('and the unsaved-changes guard', () => {
+    function renderEdit(coordinates: { lat: number; lon: number }) {
+      const onDirtyChange = vi.fn();
+      const view = render(
+        <TripForm
+          trip={{ ...EDITED_TRIP, location: 'Vannes', coordinates }}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />,
+        { withProviders: false },
+      );
+      return { ...view, onDirtyChange };
+    }
+
+    it('reads the same pin, handed over again, as no change', async () => {
+      const { user, onDirtyChange } = renderEdit({ lat: 47.66, lon: -2.76 });
+
+      await user.click(screen.getByTestId('import-trip'));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it('reads a pin moved north or south as a change', async () => {
+      const { user, onDirtyChange } = renderEdit({ lat: 40, lon: -2.76 });
+
+      await user.click(screen.getByTestId('import-trip'));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('reads a pin moved east or west as a change', async () => {
+      const { user, onDirtyChange } = renderEdit({ lat: 47.66, lon: 0 });
+
+      await user.click(screen.getByTestId('import-trip'));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+  });
 });
+
+/** An existing trip, for the cases that need edit mode. */
+const EDITED_TRIP = {
+  ...SOURCE_TRIP,
+  id: 'trip-now' as TripId,
+  name: 'This year',
+  description: undefined,
+} as unknown as Trip;

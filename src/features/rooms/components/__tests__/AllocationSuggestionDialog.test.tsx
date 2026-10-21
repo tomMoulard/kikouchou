@@ -4,9 +4,10 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { tripDay } from '@/features/rooms/__tests__/fixture-days';
 import { AllocationSuggestionDialog } from '../AllocationSuggestionDialog';
 import type { SuggestedStay } from '@/features/rooms/utils/allocation-planner';
 import type {
@@ -293,5 +294,338 @@ describe('AllocationSuggestionDialog', () => {
     });
 
     expect(screen.getByText('rooms.suggest.nothingToPlace')).toBeInTheDocument();
+  });
+});
+
+describe('AllocationSuggestionDialog — the capacity warning', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
+  function review(stays: readonly SuggestedStay[], assignments: readonly RoomAssignment[] = []) {
+    render(
+      <AllocationSuggestionDialog
+        open
+        onOpenChange={vi.fn()}
+        stays={stays}
+        rooms={rooms}
+        persons={[alice, bob]}
+        assignments={assignments}
+        onApply={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+  }
+
+  it('warns on every row that overfills a room nobody was in yet', () => {
+    review([
+      makeStay('alice', 'room-2', tripDay(1), tripDay(2), [tripDay(1)]),
+      makeStay('bob', 'room-2', tripDay(1), tripDay(2), [tripDay(1)]),
+    ]);
+
+    const warnings = screen.getAllByRole('alert');
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toHaveTextContent('rooms.suggest.overCapacity');
+    expect(warnings[0]).toHaveClass('text-warning-on-surface', 'flex', 'text-xs');
+  });
+
+  it('warns when only one of the nights is over', () => {
+    review(
+      [makeStay('alice', 'room-2', tripDay(1), tripDay(3), [tripDay(1), tripDay(2)])],
+      [makeAssignment('a1', 'bob', 'room-2', tripDay(2), tripDay(3))],
+    );
+
+    expect(screen.getByText('rooms.suggest.overCapacity')).toBeInTheDocument();
+  });
+
+  it('does not warn about a room that is exactly full', () => {
+    review(
+      [makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)])],
+      [makeAssignment('a1', 'bob', 'room-1', tripDay(1), tripDay(2))],
+    );
+
+    expect(screen.queryByText('rooms.suggest.overCapacity')).not.toBeInTheDocument();
+  });
+
+  it('copes with a suggested room that has since been removed', () => {
+    review([makeStay('alice', 'gone', tripDay(1), tripDay(2), [tripDay(1)])]);
+
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.queryByText('rooms.suggest.overCapacity')).not.toBeInTheDocument();
+  });
+});
+
+describe('AllocationSuggestionDialog — the review itself', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
+  it('starts again from the proposal each time it opens', async () => {
+    const user = userEvent.setup();
+    const stays = [makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)])];
+    const props = {
+      onOpenChange: vi.fn(),
+      stays,
+      rooms,
+      persons: [alice, bob],
+      assignments: [],
+      onApply: vi.fn(),
+    };
+    const { rerender } = render(<AllocationSuggestionDialog open {...props} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' }));
+    await user.click(await screen.findByRole('option', { name: /Attic/ }));
+    expect(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' })).toHaveTextContent('Attic');
+
+    rerender(<AllocationSuggestionDialog open={false} {...props} />);
+    rerender(<AllocationSuggestionDialog open {...props} />);
+
+    expect(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' })).toHaveTextContent(
+      'Master Bedroom',
+    );
+  });
+
+  it('says nothing fits only while the guest still has no room', async () => {
+    const user = userEvent.setup();
+    render(
+      <AllocationSuggestionDialog
+        open
+        onOpenChange={vi.fn()}
+        stays={[
+          makeStay('alice', null, tripDay(1), tripDay(2), [tripDay(1)]),
+          makeStay('bob', 'room-1', tripDay(1), tripDay(2), [tripDay(1)]),
+        ]}
+        rooms={rooms}
+        persons={[alice, bob]}
+        assignments={[]}
+        onApply={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText('rooms.suggest.nothingFits')).toHaveLength(1);
+
+    const [aliceRoom, bobRoom] = screen.getAllByRole('combobox', { name: 'rooms.suggest.roomFor' });
+    // Bob had a room on offer, so giving him none is the reader's choice, not a dead end.
+    await user.click(bobRoom!);
+    await user.click(await screen.findByRole('option', { name: 'rooms.suggest.noRoom' }));
+    expect(screen.getAllByText('rooms.suggest.nothingFits')).toHaveLength(1);
+
+    await user.click(aliceRoom!);
+    await user.click(await screen.findByRole('option', { name: /Master Bedroom/ }));
+    expect(screen.queryByText('rooms.suggest.nothingFits')).not.toBeInTheDocument();
+  });
+
+  it('locks itself while the stays are written, then lets go of a write that hangs', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let finish!: () => void;
+      const onApply = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const onOpenChange = vi.fn();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(
+        <AllocationSuggestionDialog
+          open
+          onOpenChange={onOpenChange}
+          stays={[makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)])]}
+          rooms={rooms}
+          persons={[alice, bob]}
+          assignments={[]}
+          onApply={onApply}
+        />,
+      );
+
+      const apply = screen.getByRole('button', { name: 'rooms.suggest.apply' });
+      expect(apply.querySelector('[class*="animate-spin"]')).toBeNull();
+      await user.click(apply);
+
+      expect(apply).toBeDisabled();
+      expect(apply.querySelector('[class*="animate-spin"]')).toHaveClass('mr-2');
+      expect(screen.getByRole('button', { name: 'common.cancel' })).toBeDisabled();
+      expect(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' })).toBeDisabled();
+
+      await user.keyboard('{Escape}');
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(8100);
+      });
+      await user.keyboard('{Escape}');
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+
+      await act(async () => {
+        finish();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('AllocationSuggestionDialog — following a proposal that changes while open', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
+  const common = {
+    open: true,
+    onOpenChange: vi.fn(),
+    persons: [alice, bob],
+    assignments: [],
+    onApply: vi.fn(),
+  };
+
+  it('shows the new rows, and the new room for the same row', () => {
+    const { rerender } = render(
+      <AllocationSuggestionDialog
+        {...common}
+        rooms={rooms}
+        stays={[makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)])]}
+      />,
+    );
+
+    rerender(
+      <AllocationSuggestionDialog
+        {...common}
+        rooms={rooms}
+        stays={[makeStay('alice', 'room-2', tripDay(1), tripDay(2), [tripDay(1)])]}
+      />,
+    );
+    expect(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' })).toHaveTextContent('Attic');
+
+    rerender(
+      <AllocationSuggestionDialog
+        {...common}
+        rooms={rooms}
+        stays={[makeStay('bob', 'room-1', tripDay(3), tripDay(4), [tripDay(3)])]}
+      />,
+    );
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' })).toHaveTextContent(
+      'Master Bedroom',
+    );
+  });
+
+  it('measures capacity against the rooms of now', () => {
+    const stays = [makeStay('alice', 'room-2', tripDay(1), tripDay(2), [tripDay(1)])];
+    const { rerender } = render(<AllocationSuggestionDialog {...common} rooms={rooms} stays={stays} />);
+    expect(screen.queryByText('rooms.suggest.overCapacity')).not.toBeInTheDocument();
+
+    rerender(
+      <AllocationSuggestionDialog
+        {...common}
+        rooms={[rooms[0]!, { ...rooms[1]!, capacity: 0 }]}
+        stays={stays}
+      />,
+    );
+
+    expect(screen.getByText('rooms.suggest.overCapacity')).toBeInTheDocument();
+  });
+
+  it('counts the rows left without a room as the reader makes them', async () => {
+    const user = userEvent.setup();
+    render(
+      <AllocationSuggestionDialog
+        {...common}
+        rooms={rooms}
+        stays={[makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)])]}
+      />,
+    );
+    expect(screen.queryByText('rooms.suggest.leftOut')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' }));
+    await user.click(await screen.findByRole('option', { name: 'rooms.suggest.noRoom' }));
+
+    expect(screen.getByText('rooms.suggest.leftOut')).toBeInTheDocument();
+  });
+
+  it('describes itself and ties each picker to its row', () => {
+    render(
+      <AllocationSuggestionDialog
+        {...common}
+        rooms={rooms}
+        stays={[makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)])]}
+      />,
+    );
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('rooms.suggest.description');
+    const picker = screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' });
+    expect(picker).toHaveAttribute('aria-label', 'rooms.suggest.roomFor');
+    expect(picker.id).toBe(`suggested-room-alice|${tripDay(1)}|${tripDay(2)}`);
+  });
+});
+
+describe('AllocationSuggestionDialog — proposals that only look alike', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
+  it('tells two proposals apart even when their rows run together', () => {
+    // Bob's row key, glued onto a room id: written without a separator, this
+    // one-row proposal reads exactly like the two-row one before it.
+    const bobKey = `bob|${tripDay(3)}|${tripDay(4)}`;
+    const oddRoom = makeRoom(`room-1${bobKey}>room-2`, 'Odd room', 2, 2);
+    const props = {
+      open: true,
+      onOpenChange: vi.fn(),
+      rooms: [...rooms, oddRoom],
+      persons: [alice, bob],
+      assignments: [],
+      onApply: vi.fn(),
+    };
+    const { rerender } = render(
+      <AllocationSuggestionDialog
+        {...props}
+        stays={[
+          makeStay('alice', 'room-1', tripDay(1), tripDay(2), [tripDay(1)]),
+          makeStay('bob', 'room-2', tripDay(3), tripDay(4), [tripDay(3)]),
+        ]}
+      />,
+    );
+
+    rerender(
+      <AllocationSuggestionDialog
+        {...props}
+        stays={[makeStay('alice', oddRoom.id, tripDay(1), tripDay(2), [tripDay(1)])]}
+      />,
+    );
+
+    expect(screen.getByRole('combobox', { name: 'rooms.suggest.roomFor' })).toHaveTextContent(
+      'Odd room',
+    );
+  });
+
+  it('does not put a guest left without a room into a room whose id is "none"', () => {
+    // A room whose id is the picker's own "no room" value, already over its
+    // beds. A guest given no room is not in it, so nothing is over capacity.
+    const noneRoom = makeRoom('none', 'Shed', 0, 2);
+    render(
+      <AllocationSuggestionDialog
+        open
+        onOpenChange={vi.fn()}
+        rooms={[...rooms, noneRoom]}
+        persons={[alice, bob]}
+        assignments={[makeAssignment('a1', 'bob', 'none', tripDay(1), tripDay(2))]}
+        stays={[makeStay('alice', null, tripDay(1), tripDay(2), [tripDay(1)])]}
+        onApply={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('rooms.suggest.overCapacity')).not.toBeInTheDocument();
   });
 });

@@ -37,12 +37,29 @@ function clientCapturing(
     error?: unknown;
     serverRows?: { id: number }[];
     serverSnapshot?: { through_id: number } | null;
+    rowsError?: { message: string } | null;
+    snapshotError?: { message: string } | null;
+    throwOnRead?: boolean;
+    insertThrows?: unknown;
   } = {},
 ) {
-  const { error = null, serverRows = [], serverSnapshot = null } = options;
+  const {
+    error = null,
+    serverRows = [],
+    serverSnapshot = null,
+    rowsError = null,
+    snapshotError = null,
+    throwOnRead = false,
+    insertThrows,
+  } = options;
   const rows: { trip_id: string; update: string }[] = [];
+  /** Every read, as `table.select(columns).eq(column, value)`. */
+  const reads: string[] = [];
 
   const insert = vi.fn(async (values: { trip_id: string; update: string }) => {
+    if (insertThrows !== undefined) {
+      throw insertThrows;
+    }
     if (!error) {
       rows.push(values);
     }
@@ -51,30 +68,36 @@ function clientCapturing(
 
   const client = {
     from: (table: string) => {
+      if (throwOnRead) {
+        throw new Error('network down');
+      }
       if (table === 'trip_doc_snapshots') {
         return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: serverSnapshot, error: null }),
-            }),
+          select: (columns: string) => ({
+            eq: (column: string, value: string) => {
+              reads.push(`${table}.select(${columns}).eq(${column}, ${value})`);
+              return {
+                maybeSingle: async () => ({ data: serverSnapshot, error: snapshotError }),
+              };
+            },
           }),
         };
       }
       return {
         insert,
-        select: () => ({
-          eq: () => ({
-            order: () => ({
-              limit: async () => ({ data: serverRows, error: null }),
-            }),
-            limit: async () => ({ data: serverRows, error: null }),
-          }),
+        select: (columns: string) => ({
+          eq: (column: string, value: string) => {
+            reads.push(`${table}.select(${columns}).eq(${column}, ${value})`);
+            return {
+              limit: async () => ({ data: serverRows, error: rowsError }),
+            };
+          },
         }),
       };
     },
   };
 
-  return { client: client as never, rows, insert };
+  return { client: client as never, rows, insert, reads };
 }
 
 /** Decodes a captured row back to bytes. */
@@ -268,5 +291,128 @@ describe('uploadTripDocument', () => {
 
     // Nothing to upload is not a crash; the share dialog has to render something.
     expect(['already-current', 'error']).toContain(result.status);
+  });
+
+  it('does not ask the server when this device never recorded an upload', async () => {
+    const trip = await makeTrip('Brittany');
+
+    // Rows on the server would make a check say "already there"; with no
+    // recorded vector there is nothing to check, so the document goes up.
+    const { client, rows, reads } = clientCapturing({ serverRows: [{ id: 1 }] });
+    const result = await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    expect(result.status).toBe('uploaded');
+    expect(rows).toHaveLength(1);
+    expect(reads).toEqual([]);
+  });
+
+  it('asks the log for this trip, then the snapshot, before deciding', async () => {
+    const trip = await makeTrip('Brittany');
+    await recordServerState(trip.id, Y.encodeStateVector(new Y.Doc()));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { client, reads } = clientCapturing();
+    await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    expect(reads).toEqual([
+      `trip_doc_updates.select(id).eq(trip_id, ${REMOTE_TRIP_ID})`,
+      `trip_doc_snapshots.select(through_id).eq(trip_id, ${REMOTE_TRIP_ID})`,
+    ]);
+    // A clear "the server has nothing" is an answer, not a failure to ask.
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves a fully compacted trip alone: a snapshot and an empty log', async () => {
+    const trip = await makeTrip('Brittany');
+    await recordServerState(trip.id, Y.encodeStateVector(new Y.Doc()));
+
+    const { client, rows } = clientCapturing({
+      serverRows: [],
+      serverSnapshot: { through_id: 40 },
+    });
+    const result = await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    expect(result.status).toBe('already-current');
+    expect(rows).toHaveLength(0);
+  });
+
+  it.each([
+    ['the log read fails', { rowsError: { message: 'denied' } }],
+    ['the snapshot read fails', { snapshotError: { message: 'denied' } }],
+  ])('uploads, with a warning, when %s', async (_label, failure) => {
+    const trip = await makeTrip('Brittany');
+    await recordServerState(trip.id, Y.encodeStateVector(new Y.Doc()));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Rows and a snapshot exist, so a check that wrongly answered would skip
+    // the upload.
+    const { client, insert } = clientCapturing({
+      serverRows: 'rowsError' in failure ? [{ id: 1 }] : [],
+      serverSnapshot: { through_id: 40 },
+      ...failure,
+    });
+    const result = await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not read'));
+    expect(result.status).toBe('uploaded');
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a check that throws as unanswered, not as an answer', async () => {
+    const trip = await makeTrip('Brittany');
+    await recordServerState(trip.id, Y.encodeStateVector(new Y.Doc()));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { client } = clientCapturing({ throwOnRead: true });
+    const result = await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    // The check swallowed its throw and said "could not tell"; the insert's
+    // own `from` then threw too, and that is reported rather than thrown.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not read'));
+    expect(result).toEqual({ status: 'error', message: 'network down' });
+  });
+
+  it('reports a thrown error by its message and does not record server state', async () => {
+    const trip = await makeTrip('Brittany');
+    const { client } = clientCapturing({ insertThrows: new Error('socket closed') });
+
+    const result = await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    expect(result).toEqual({ status: 'error', message: 'socket closed' });
+    expect((await readCursor(trip.id)).serverStateVector).toBeUndefined();
+  });
+
+  it('reports a thrown non-Error as text', async () => {
+    const trip = await makeTrip('Brittany');
+    const { client } = clientCapturing({ insertThrows: 'plain failure' });
+
+    const result = await uploadTripDocument(client, trip.id, REMOTE_TRIP_ID);
+
+    expect(result).toEqual({ status: 'error', message: 'plain failure' });
+  });
+
+  it('destroys the document it built, whatever the outcome', async () => {
+    const trip = await makeTrip('Brittany');
+    const destroy = vi.spyOn(Y.Doc.prototype, 'destroy');
+
+    await uploadTripDocument(clientCapturing().client, trip.id, REMOTE_TRIP_ID);
+    expect(destroy).toHaveBeenCalledTimes(1);
+
+    await uploadTripDocument(
+      clientCapturing({ insertThrows: new Error('x') }).client,
+      trip.id,
+      REMOTE_TRIP_ID,
+    );
+    expect(destroy).toHaveBeenCalledTimes(2);
+  });
+
+  it('records an empty document as current without inserting anything', async () => {
+    const { client, insert } = clientCapturing();
+
+    const result = await uploadTripDocument(client, 'no-such-trip' as TripId, REMOTE_TRIP_ID);
+
+    expect(result.status).toBe('already-current');
+    expect(insert).not.toHaveBeenCalled();
+    expect((await readCursor('no-such-trip' as TripId)).serverStateVector).toBeDefined();
   });
 });

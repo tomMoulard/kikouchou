@@ -7,7 +7,7 @@
  *
  * @module lib/db/repositories/__tests__/guest-group-repository.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
 import {
@@ -380,5 +380,44 @@ describe('createGuestGroupFromPersons', () => {
     const { persons } = await importGuestGroupMembers(target, group.id);
 
     expect(getPersonHeadcount(persons[0]!)).toBe(2);
+  });
+});
+
+describe('guest groups, in detail', () => {
+  it('names the group it failed to create', async () => {
+    vi.spyOn(db.guestGroups, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(createGuestGroup(familyGroupData({ name: '  Family  ' }))).rejects.toThrow(
+      'Failed to create guest group "Family"',
+    );
+  });
+
+  it('writes no headcount for a member that stands for one person', async () => {
+    const tripId = await createTestTrip();
+    await db.guestGroups.put({
+      id: 'group-1',
+      name: 'Family',
+      members: [{ id: 'member-1', name: 'Alice', color: '#3b82f6', headcount: 1 }],
+      createdAt: 1,
+      updatedAt: 1,
+    } as never);
+
+    const { persons } = await importGuestGroupMembers(tripId, 'group-1' as never);
+
+    expect(persons).toHaveLength(1);
+    expect(persons[0]).not.toHaveProperty('headcount');
+  });
+
+  it('keeps no headcount for a guest captured who stands for one person', async () => {
+    const tripId = await createTestTrip();
+    const alice = await createPerson(tripId, {
+      name: 'Alice',
+      color: hexColor('#3b82f6'),
+      headcount: 1,
+    });
+
+    const group = await createGuestGroupFromPersons('Family', [alice]);
+
+    expect(group.members[0]?.headcount).toBeUndefined();
   });
 });

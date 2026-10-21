@@ -207,3 +207,29 @@ describe('validation index', () => {
     });
   });
 });
+
+
+describe('field error paths', () => {
+  it('names a nested field by its dotted path', () => {
+    const result = validateTripForm({
+      name: 'Trip',
+      startDate: '2025-01-01',
+      endDate: '2025-01-05',
+      coordinates: { lat: 120, lon: 2 },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.map((error) => error.path)).toEqual(['coordinates.lat']);
+    }
+  });
+
+  it('calls an error on the value itself "root"', () => {
+    const result = validateTripForm('not a trip');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.map((error) => error.path)).toEqual(['root']);
+    }
+  });
+});

@@ -14,9 +14,21 @@
  * @module components/shared/__tests__/MapMarker.test
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { fireEvent, render, screen } from '@/test/utils';
 
-import { MapMarker, type MapMarkerData, type MapMarkerType } from '@/components/shared/MapMarker';
+import type { MapMarkerData, MapMarkerType } from '@/components/shared/MapMarker';
+
+/**
+ * Loaded inside the first test rather than at the top of the file: the marker
+ * classes, glyphs and colour pattern are load-time tables, and Stryker can only
+ * test a mutant in load-time code against the test that was running when the
+ * module loaded.
+ */
+let MapMarker: typeof import('@/components/shared/MapMarker').MapMarker;
+
+beforeEach(async () => {
+  ({ MapMarker } = await import('@/components/shared/MapMarker'));
+});
 import { statusVariants } from '@/components/ui/status.variants';
 
 // ============================================================================
@@ -84,8 +96,25 @@ vi.mock('react-leaflet', () => ({
   Popup: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="mock-popup">{children}</div>
   ),
-  Tooltip: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="mock-tooltip">{children}</div>
+  Tooltip: ({
+    children,
+    direction,
+    offset,
+    opacity,
+  }: {
+    children: React.ReactNode;
+    direction?: string;
+    offset?: [number, number];
+    opacity?: number;
+  }) => (
+    <div
+      data-testid="mock-tooltip"
+      data-direction={direction}
+      data-offset={JSON.stringify(offset)}
+      data-opacity={opacity}
+    >
+      {children}
+    </div>
   ),
 }));
 
@@ -155,6 +184,66 @@ function renderedIconHtml(marker: MapMarkerData): string {
   render(<MapMarker marker={marker} />);
   return lastIconHtml();
 }
+
+// ============================================================================
+// Load-time tables
+// ============================================================================
+
+describe('MapMarker load-time tables', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const BASE =
+    'map-marker-container flex size-8 cursor-pointer items-center justify-center ' +
+    'rounded-full border-2 border-background shadow-md transition-colors';
+
+  it('paints each type with its own classes and glyph, and lets only a real hex colour through', () => {
+    const expected: ReadonlyArray<readonly [MapMarkerType, string, string]> = [
+      [
+        'trip',
+        'bg-primary text-primary-foreground',
+        '<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>',
+      ],
+      [
+        'transport',
+        statusVariants({ tone: 'arrival', emphasis: 'solid' }),
+        '<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>',
+      ],
+      [
+        'pickup',
+        statusVariants({ tone: 'departure', emphasis: 'solid' }),
+        '<path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>',
+      ],
+      [
+        'default',
+        'bg-muted-foreground text-background',
+        '<path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>',
+      ],
+    ];
+
+    for (const [type, classes, glyph] of expected) {
+      const { unmount } = render(<MapMarker marker={createTestMarker({ id: type, type })} />);
+      const html = lastIconHtml();
+      expect(html).toContain(`class="${BASE} ${classes}" data-marker-type="${type}"`);
+      expect(html).toContain(glyph);
+      unmount();
+    }
+
+    const accepts = (color: string): boolean => {
+      const { unmount } = render(<MapMarker marker={createTestMarker({ color })} />);
+      const html = lastIconHtml();
+      unmount();
+      return html.includes(`style="background-color:${color}"`);
+    };
+    for (const color of ['#abc', '#A1B2C3', '#a1b2c3d4']) {
+      expect(accepts(color), color).toBe(true);
+    }
+    for (const color of ['red', '#a', '#ab', '#abcd', 'x#abc', '#abcz', '#xyz', '#zzzzzz', '#zzzzzzzz']) {
+      expect(accepts(color), color).toBe(false);
+    }
+  });
+});
 
 // ============================================================================
 // Basic Rendering Tests
@@ -872,5 +961,117 @@ describe('MapMarker Memoization', () => {
 
     expect(mocks.divIcon.mock.calls.length).toBeGreaterThan(buildsAfterFirstPaint);
     expect(lastIconHtml()).toContain('background-color:#ff0000');
+  });
+});
+
+// ============================================================================
+// Freshness, the warning text and the tooltip placement
+// ============================================================================
+
+describe('MapMarker freshness and details', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('refuses a coordinate that is not a number at all', () => {
+    const marker = createTestMarker({ position: ['48' as unknown as number, 2] });
+    const { container } = render(<MapMarker marker={marker} />, { withProviders: false });
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('refuses a longitude that is not a number at all', () => {
+    const marker = createTestMarker({ position: [48, '2' as unknown as number] });
+    const { container } = render(<MapMarker marker={marker} />, { withProviders: false });
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('spells the whole marker out in the dev warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<MapMarker marker={createTestMarker({ id: 'pickup-7', position: [999, 4] })} />, {
+      withProviders: false,
+    });
+
+    expect(warn).toHaveBeenCalledWith('MapMarker: Invalid coordinates for marker "pickup-7": [999, 4]');
+    warn.mockRestore();
+  });
+
+  it('warns again when a marker it already drew moves off the globe', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { rerender } = render(<MapMarker marker={createTestMarker({ id: 'pickup-7', position: [48, 2] })} />, {
+        withProviders: false,
+      });
+      expect(warn).not.toHaveBeenCalled();
+
+      rerender(<MapMarker marker={createTestMarker({ id: 'pickup-7', position: [999, 4] })} />);
+
+      expect(warn).toHaveBeenCalledWith('MapMarker: Invalid coordinates for marker "pickup-7": [999, 4]');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('repaints the pin when its type or colour changes', () => {
+    const { rerender } = render(<MapMarker marker={createTestMarker({ type: 'trip' })} />, {
+      withProviders: false,
+    });
+    expect(screen.getByTestId('mock-marker').getAttribute('data-icon-html')).toContain('data-marker-type="trip"');
+
+    rerender(<MapMarker marker={createTestMarker({ type: 'pickup' })} />);
+    expect(screen.getByTestId('mock-marker').getAttribute('data-icon-html')).toContain('data-marker-type="pickup"');
+
+    rerender(<MapMarker marker={createTestMarker({ type: 'pickup', color: '#123456' })} />);
+    expect(screen.getByTestId('mock-marker').getAttribute('data-icon-html')).toContain('background-color:#123456');
+  });
+
+  it('drops a marker moved off the map', () => {
+    const { container, rerender } = render(<MapMarker marker={createTestMarker()} />, {
+      withProviders: false,
+    });
+    expect(screen.getByTestId('mock-marker')).toBeInTheDocument();
+
+    rerender(<MapMarker marker={createTestMarker({ position: [95, 0] })} />);
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('reports a click and a key to the newest handlers, with the newest marker', () => {
+    const firstClick = vi.fn();
+    const secondClick = vi.fn();
+    const secondKey = vi.fn();
+    const { rerender } = render(<MapMarker marker={createTestMarker()} onClick={firstClick} />, {
+      withProviders: false,
+    });
+    const moved = createTestMarker({ label: 'Lyon' });
+    rerender(<MapMarker marker={moved} onClick={secondClick} onKeyDown={secondKey} />);
+
+    fireEvent.click(screen.getByTestId('mock-marker'));
+    fireEvent.keyDown(screen.getByTestId('mock-marker'), { key: 'Enter' });
+
+    expect(firstClick).not.toHaveBeenCalled();
+    expect(secondClick).toHaveBeenNthCalledWith(1, moved);
+    expect(secondClick).toHaveBeenNthCalledWith(2, moved);
+    expect(secondKey).toHaveBeenCalledWith(expect.objectContaining({ key: 'Enter' }), moved);
+  });
+
+  it('passes Enter on to onKeyDown when there is no click handler', () => {
+    const onKeyDown = vi.fn();
+    render(<MapMarker marker={createTestMarker()} onKeyDown={onKeyDown} />, { withProviders: false });
+
+    fireEvent.keyDown(screen.getByTestId('mock-marker'), { key: 'Enter' });
+
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('floats the tooltip above the pin, fully opaque', () => {
+    render(<MapMarker marker={createTestMarker({ tooltipContent: 'Paris' })} />, { withProviders: false });
+
+    const tooltip = screen.getByTestId('mock-tooltip');
+    expect(tooltip).toHaveAttribute('data-direction', 'top');
+    expect(tooltip).toHaveAttribute('data-offset', '[0,-16]');
+    expect(tooltip).toHaveAttribute('data-opacity', '1');
+    expect(tooltip.firstElementChild).toHaveClass('text-xs');
   });
 });

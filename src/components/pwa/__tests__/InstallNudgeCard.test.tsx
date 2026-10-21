@@ -8,9 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { InstallNudgeCard } from '../InstallNudgeCard';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { usePhoneViewport } from '@/hooks/usePhoneViewport';
+import { notify } from '@/lib/notifications';
 import { captureEvent } from '@/lib/posthog';
 import type { Trip } from '@/types';
 
@@ -18,22 +18,25 @@ import type { Trip } from '@/types';
 // Test doubles
 // ============================================================================
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, fallback?: string | Record<string, unknown>) => {
-      if (typeof fallback === 'string') {
-        return fallback;
-      }
-      const options = fallback ?? {};
-      const template = options.defaultValue;
-      if (typeof template !== 'string') {
-        return key;
-      }
-      return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
-        String(options[name] ?? ''),
-      );
-    },
+/** The English fallback on screen, and the key on record. */
+const { translate } = vi.hoisted(() => ({
+  translate: vi.fn((key: string, fallback?: string | Record<string, unknown>) => {
+    if (typeof fallback === 'string') {
+      return fallback;
+    }
+    const options = fallback ?? {};
+    const template = options.defaultValue;
+    if (typeof template !== 'string') {
+      return key;
+    }
+    return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+      String(options[name] ?? ''),
+    );
   }),
+}));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: translate }),
 }));
 
 vi.mock('@/contexts/InstallPromptContext', () => ({ useInstallPromptState: vi.fn() }));
@@ -119,6 +122,41 @@ afterEach(() => {
 // Tests
 // ============================================================================
 
+/**
+ * Loaded inside the first test rather than at the top of the file: the
+ * dismissal key and window are load-time constants, and Stryker can only test
+ * a mutant in load-time code against the test that was running when the
+ * module loaded.
+ */
+let InstallNudgeCard: typeof import('../InstallNudgeCard').InstallNudgeCard;
+
+beforeEach(async () => {
+  ({ InstallNudgeCard } = await import('../InstallNudgeCard'));
+});
+
+describe('InstallNudgeCard load-time constants', () => {
+  it('keeps "Not now" under its own key, for thirty days', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 0, 10, 12));
+    const day = 24 * 60 * 60 * 1000;
+    const key = 'kikouchou-install-nudge-dismissed';
+
+    const user = userEvent.setup();
+    const { unmount } = render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+    expect([...stored.keys()]).toEqual([key]);
+    unmount();
+
+    stored.set(key, String(Date.now() - 29 * day));
+    const hidden = render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+    expect(hidden.container).toBeEmptyDOMElement();
+    hidden.unmount();
+
+    stored.set(key, String(Date.now() - 30 * day));
+    expect(render(<InstallNudgeCard trip={VIEWER_TRIP} />).container).not.toBeEmptyDOMElement();
+  });
+});
+
 describe('InstallNudgeCard', () => {
   it('pitches reminders for a shared trip on a phone', () => {
     render(<InstallNudgeCard trip={VIEWER_TRIP} />);
@@ -200,5 +238,129 @@ describe('InstallNudgeCard', () => {
     render(<InstallNudgeCard trip={VIEWER_TRIP} />);
 
     expect(screen.getByTestId('install-nudge-card')).toBeInTheDocument();
+  });
+});
+
+describe('InstallNudgeCard, more of it', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const KEY = 'kikouchou-install-nudge-dismissed';
+
+  it('counts the card for a member trip as a member', () => {
+    render(<InstallNudgeCard trip={MEMBER_TRIP} className="extra" />);
+
+    expect(capture).toHaveBeenCalledWith('install_nudge_shown', { trip_access: 'member' });
+    const region = screen.getByRole('region', { name: 'Install suggestion' });
+    expect(region).toHaveClass('border-primary/20', 'extra');
+  });
+
+  it('counts the card again when it appears later', () => {
+    installState({ canInstall: false });
+    const { rerender } = render(<InstallNudgeCard trip={VIEWER_TRIP} className="a" />);
+    expect(capture).not.toHaveBeenCalled();
+
+    installState({ canInstall: true });
+    rerender(<InstallNudgeCard trip={VIEWER_TRIP} className="b" />);
+
+    expect(capture).toHaveBeenCalledWith('install_nudge_shown', { trip_access: 'viewer' });
+  });
+
+  it('says so when the install does not happen', async () => {
+    install.mockResolvedValue(false);
+    const user = userEvent.setup();
+    render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+
+    await user.click(screen.getByRole('button', { name: 'Install app' }));
+
+    expect(notify.error).toHaveBeenCalledWith('Installation failed. Please try again.');
+    expect(translate).toHaveBeenCalledWith('pwa.installFailed', 'Installation failed. Please try again.');
+  });
+
+  it('fires the prompt it holds now', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<InstallNudgeCard trip={VIEWER_TRIP} className="a" />);
+    const fresh = vi.fn(async () => true);
+    installState({ install: fresh });
+    rerender(<InstallNudgeCard trip={VIEWER_TRIP} className="b" />);
+
+    await user.click(screen.getByRole('button', { name: 'Install app' }));
+
+    expect(fresh).toHaveBeenCalledTimes(1);
+    expect(install).not.toHaveBeenCalled();
+  });
+
+  it('says nothing when the install goes through', async () => {
+    const user = userEvent.setup();
+    render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+
+    await user.click(screen.getByRole('button', { name: 'Install app' }));
+
+    expect(notify.error).not.toHaveBeenCalled();
+  });
+
+  it('writes when "Not now" was pressed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 0, 10, 12));
+    const user = userEvent.setup();
+    render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+
+    expect(stored.get(KEY)).toBe(String(Date.now()));
+  });
+
+  it('stays hidden for 29 days and comes back on day 30', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 0, 10, 12));
+
+    stored.set(KEY, String(Date.now() - 29 * DAY_MS));
+    expect(render(<InstallNudgeCard trip={VIEWER_TRIP} />).container).toBeEmptyDOMElement();
+
+    stored.set(KEY, String(Date.now() - 30 * DAY_MS));
+    expect(render(<InstallNudgeCard trip={VIEWER_TRIP} />).container).not.toBeEmptyDOMElement();
+  });
+
+  it('treats an unreadable dismissal as none', () => {
+    stored.set(KEY, 'garbage');
+
+    expect(render(<InstallNudgeCard trip={VIEWER_TRIP} />).container).not.toBeEmptyDOMElement();
+  });
+
+  it('still offers the card, and still hides it, when storage refuses', async () => {
+    const getItem = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    const user = userEvent.setup();
+    const { container } = render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+    expect(container).not.toBeEmptyDOMElement();
+
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+
+    expect(container).toBeEmptyDOMElement();
+    getItem.mockRestore();
+    setItem.mockRestore();
+  });
+
+  it('keeps the install button dead while the browser prompt is up', () => {
+    installState({ isInstalling: true });
+    render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+
+    expect(screen.getByRole('button', { name: 'Install app' })).toBeDisabled();
+  });
+
+  it('asks for each string under its key', () => {
+    render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+
+    expect(translate).toHaveBeenCalledWith('install.nudge.region', 'Install suggestion');
+    expect(translate).toHaveBeenCalledWith('install.nudge.title', 'Get a reminder before the trip');
+    expect(screen.getByText('Get a reminder before the trip')).toBeInTheDocument();
+    expect(translate).toHaveBeenCalledWith(
+      'install.nudge.description',
+      expect.objectContaining({ tripName: 'Brittany' }),
+    );
+    expect(translate).toHaveBeenCalledWith('pwa.install', 'Install app');
+    expect(translate).toHaveBeenCalledWith('pwa.notNow', 'Not now');
   });
 });

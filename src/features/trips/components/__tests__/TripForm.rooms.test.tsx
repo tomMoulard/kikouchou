@@ -248,6 +248,38 @@ describe('TripForm Room List', () => {
     expect(roomInputs().map((field) => field.value)).toEqual(['Cellar']);
   });
 
+  it('moves focus to the row above a removed room', async () => {
+    const user = userEvent.setup();
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    await addRoom(user, 'Attic');
+    await addRoom(user, 'Cellar');
+    await addRoom(user, 'Barn');
+
+    await user.click(
+      within(roomList()).getAllByRole('button', { name: /trips\.removeRoom/iu })[1]!,
+    );
+
+    expect(roomInputs().map((field) => field.value)).toEqual(['Attic', 'Barn']);
+    expect(roomInputs()[0]).toHaveFocus();
+  });
+
+  it('moves focus to the add button when the first room is removed', async () => {
+    const user = userEvent.setup();
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    await addRoom(user, 'Attic');
+    await addRoom(user, 'Cellar');
+
+    await user.click(
+      within(roomList()).getAllByRole('button', { name: /trips\.removeRoom/iu })[0]!,
+    );
+
+    // The removed row held the focus; leaving it on <body> loses a keyboard
+    // user's place in the form.
+    expect(screen.getByRole('button', { name: /trips\.addRoom/iu })).toHaveFocus();
+  });
+
   // The form asks for the beds, the guests and the dates, so it is the one
   // place that can answer "does everybody have a bed?" without the user doing
   // the sums themselves. The arithmetic itself is covered in
@@ -278,6 +310,7 @@ describe('TripForm Room List', () => {
       const line = summaryLine();
       expect(line).toBeInTheDocument();
       expect(line).toHaveAttribute('aria-live', 'polite');
+      expect(line).toHaveClass('text-xs');
     });
 
     it('stays quiet in tone while the beds cover the guests', async () => {

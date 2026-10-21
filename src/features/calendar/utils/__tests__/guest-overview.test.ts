@@ -168,6 +168,71 @@ describe('buildGuestOverview', () => {
     expect(overview.activities.map((activity) => activity.id)).toEqual(['walk', 'swim']);
   });
 
+  it('orders two stays that start together by the one that ends first', () => {
+    const overview = build({
+      assignments: [
+        makeAssignment('long', 'r1', 'alice', '2024-07-15', '2024-07-19'),
+        makeAssignment('short', 'r2', 'alice', '2024-07-15', '2024-07-17'),
+      ],
+    });
+
+    expect(overview.stays.map((stay) => stay.assignment.id)).toEqual(['short', 'long']);
+  });
+
+  it('orders two activities on the same first day by the one that ends first', () => {
+    const long = {
+      ...makeActivity('long', 15, ['alice']),
+      endDatetime: new Date(2024, 6, 18, 10, 0).toISOString(),
+    };
+    const short = {
+      ...makeActivity('short', 15, ['alice']),
+      endDatetime: new Date(2024, 6, 16, 10, 0).toISOString(),
+    };
+
+    expect(build({ activities: [long, short] }).activities.map((a) => a.id)).toEqual([
+      'short',
+      'long',
+    ]);
+    expect(build({ activities: [short, long] }).activities.map((a) => a.id)).toEqual([
+      'short',
+      'long',
+    ]);
+  });
+
+  it('puts an activity whose date cannot be read before the dated ones', () => {
+    const undated = { ...makeActivity('undated', 15, ['alice']), startDatetime: 'not a date' };
+
+    const overview = build({
+      activities: [makeActivity('walk', 15, ['alice']), undated],
+    });
+
+    expect(overview.activities.map((activity) => activity.id)).toEqual(['undated', 'walk']);
+  });
+
+  it('puts an undated activity with no end before an undated one that ends on a known day', () => {
+    const open = { ...makeActivity('open', 15, ['alice']), startDatetime: 'not a date' };
+    const ending = {
+      ...makeActivity('ending', 15, ['alice']),
+      startDatetime: 'still not',
+      endDatetime: new Date(2024, 6, 16, 10, 0).toISOString(),
+    };
+
+    expect(build({ activities: [ending, open] }).activities.map((a) => a.id)).toEqual([
+      'open',
+      'ending',
+    ]);
+  });
+
+  it('keeps two undated activities in the order they came', () => {
+    const first = { ...makeActivity('first', 15, ['alice']), startDatetime: 'not a date' };
+    const second = { ...makeActivity('second', 15, ['alice']), startDatetime: 'still not' };
+
+    expect(build({ activities: [first, second] }).activities.map((a) => a.id)).toEqual([
+      'first',
+      'second',
+    ]);
+  });
+
   it('falls back to the trip dates when the guest has no stay dates or travel', () => {
     const overview = build();
 

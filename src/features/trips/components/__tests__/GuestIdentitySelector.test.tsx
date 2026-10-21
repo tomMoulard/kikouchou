@@ -10,6 +10,7 @@
  * @module features/trips/components/__tests__/GuestIdentitySelector.test
  */
 
+import { createContext, useContext } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { render, screen, userEvent } from '@/test/utils';
@@ -154,6 +155,16 @@ vi.mock('@/lib/notifications', () => ({
   },
 }));
 
+const mockReportError = vi.fn();
+vi.mock('@/lib/posthog', () => ({
+  reportError: (...args: unknown[]) => mockReportError(...args),
+}));
+
+const mockReportFailure = vi.fn();
+vi.mock('@/lib/errors/report-failure', () => ({
+  reportFailure: (...args: unknown[]) => mockReportFailure(...args),
+}));
+
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 
@@ -179,6 +190,37 @@ function setContexts(
     persons,
     isLoading,
   } as ReturnType<typeof usePersonContext>);
+}
+
+// The card is memoised and takes no props, so a changed mock return value
+// never reaches it. Reading the two contexts from a real React context lets a
+// test change the trip or the guests under a card that is already mounted.
+interface LiveContexts {
+  readonly trip: Trip;
+  readonly persons: readonly Person[];
+}
+
+const LiveContext = createContext<LiveContexts>({ trip: mockTrip, persons: [] });
+
+function live(value: LiveContexts) {
+  return (
+    <LiveContext.Provider value={value}>
+      <GuestIdentitySelector />
+    </LiveContext.Provider>
+  );
+}
+
+function renderLive(value: LiveContexts): ReturnType<typeof render> {
+  vi.mocked(useTripContext).mockImplementation(
+    () => ({ currentTrip: useContext(LiveContext).trip }) as ReturnType<typeof useTripContext>,
+  );
+  vi.mocked(usePersonContext).mockImplementation(
+    () =>
+      ({ persons: useContext(LiveContext).persons, isLoading: false }) as ReturnType<
+        typeof usePersonContext
+      >,
+  );
+  return render(live(value), { withProviders: false });
 }
 
 /**
@@ -344,5 +386,113 @@ describe('GuestIdentitySelector', () => {
     await user.click(screen.getByRole('button', { name: 'settings.guestIdentityOpenGuests' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/persons');
+  });
+
+  it('titles the card, explains it, and says where the answer is kept', () => {
+    render(<GuestIdentitySelector />, { withProviders: false });
+
+    expect(screen.getByText('settings.guestIdentity')).toHaveClass('text-base');
+    expect(screen.getByText('settings.guestIdentityDescription')).toBeInTheDocument();
+    expect(screen.getByText('settings.guestIdentityHint')).toHaveClass('text-xs');
+  });
+
+  it('names what it is waiting for while the guests load', () => {
+    setContexts({ persons: [], isLoading: true });
+
+    render(<GuestIdentitySelector />, { withProviders: false });
+
+    expect(screen.getByText('settings.guestIdentityLoading')).toBeInTheDocument();
+  });
+
+  it('keeps the guest and warns when storage refuses to forget them', async () => {
+    entries.set(SHARE_KEY, JSON.stringify({ personId: marie.id, tripId: mockTrip.id }));
+    render(<GuestIdentitySelector />, { withProviders: false });
+    storageThrows = true;
+
+    await choose('settings.guestIdentityNone');
+
+    expect(mockNotifyError).toHaveBeenCalledWith('sharing.identityStorageFailed');
+    expect(mockNotifySuccess).not.toHaveBeenCalled();
+    expect(mockSetMyPersonId).not.toHaveBeenCalled();
+    expect(screen.getByText('settings.guestIdentityCurrent')).toBeInTheDocument();
+  });
+
+  it('reports a failure to clear the explicit answer', async () => {
+    const failure = new Error('Dexie closed');
+    mockSetMyPersonId.mockRejectedValueOnce(failure);
+    entries.set(SHARE_KEY, JSON.stringify({ personId: marie.id, tripId: mockTrip.id }));
+    render(<GuestIdentitySelector />, { withProviders: false });
+
+    await choose('settings.guestIdentityNone');
+
+    await vi.waitFor(() => {
+      expect(mockReportError).toHaveBeenCalledWith(failure, {
+        source: 'GuestIdentitySelector.clear',
+      });
+    });
+  });
+
+  it('reports a failure to save the explicit answer, and claims nothing', async () => {
+    const failure = new Error('Dexie closed');
+    mockSetMyPersonId.mockRejectedValueOnce(failure);
+    render(<GuestIdentitySelector />, { withProviders: false });
+
+    await choose('Paul');
+
+    await vi.waitFor(() => {
+      expect(mockReportFailure).toHaveBeenCalledWith(
+        'GuestIdentitySelector.select',
+        failure,
+        'sharing.identityStorageFailed',
+      );
+    });
+    expect(mockNotifySuccess).not.toHaveBeenCalled();
+  });
+
+  it('reads the answer again when another trip is opened', () => {
+    const otherTrip: Trip = {
+      ...mockTrip,
+      id: 'trip-2' as Trip['id'],
+      shareId: 'share-2' as Trip['shareId'],
+    };
+    entries.set(SHARE_KEY, JSON.stringify({ personId: marie.id, tripId: mockTrip.id }));
+    entries.set(
+      'kikouchou_guest_share-2',
+      JSON.stringify({ personId: paul.id, tripId: otherTrip.id }),
+    );
+    const { rerender } = renderLive({ trip: mockTrip, persons: [marie, paul] });
+    expect(screen.getByRole('combobox', { name: 'settings.guestIdentity' })).toHaveTextContent(
+      'Marie',
+    );
+
+    rerender(live({ trip: otherTrip, persons: [marie, paul] }));
+
+    expect(screen.getByRole('combobox', { name: 'settings.guestIdentity' })).toHaveTextContent(
+      'Paul',
+    );
+  });
+
+  it('offers a guest added after the card first rendered', async () => {
+    const lea: Person = { ...marie, id: 'person-lea' as Person['id'], name: 'Léa' };
+    const { rerender } = renderLive({ trip: mockTrip, persons: [marie, paul] });
+
+    rerender(live({ trip: mockTrip, persons: [marie, paul, lea] }));
+    await choose('Léa');
+
+    expect(JSON.parse(entries.get(SHARE_KEY) ?? '{}')).toEqual({
+      personId: lea.id,
+      tripId: mockTrip.id,
+    });
+  });
+
+  it('opens the guest list of the trip open now', async () => {
+    const otherTrip: Trip = { ...mockTrip, id: 'trip-2' as Trip['id'] };
+    const { rerender } = renderLive({ trip: mockTrip, persons: [] });
+
+    rerender(live({ trip: otherTrip, persons: [] }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'settings.guestIdentityOpenGuests' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-2/persons');
   });
 });

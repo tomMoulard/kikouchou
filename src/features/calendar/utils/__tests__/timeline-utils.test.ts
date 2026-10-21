@@ -4,7 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildCalendarTimelineModel } from '../timeline-utils';
+import {
+  buildCalendarTimelineModel,
+  collectAssignmentDayKeys,
+  collectTransportDayKeys,
+} from '../timeline-utils';
 import type {
   HexColor,
   ISODateString,
@@ -957,5 +961,408 @@ describe('buildCalendarTimelineModel', () => {
     const row = model.rows[0]!;
     expect(row.items.length).toBe(0);
     expect(model.dayKeys).toHaveLength(5);
+  });
+});
+
+// ============================================================================
+// Which stay a leg is drawn in
+// ============================================================================
+
+describe('buildCalendarTimelineModel: legs inside stays', () => {
+  const room2: Room = { ...room1, id: 'r2' as RoomId, name: 'Room 2' };
+
+  /** A guest whose own dates cover the whole trip, so no stay is clipped. */
+  const guest: Person = {
+    ...p1,
+    stayStartDate: iso('2026-04-01'),
+    stayEndDate: iso('2026-04-11'),
+  };
+
+  function stay(id: string, roomId: string, startDate: string, endDate: string): RoomAssignment {
+    return {
+      id: id as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: roomId as RoomId,
+      personId: guest.id,
+      startDate: iso(startDate),
+      endDate: iso(endDate),
+    };
+  }
+
+  function leg(id: string, type: Transport['type'], day: number): Transport {
+    return {
+      id: id as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: guest.id,
+      type,
+      datetime: localInstant(2026, 4, day, 10),
+      location: id,
+      needsPickup: false,
+    };
+  }
+
+  function build(assignments: RoomAssignment[], transports: Transport[], rooms = [room1, room2]) {
+    return buildCalendarTimelineModel({
+      trip: createTrip({ endDate: iso('2026-04-10') }),
+      persons: [guest],
+      rooms,
+      assignments,
+      arrivals: transports.filter((t) => t.type === 'arrival'),
+      departures: transports.filter((t) => t.type === 'departure'),
+      unknownLabel: 'Unknown',
+    }).rows[0]!;
+  }
+
+  /** Which legs each stay carries, and which legs stand on their own. */
+  function layout(row: ReturnType<typeof build>) {
+    const stays: Record<string, string[]> = {};
+    const loose: string[] = [];
+    for (const item of row.items) {
+      if (item.kind === 'assignment') {
+        stays[item.id] = (item.timelineTransports ?? []).map((m) => m.transport.id);
+      } else {
+        loose.push(item.id);
+      }
+    }
+    return { stays, loose };
+  }
+
+  it('draws a departure on check-out day, and an arrival the day before, inside the stay', () => {
+    // A sleeps the 2nd to the 4th, B the 7th and the 8th.
+    const row = build(
+      [stay('A', 'r1', '2026-04-02', '2026-04-05'), stay('B', 'r2', '2026-04-07', '2026-04-09')],
+      [
+        leg('out-on-checkout', 'departure', 5),
+        leg('in-on-checkout', 'arrival', 5),
+        leg('in-day-before', 'arrival', 6),
+        leg('out-day-before', 'departure', 6),
+      ],
+    );
+
+    expect(layout(row)).toEqual({
+      stays: { A: ['out-on-checkout'], B: ['in-day-before'] },
+      loose: ['in-on-checkout', 'out-day-before'],
+    });
+  });
+
+  it('draws a leg on the last night of a stay inside it, and leaves a legless stay bare', () => {
+    const row = build(
+      [stay('A', 'r1', '2026-04-02', '2026-04-05'), stay('B', 'r2', '2026-04-07', '2026-04-09')],
+      [leg('in-last-night', 'arrival', 4)],
+    );
+
+    expect(layout(row).stays.A).toEqual(['in-last-night']);
+    const bare = row.items.find((item) => item.id === 'B');
+    expect(bare).toMatchObject({ kind: 'assignment' });
+    expect(bare && 'timelineTransports' in bare ? bare.timelineTransports : undefined).toBeUndefined();
+    expect(row.items.find((item) => item.id === 'A')).toMatchObject({ person: guest });
+  });
+
+  it('hands a leg two stays could carry to the one that starts first', () => {
+    const row = build(
+      [stay('B', 'r2', '2026-04-04', '2026-04-07'), stay('A', 'r1', '2026-04-02', '2026-04-04')],
+      [leg('out', 'departure', 4)],
+    );
+
+    expect(layout(row).stays).toEqual({ A: ['out'], B: [] });
+  });
+
+  it('orders the legs of a stay by time', () => {
+    const late = { ...leg('late', 'arrival', 3), datetime: localInstant(2026, 4, 3, 18) };
+    const early = { ...leg('early', 'arrival', 3), datetime: localInstant(2026, 4, 3, 8) };
+    const row = build(
+      [stay('A', 'r1', '2026-04-02', '2026-04-05'), stay('B', 'r2', '2026-04-07', '2026-04-09')],
+      [late, early],
+    );
+
+    expect(layout(row).stays.A).toEqual(['early', 'late']);
+  });
+
+  it('joins same-room stays given out of order into one bar, named in order', () => {
+    const row = build(
+      [
+        stay('second', 'r1', '2026-04-05', '2026-04-07'),
+        stay('first', 'r1', '2026-04-02', '2026-04-05'),
+        stay('other', 'r2', '2026-04-08', '2026-04-10'),
+      ],
+      [],
+    );
+
+    const bar = row.items.find((item) => item.kind === 'assignment' && item.id.includes('+'));
+    expect(bar).toMatchObject({ id: 'first+second', startIndex: 1, endIndex: 5 });
+  });
+});
+
+describe('collectAssignmentDayKeys and collectTransportDayKeys', () => {
+  function nights(id: string, startDate: string, endDate: string): RoomAssignment {
+    return {
+      id: id as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r1' as RoomId,
+      personId: 'p1' as PersonId,
+      startDate: iso(startDate),
+      endDate: iso(endDate),
+    };
+  }
+
+  function travel(id: string, datetime: Transport['datetime']): Transport {
+    return {
+      id: id as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type: 'arrival',
+      datetime,
+      location: '',
+      needsPickup: false,
+    };
+  }
+
+  it('names the first and the last night of each stay, and skips what it cannot draw', () => {
+    const keys = collectAssignmentDayKeys([
+      nights('a', '2026-04-02', '2026-04-05'),
+      nights('zero', '2026-04-06', '2026-04-06'),
+      nights('bad', 'nope', '2026-04-06'),
+      nights('bad-end', '2026-04-06', 'nope'),
+    ]);
+
+    expect(keys).toEqual(['2026-04-02', '2026-04-04']);
+  });
+
+  it('names the day of each leg it can read', () => {
+    const keys = collectTransportDayKeys([
+      travel('t', localInstant(2026, 4, 3, 10)),
+      travel('bad', 'nope' as Transport['datetime']),
+    ]);
+
+    expect(keys).toEqual(['2026-04-03']);
+  });
+
+  it('keeps a one-night stay', () => {
+    expect(collectAssignmentDayKeys([nights('one', '2026-04-02', '2026-04-03')])).toEqual([
+      '2026-04-02',
+      '2026-04-02',
+    ]);
+  });
+});
+
+// ============================================================================
+// Stay bars, check-out and the dashed stay window
+// ============================================================================
+
+describe('buildCalendarTimelineModel: bars and the stay window', () => {
+  const room2: Room = { ...room1, id: 'r2' as RoomId, name: 'Room 2' };
+
+  function stayFor(
+    personId: string,
+    id: string,
+    roomId: string,
+    startDate: string,
+    endDate: string,
+  ): RoomAssignment {
+    return {
+      id: id as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: roomId as RoomId,
+      personId: personId as PersonId,
+      startDate: iso(startDate),
+      endDate: iso(endDate),
+    };
+  }
+
+  function rowFor(person: Person, assignments: RoomAssignment[], trip = createTrip()) {
+    return buildCalendarTimelineModel({
+      trip,
+      persons: [person],
+      rooms: [room1, room2],
+      assignments,
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    }).rows[0]!;
+  }
+
+  /** The bars of a row as [id, start column, end column]. */
+  function bars(row: ReturnType<typeof rowFor>): [string, number, number][] {
+    return row.items
+      .filter((item) => item.kind === 'assignment')
+      .map((item) => [item.id, item.startIndex, item.endIndex]);
+  }
+
+  it('adds no leg list to a stay when the guest travels nowhere', () => {
+    const row = rowFor(p1, [stayFor('p1', 'a', 'r1', '2026-04-02', '2026-04-04')]);
+
+    expect(Object.prototype.hasOwnProperty.call(row.items[0], 'timelineTransports')).toBe(false);
+  });
+
+  it('draws nothing for a stay whose first night cannot be read', () => {
+    const row = rowFor(p1, [stayFor('p1', 'a', 'r1', 'nope', '2026-04-04')]);
+
+    expect(row.items).toEqual([]);
+  });
+
+  it('hatches nothing for a check-out date that cannot be read', () => {
+    const odd = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('nope') };
+
+    expect(rowFor(odd, []).checkoutDayIndex).toBeUndefined();
+  });
+
+  it('drops a leg whose time cannot be read', () => {
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1],
+      rooms: [],
+      assignments: [],
+      arrivals: [
+        {
+          id: 'unreadable' as Transport['id'],
+          tripId: 'trip-1' as TripId,
+          personId: p1.id,
+          type: 'arrival',
+          datetime: 'not a time' as Transport['datetime'],
+          location: 'Station',
+          needsPickup: false,
+        },
+      ],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    expect(model.rows[0]!.items).toEqual([]);
+  });
+
+  it('names a bar after its room', () => {
+    const row = rowFor(p1, [stayFor('p1', 'a', 'r2', '2026-04-02', '2026-04-04')]);
+
+    expect(row.items[0]).toMatchObject({ kind: 'assignment', label: 'Room 2' });
+  });
+
+  it('draws nothing for a stay whose check-out cannot be read', () => {
+    const row = rowFor(p1, [stayFor('p1', 'a', 'r1', '2026-04-02', 'nope')]);
+
+    expect(row.items).toEqual([]);
+  });
+
+  it('keeps each of two stays its own length when the guest gave dates', () => {
+    const dated = { ...p1, stayStartDate: iso('2026-04-01'), stayEndDate: iso('2026-04-06') };
+    const row = rowFor(dated, [
+      stayFor('p1', 'a', 'r1', '2026-04-02', '2026-04-03'),
+      stayFor('p1', 'b', 'r2', '2026-04-04', '2026-04-05'),
+    ]);
+
+    expect(bars(row)).toEqual([
+      ['a', 1, 1],
+      ['b', 3, 3],
+    ]);
+  });
+
+  it.each([
+    ['no dates of their own', {}],
+    ['only a check-out date', { stayEndDate: iso('2026-04-06') }],
+    ['only a check-in date', { stayStartDate: iso('2026-04-01') }],
+  ])('does not stretch a single stay for a guest with %s', (_, dates) => {
+    const row = rowFor({ ...p1, ...dates }, [stayFor('p1', 'a', 'r1', '2026-04-02', '2026-04-04')]);
+
+    expect(bars(row)).toEqual([['a', 1, 2]]);
+  });
+
+  it('drops the dashed window once two stays cover every night of it', () => {
+    // The guest is there the 2nd to the 4th; one night in each room.
+    const dated = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('2026-04-05') };
+    const row = rowFor(dated, [
+      stayFor('p1', 'a', 'r1', '2026-04-02', '2026-04-03'),
+      stayFor('p1', 'b', 'r2', '2026-04-03', '2026-04-05'),
+    ]);
+
+    expect(row.staySpan).toBeUndefined();
+  });
+
+  it('keeps the dashed window over a night no stay covers', () => {
+    const dated = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('2026-04-06') };
+    const row = rowFor(dated, [
+      stayFor('p1', 'a', 'r1', '2026-04-02', '2026-04-03'),
+      stayFor('p1', 'b', 'r2', '2026-04-04', '2026-04-06'),
+    ]);
+
+    expect(row.staySpan).toEqual({ startIndex: 1, endIndex: 4 });
+  });
+
+  it('keeps the dashed window when only the last night is uncovered', () => {
+    const dated = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('2026-04-06') };
+    const row = rowFor(dated, [
+      stayFor('p1', 'a', 'r1', '2026-04-02', '2026-04-04'),
+      stayFor('p1', 'b', 'r2', '2026-04-04', '2026-04-05'),
+    ]);
+
+    expect(row.staySpan).toEqual({ startIndex: 1, endIndex: 4 });
+  });
+
+  it('hatches the only column of a one-day trip', () => {
+    const row = rowFor(p1, [], createTrip({ endDate: iso('2026-04-01') }));
+
+    expect(row.checkoutDayIndex).toBe(0);
+  });
+
+  it('hatches the last column for a check-out past the end of the axis', () => {
+    const late = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('2026-04-20') };
+
+    expect(rowFor(late, []).checkoutDayIndex).toBe(4);
+  });
+
+  it('hatches nothing for a check-out before the axis begins', () => {
+    const early = { ...p1, stayStartDate: iso('2026-03-20'), stayEndDate: iso('2026-03-25') };
+
+    expect(rowFor(early, []).checkoutDayIndex).toBeUndefined();
+  });
+
+  it('keeps another guest’s travel off the row', () => {
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1, p2],
+      rooms: [room1],
+      assignments: [],
+      arrivals: [
+        {
+          id: 'sam-in' as Transport['id'],
+          tripId: 'trip-1' as TripId,
+          personId: p2.id,
+          type: 'arrival',
+          datetime: localInstant(2026, 4, 2, 10),
+          location: 'Station',
+          needsPickup: false,
+        },
+      ],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    expect(model.rows[0]!.items).toEqual([]);
+    expect(model.rows[1]!.items.map((item) => item.id)).toEqual(['sam-in']);
+  });
+
+  it('lists the days of the axis, and keys only the columns that are one day', () => {
+    const full = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [],
+      rooms: [],
+      assignments: [],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+    expect(full.tripDays[0]).toEqual(new Date(2026, 3, 1));
+    expect(full.tripDays).toHaveLength(5);
+
+    const hour = full.columns[0]!;
+    const partial = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [],
+      rooms: [],
+      assignments: [],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+      columns: [hour, { ...hour, key: 'hour', dayKey: undefined }],
+    });
+    expect(partial.dayKeys).toEqual(['2026-04-01']);
   });
 });

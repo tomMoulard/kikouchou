@@ -66,6 +66,13 @@ export interface NavItem {
   readonly activeIcon?: SolidIcon;
   /** Whether this route requires a trip (trip-scoped) */
   readonly requiresTrip: boolean;
+  /**
+   * The exact paths this entry is the current page on, lower case and with no
+   * trailing slash. Without it an entry is current on its own path and every
+   * page below it, which is wrong for the trip list: each trip's pages live
+   * below `/trips` without being the list.
+   */
+  readonly currentOn?: readonly string[];
 }
 
 /**

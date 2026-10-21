@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { render, screen, waitFor, within } from '@/test/utils';
 import { RoomCard } from '../RoomCard';
 import type { Person, Room } from '@/types';
 
@@ -654,5 +654,267 @@ describe('RoomCard', () => {
         name.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
+  });
+});
+
+// ============================================================================
+// What the card draws for each state, and the handlers of the latest render
+// ============================================================================
+
+describe('RoomCard states', () => {
+  type CardProps = Parameters<typeof RoomCard>[0];
+
+  function cardProps(overrides: Partial<CardProps> = {}): CardProps {
+    return {
+      room: mockRoom,
+      occupants: [],
+      peakOccupancy: 1,
+      availableSpots: 3,
+      isFull: false,
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  function cardOf(): HTMLElement {
+    return screen.getByText('Main Bedroom').closest('[data-slot="card"]') as HTMLElement;
+  }
+
+  function bar(): HTMLElement {
+    return screen.getByRole('progressbar').firstElementChild as HTMLElement;
+  }
+
+  it('fills the bar by the share of beds taken, in the colour of progress', () => {
+    render(<RoomCard {...cardProps()} />, { withProviders: false });
+
+    expect(bar()).toHaveStyle({ width: '25%' });
+    expect(bar()).toHaveClass('h-full', 'rounded-full', 'bg-primary');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', 'rooms.spotsTaken');
+    expect(cardOf()).toHaveClass('relative', 'transition-all');
+    expect(cardOf()).not.toHaveClass('border-success/50');
+    expect(cardOf()).not.toHaveClass('border-destructive/50');
+    expect(cardOf()).not.toHaveClass('opacity-50');
+  });
+
+  it('turns the bar green, the edge green and says complete once every bed is taken', () => {
+    render(
+      <RoomCard {...cardProps({ peakOccupancy: 4, availableSpots: 0, isFull: true })} />,
+      { withProviders: false },
+    );
+
+    expect(bar()).toHaveStyle({ width: '100%' });
+    expect(bar()).toHaveClass('bg-success');
+    expect(cardOf()).toHaveClass('border-success/50');
+    expect(screen.getByText('rooms.complete')).toHaveClass('text-xs', 'bg-success-surface');
+  });
+
+  it('caps the bar and turns it red when more people than beds sleep there', () => {
+    render(
+      <RoomCard
+        {...cardProps({ peakOccupancy: 6, availableSpots: 0, isFull: true, isOverCapacity: true })}
+      />,
+      { withProviders: false },
+    );
+
+    expect(bar()).toHaveStyle({ width: '100%' });
+    expect(bar()).toHaveClass('bg-destructive');
+    expect(cardOf()).toHaveClass('border-destructive/50');
+    expect(cardOf()).not.toHaveClass('border-success/50');
+    expect(screen.getByText('rooms.overCapacity')).toHaveClass('text-xs', 'bg-destructive-surface');
+  });
+
+  it('draws an empty bar for a room with no beds', () => {
+    render(
+      <RoomCard
+        {...cardProps({ room: { ...mockRoom, capacity: 0 }, peakOccupancy: 0, availableSpots: 0 })}
+      />,
+      { withProviders: false },
+    );
+
+    expect(bar()).toHaveStyle({ width: '0%' });
+  });
+
+  it('says how many spots are open in green', () => {
+    render(<RoomCard {...cardProps()} />, { withProviders: false });
+
+    expect(screen.getByText('rooms.spotsOpen')).toHaveClass('text-xs', 'mt-1', 'text-success-on-surface');
+  });
+
+  it('draws no occupants row and no description when there are none', () => {
+    const { container } = render(
+      <RoomCard {...cardProps({ room: { ...mockRoom, description: undefined } })} />,
+      { withProviders: false },
+    );
+
+    expect(container.querySelector('.flex-wrap')).toBeNull();
+    expect(container.querySelector('[data-slot="card-description"]')).toBeNull();
+  });
+
+  it('names the double click in the room name’s tooltip', () => {
+    render(<RoomCard {...cardProps()} />, { withProviders: false });
+
+    expect(screen.getByText('Main Bedroom')).toHaveAttribute(
+      'title',
+      'Main Bedroom · rooms.doubleClickToEdit',
+    );
+  });
+
+  it('makes the whole card a button while it can be clicked', () => {
+    render(<RoomCard {...cardProps({ onClick: vi.fn() })} />, { withProviders: false });
+
+    const overlay = screen.getByRole('button', { name: /Main Bedroom/ });
+    expect(overlay).toHaveAttribute('tabindex', '0');
+    expect(overlay).not.toHaveAttribute('aria-disabled');
+    expect(overlay).not.toHaveAttribute('aria-expanded');
+    expect(overlay).toHaveClass('absolute', 'inset-0', 'focus-visible:ring-2');
+    expect(overlay).not.toHaveClass('cursor-not-allowed');
+    expect(cardOf()).toHaveClass('cursor-pointer', 'hover:shadow-md');
+  });
+
+  it('takes the card out of the tab order, greyed, while it is disabled', () => {
+    render(<RoomCard {...cardProps({ onClick: vi.fn(), isDisabled: true })} />, {
+      withProviders: false,
+    });
+
+    const overlay = screen.getByRole('button', { name: /Main Bedroom/ });
+    expect(overlay).toHaveAttribute('tabindex', '-1');
+    expect(overlay).toHaveAttribute('aria-disabled', 'true');
+    expect(overlay).toHaveClass('cursor-not-allowed');
+    expect(cardOf()).toHaveClass('opacity-50', 'cursor-not-allowed');
+    expect(cardOf()).not.toHaveClass('cursor-pointer');
+  });
+
+  it('starts folded, and turns its chevron when unfolded', () => {
+    const { rerender, container } = render(
+      <RoomCard {...cardProps({ onClick: vi.fn(), expandedContent: <p>stays</p> })} />,
+      { withProviders: false },
+    );
+
+    expect(screen.queryByText('stays')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Main Bedroom/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    const chevron = container.querySelector('.lucide-chevron-down');
+    expect(chevron).toHaveClass('size-4', 'transition-transform');
+    expect(chevron).not.toHaveClass('rotate-180');
+
+    rerender(
+      <RoomCard
+        {...cardProps({ onClick: vi.fn(), expandedContent: <p>stays</p>, isExpanded: true })}
+      />,
+    );
+    expect(container.querySelector('.lucide-chevron-down')).toHaveClass('rotate-180');
+  });
+
+  it('keeps clicks and keys on its menu and its claim button away from the card', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn();
+    render(
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- a stand-in for the page around the card
+      <div onKeyDown={onKeyDown}>
+        <RoomCard {...cardProps({ onClick, onClaim: vi.fn() })} />
+      </div>,
+      { withProviders: false },
+    );
+
+    await user.click(screen.getByRole('button', { name: 'rooms.assignGuest' }));
+    await user.click(screen.getByRole('button', { name: 'common.openMenu' }));
+    expect(onClick).not.toHaveBeenCalled();
+    onKeyDown.mockClear();
+    await user.keyboard('{Escape}');
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
+  it('acts on the props of the latest render', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const first = { onClick: vi.fn(), onEdit: vi.fn(), onDuplicate: vi.fn(), onDelete: vi.fn() };
+    const second = {
+      onClick: vi.fn(),
+      onEdit: vi.fn(),
+      onDuplicate: vi.fn(),
+      onDelete: vi.fn().mockResolvedValue(undefined),
+    };
+    const renamed = { ...mockRoom, name: 'Renamed' };
+    const { rerender } = render(<RoomCard {...cardProps({ ...first, isDisabled: true })} />, {
+      withProviders: false,
+    });
+    rerender(<RoomCard {...cardProps({ ...second, room: renamed })} />);
+
+    await user.click(screen.getByRole('button', { name: /Renamed/ }));
+    await user.dblClick(screen.getByText('Renamed'));
+    await user.click(screen.getByRole('button', { name: 'common.openMenu' }));
+    await user.click(await screen.findByRole('menuitem', { name: /rooms.duplicate/ }));
+    await user.click(screen.getByRole('button', { name: 'common.openMenu' }));
+    await user.click(await screen.findByRole('menuitem', { name: /common.delete/ }));
+    const prompt = await screen.findByRole('alertdialog');
+    expect(prompt).toHaveTextContent('confirm.deleteRoomDescription');
+    await user.click(within(prompt).getByRole('button', { name: 'common.delete' }));
+
+    expect(second.onClick).toHaveBeenCalledWith(renamed);
+    expect(second.onEdit).toHaveBeenCalledWith(renamed);
+    expect(second.onDuplicate).toHaveBeenCalledWith(renamed);
+    await waitFor(() => {
+      expect(second.onDelete).toHaveBeenCalledWith(renamed);
+    });
+    for (const handler of Object.values(first)) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+  });
+
+  it('stops answering a click once it is disabled', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const { rerender } = render(<RoomCard {...cardProps({ onClick })} />, {
+      withProviders: false,
+    });
+    rerender(<RoomCard {...cardProps({ onClick, isDisabled: true })} />);
+
+    await user.click(screen.getByText('Main Bedroom'));
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('closes the delete prompt when the reader backs out', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(<RoomCard {...cardProps({ onDelete })} />, { withProviders: false });
+
+    await user.click(screen.getByRole('button', { name: 'common.openMenu' }));
+    await user.click(await screen.findByRole('menuitem', { name: /common.delete/ }));
+    const prompt = await screen.findByRole('alertdialog');
+    await user.click(within(prompt).getByRole('button', { name: 'common.cancel' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+});
+
+describe('RoomCard menu after a re-render', () => {
+  it('edits the room of the latest render from the menu', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const first = vi.fn();
+    const second = vi.fn();
+    const renamed = { ...mockRoom, name: 'Renamed' };
+    const props = { occupants: [], peakOccupancy: 0, availableSpots: 4, isFull: false, onDelete: vi.fn() };
+    const { rerender } = render(<RoomCard room={mockRoom} onEdit={first} {...props} />, {
+      withProviders: false,
+    });
+    rerender(<RoomCard room={renamed} onEdit={second} {...props} />);
+
+    await user.click(screen.getByRole('button', { name: 'common.openMenu' }));
+    await user.click(await screen.findByRole('menuitem', { name: /common.edit/ }));
+
+    expect(second).toHaveBeenCalledWith(renamed);
+    expect(first).not.toHaveBeenCalled();
   });
 });

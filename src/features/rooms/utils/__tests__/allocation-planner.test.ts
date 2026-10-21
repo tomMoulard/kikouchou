@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { tripDay } from '@/features/rooms/__tests__/fixture-days';
 import {
   planRoomAllocation,
   type GuestNeedingRoom,
@@ -308,5 +309,402 @@ describe('planRoomAllocation', () => {
     });
 
     expect(stays.map((stay) => stay.personId)).toEqual(['alice', 'bob']);
+  });
+});
+
+describe('planRoomAllocation, choosing between rooms that all fit', () => {
+  function place(
+    guests: readonly GuestNeedingRoom[],
+    rooms: readonly Room[],
+    options: {
+      readonly assignments?: readonly RoomAssignment[];
+      readonly persons?: readonly Person[];
+      readonly partyOf?: ReadonlyMap<PersonId, string>;
+    } = {},
+  ): readonly SuggestedStay[] {
+    const persons = options.persons ?? guests.map((entry) => entry.person);
+    return planRoomAllocation({
+      guests,
+      rooms,
+      assignments: options.assignments ?? [],
+      headcountOf: createHeadcountResolver(persons),
+      partyOf: options.partyOf ?? soloParties(persons),
+    });
+  }
+
+  it('opens an empty room before squeezing into a shared one', () => {
+    const alice = makePerson('alice');
+    const bob = makePerson('bob');
+
+    const stays = place(
+      [guest(bob, nights(tripDay(1)))],
+      [makeRoom('shared', 2, 0), makeRoom('empty', 3, 1)],
+      {
+        persons: [alice, bob],
+        assignments: [makeAssignment('a1', 'alice', 'shared', tripDay(1), tripDay(2))],
+      },
+    );
+
+    expect(roomOf(stays, 'bob')).toBe('empty');
+  });
+
+  it('only counts the nights asked for when deciding a room is empty', () => {
+    const alice = makePerson('alice');
+    const bob = makePerson('bob');
+
+    // Alice sleeps in the single on other nights, so for Bob's night it is
+    // as empty as the dorm, and the tighter fit wins.
+    const stays = place(
+      [guest(bob, nights(tripDay(3)))],
+      [makeRoom('dorm', 6, 0), makeRoom('single', 1, 1)],
+      {
+        persons: [alice, bob],
+        assignments: [makeAssignment('a1', 'alice', 'single', tripDay(1), tripDay(3))],
+      },
+    );
+
+    expect(roomOf(stays, 'bob')).toBe('single');
+  });
+
+  it('prefers the tighter of two empty rooms, whatever order they come in', () => {
+    const alice = makePerson('alice');
+
+    for (const rooms of [
+      [makeRoom('triple', 3, 0), makeRoom('single', 1, 1)],
+      [makeRoom('single', 1, 1), makeRoom('triple', 3, 0)],
+    ]) {
+      expect(roomOf(place([guest(alice, nights(tripDay(1)))], rooms), 'alice')).toBe('single');
+    }
+  });
+
+  it('breaks a tie between identical rooms by their order', () => {
+    const alice = makePerson('alice');
+
+    for (const rooms of [
+      [makeRoom('second', 2, 1), makeRoom('first', 2, 0)],
+      [makeRoom('first', 2, 0), makeRoom('second', 2, 1)],
+    ]) {
+      expect(roomOf(place([guest(alice, nights(tripDay(1)))], rooms), 'alice')).toBe('first');
+    }
+  });
+
+  it('draws a party member to the party room over an empty one listed first', () => {
+    const alice = makePerson('alice');
+    const bob = makePerson('bob');
+    const party = new Map<PersonId, string>([
+      [alice.id, 'party'],
+      [bob.id, 'party'],
+    ]);
+
+    const stays = place(
+      [guest(bob, nights(tripDay(1)))],
+      [makeRoom('empty', 2, 0), makeRoom('with-alice', 2, 1)],
+      {
+        persons: [alice, bob],
+        partyOf: party,
+        assignments: [makeAssignment('a1', 'alice', 'with-alice', tripDay(1), tripDay(2))],
+      },
+    );
+
+    expect(roomOf(stays, 'bob')).toBe('with-alice');
+  });
+
+  it('remembers every room the party already sleeps in', () => {
+    const alice = makePerson('alice');
+    const bob = makePerson('bob');
+    const carol = makePerson('carol');
+    const party = new Map<PersonId, string>([
+      [alice.id, 'party'],
+      [bob.id, 'party'],
+      [carol.id, 'party'],
+    ]);
+
+    // Alice is in the double and Bob in the quad; both are the party's, and
+    // the double is the tighter fit for Carol.
+    const stays = place(
+      [guest(carol, nights(tripDay(1)))],
+      [makeRoom('double', 2, 0), makeRoom('quad', 4, 1), makeRoom('empty', 1, 2)],
+      {
+        persons: [alice, bob, carol],
+        partyOf: party,
+        assignments: [
+          makeAssignment('a1', 'alice', 'double', tripDay(1), tripDay(2)),
+          makeAssignment('a2', 'bob', 'quad', tripDay(1), tripDay(2)),
+        ],
+      },
+    );
+
+    expect(roomOf(stays, 'carol')).toBe('double');
+  });
+
+  it.each([
+    ['a party that already has a room', true],
+    ['a party with no room yet', false],
+  ])('keeps the members of %s together once one of them is placed', (_name, hasRoom) => {
+    const dan = makePerson('dan');
+    const [ann, ben, cat] = [makePerson('ann'), makePerson('ben'), makePerson('cat')];
+    const members = hasRoom ? [dan, ann, ben, cat] : [ann, ben, cat];
+    const party = new Map<PersonId, string>(members.map((member) => [member.id, 'party']));
+
+    // Three people, two doubles: no room takes all three, so they are placed
+    // one by one. Ben must follow Ann into her room rather than the empty one.
+    const stays = place(
+      [
+        guest(ann, nights(tripDay(1))),
+        guest(ben, nights(tripDay(1))),
+        guest(cat, nights(tripDay(1))),
+      ],
+      [
+        ...(hasRoom ? [makeRoom('full', 1, 0)] : []),
+        makeRoom('double-a', 2, 1),
+        makeRoom('double-b', 2, 2),
+      ],
+      {
+        persons: members,
+        partyOf: party,
+        assignments: hasRoom
+          ? [makeAssignment('a0', 'dan', 'full', tripDay(1), tripDay(2))]
+          : [],
+      },
+    );
+
+    expect(roomOf(stays, 'ann')).toBe('double-a');
+    expect(roomOf(stays, 'ben')).toBe('double-a');
+    expect(roomOf(stays, 'cat')).toBe('double-b');
+  });
+
+  it('counts a party placed together against the next party', () => {
+    const [ann, ben, cat] = [makePerson('ann'), makePerson('ben'), makePerson('cat')];
+    const partyOf = new Map<PersonId, string>([
+      [ann.id, 'pair'],
+      [ben.id, 'pair'],
+      [cat.id, 'cat'],
+    ]);
+
+    const stays = place(
+      [
+        guest(ann, nights(tripDay(1))),
+        guest(ben, nights(tripDay(1))),
+        guest(cat, nights(tripDay(1))),
+      ],
+      [makeRoom('double', 2, 0), makeRoom('other', 2, 1)],
+      { partyOf },
+    );
+
+    expect(roomOf(stays, 'ann')).toBe('double');
+    expect(roomOf(stays, 'ben')).toBe('double');
+    expect(roomOf(stays, 'cat')).toBe('other');
+  });
+
+  it('lets the longest stay of a split party pick its room first', () => {
+    const [ann, ben] = [makePerson('ann'), makePerson('ben')];
+    const party = new Map<PersonId, string>([
+      [ann.id, 'party'],
+      [ben.id, 'party'],
+    ]);
+
+    // Ann's short stay starts first, but Ben's long one is placed first and so
+    // gets the first room.
+    const stays = place(
+      [
+        guest(ann, nights(tripDay(1), tripDay(2))),
+        guest(ben, nights(tripDay(2), tripDay(3), tripDay(4), tripDay(5))),
+      ],
+      [makeRoom('first', 1, 0), makeRoom('second', 1, 1)],
+      { partyOf: party },
+    );
+
+    expect(roomOf(stays, 'ben')).toBe('first');
+    expect(roomOf(stays, 'ann')).toBe('second');
+  });
+});
+
+describe('planRoomAllocation, the order of the proposal', () => {
+  function order(
+    guests: readonly GuestNeedingRoom[],
+    partyOf: ReadonlyMap<PersonId, string>,
+  ): string[] {
+    const persons = guests.map((entry) => entry.person);
+    return planRoomAllocation({
+      guests,
+      rooms: [makeRoom('dorm', 20, 0)],
+      assignments: [],
+      headcountOf: createHeadcountResolver(persons),
+      partyOf,
+    }).map((stay) => stay.personId);
+  }
+
+  it('lists a party by date, then by guest', () => {
+    const [ann, ben, cat] = [makePerson('ann'), makePerson('ben'), makePerson('cat')];
+    const party = new Map<PersonId, string>([
+      [ann.id, 'party'],
+      [ben.id, 'party'],
+      [cat.id, 'party'],
+    ]);
+
+    expect(
+      order(
+        [
+          guest(cat, nights(tripDay(1))),
+          guest(ben, nights(tripDay(1))),
+          guest(ann, nights(tripDay(2))),
+        ],
+        party,
+      ),
+    ).toEqual(['ben', 'cat', 'ann']);
+  });
+
+  it('places the party with the most nights first', () => {
+    const [ann, ben] = [makePerson('ann'), makePerson('ben')];
+
+    expect(
+      order(
+        [
+          guest(ann, nights(tripDay(1))),
+          guest(ben, nights(tripDay(1), tripDay(2), tripDay(3))),
+        ],
+        soloParties([ann, ben]),
+      ),
+    ).toEqual(['ben', 'ann']);
+  });
+
+  it('places the party with more stays first when the nights are equal', () => {
+    const [ann, ben, cat] = [makePerson('ann'), makePerson('ben'), makePerson('cat')];
+    const partyOf = new Map<PersonId, string>([
+      [ann.id, 'ann'],
+      [ben.id, 'pair'],
+      [cat.id, 'pair'],
+    ]);
+
+    expect(
+      order(
+        [
+          guest(ann, nights(tripDay(1), tripDay(2))),
+          guest(ben, nights(tripDay(1))),
+          guest(cat, nights(tripDay(1))),
+        ],
+        partyOf,
+      ),
+    ).toEqual(['ben', 'cat', 'ann']);
+  });
+
+  it('falls back on the party key when everything else is equal', () => {
+    const [ann, ben] = [makePerson('ann'), makePerson('ben')];
+
+    expect(
+      order(
+        [guest(ben, nights(tripDay(1))), guest(ann, nights(tripDay(1)))],
+        soloParties([ann, ben]),
+      ),
+    ).toEqual(['ann', 'ben']);
+  });
+});
+
+describe('planRoomAllocation, more of its choices', () => {
+  it('fills the fuller of two shared rooms first', () => {
+    const [ann, ben, cat, dan] = ['ann', 'ben', 'cat', 'dan'].map((id) => makePerson(id)) as [
+      Person,
+      Person,
+      Person,
+      Person,
+    ];
+
+    const stays = planRoomAllocation({
+      guests: [guest(dan, nights(tripDay(1)))],
+      rooms: [makeRoom('one-taken', 3, 0), makeRoom('two-taken', 3, 1)],
+      assignments: [
+        makeAssignment('a1', 'ann', 'one-taken', tripDay(1), tripDay(2)),
+        makeAssignment('a2', 'ben', 'two-taken', tripDay(1), tripDay(2)),
+        makeAssignment('a3', 'cat', 'two-taken', tripDay(1), tripDay(2)),
+      ],
+      headcountOf: createHeadcountResolver([ann, ben, cat, dan]),
+      partyOf: soloParties([ann, ben, cat, dan]),
+    });
+
+    expect(roomOf(stays, 'dan')).toBe('two-taken');
+  });
+
+  it('remembers a party room it learns of second', () => {
+    const alice = makePerson('alice');
+    const bob = makePerson('bob');
+    const carol = makePerson('carol');
+    const party = new Map<PersonId, string>([
+      [alice.id, 'party'],
+      [bob.id, 'party'],
+      [carol.id, 'party'],
+    ]);
+
+    const stays = planRoomAllocation({
+      guests: [guest(carol, nights(tripDay(1)))],
+      rooms: [makeRoom('quad', 4, 0), makeRoom('double', 2, 1), makeRoom('empty', 1, 2)],
+      assignments: [
+        makeAssignment('a1', 'alice', 'quad', tripDay(1), tripDay(2)),
+        makeAssignment('a2', 'bob', 'double', tripDay(1), tripDay(2)),
+      ],
+      headcountOf: createHeadcountResolver([alice, bob, carol]),
+      partyOf: party,
+    });
+
+    expect(roomOf(stays, 'carol')).toBe('double');
+  });
+
+  it('lists a party by date even when the later stay comes first', () => {
+    const [ann, ben] = [makePerson('ann'), makePerson('ben')];
+    const party = new Map<PersonId, string>([
+      [ann.id, 'party'],
+      [ben.id, 'party'],
+    ]);
+
+    const stays = planRoomAllocation({
+      guests: [guest(ann, nights(tripDay(2))), guest(ben, nights(tripDay(1)))],
+      rooms: [makeRoom('dorm', 20, 0)],
+      assignments: [],
+      headcountOf: createHeadcountResolver([ann, ben]),
+      partyOf: party,
+    });
+
+    expect(stays.map((stay) => stay.personId)).toEqual(['ben', 'ann']);
+  });
+
+  it('orders equal parties by key whatever order they come in', () => {
+    const [ann, ben] = [makePerson('ann'), makePerson('ben')];
+
+    const stays = planRoomAllocation({
+      guests: [guest(ann, nights(tripDay(1))), guest(ben, nights(tripDay(1)))],
+      rooms: [makeRoom('dorm', 20, 0)],
+      assignments: [],
+      headcountOf: createHeadcountResolver([ann, ben]),
+      partyOf: soloParties([ann, ben]),
+    });
+
+    expect(stays.map((stay) => stay.personId)).toEqual(['ann', 'ben']);
+  });
+});
+
+describe('planRoomAllocation, a party with a room already', () => {
+  it('still draws a later stay to the party’s first room once another member went elsewhere', () => {
+    // Xavier already sleeps in the attic on the first night, so it is full for
+    // Yann's two-person stay, which goes to the barn. Zoé needs the second
+    // night only, when the attic is free again: as the party's room it wins
+    // over the snug single, which would otherwise be the tighter fit.
+    const xavier = makePerson('xavier');
+    const yann = makePerson('yann', 2);
+    const zoe = makePerson('zoe');
+    const party = new Map<PersonId, string>([
+      [xavier.id, 'party'],
+      [yann.id, 'party'],
+      [zoe.id, 'party'],
+    ]);
+
+    const stays = planRoomAllocation({
+      guests: [guest(yann, nights(tripDay(1), tripDay(2))), guest(zoe, nights(tripDay(2)))],
+      rooms: [makeRoom('attic', 2, 0), makeRoom('barn', 2, 1), makeRoom('single', 1, 2)],
+      assignments: [makeAssignment('a1', 'xavier', 'attic', tripDay(1), tripDay(2))],
+      headcountOf: createHeadcountResolver([xavier, yann, zoe]),
+      partyOf: party,
+    });
+
+    expect(roomOf(stays, 'yann')).toBe('barn');
+    expect(roomOf(stays, 'zoe')).toBe('attic');
   });
 });

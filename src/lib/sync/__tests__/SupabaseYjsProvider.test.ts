@@ -77,6 +77,40 @@ class FakeServer {
   snapshotStateReads = 0;
   channelStatus: string | null = null;
 
+  /** Every read and write, described with its table, columns and filters. */
+  queries: string[] = [];
+  /** Set to fail the next N log page reads only. */
+  failLogReads = 0;
+  /** Set to fail the next N snapshot state reads only (not the marker). */
+  failStateReads = 0;
+  /** The snapshot row vanishes between the marker read and the state read. */
+  stateReadReturnsNull = false;
+  /** Replaces what the state read says the snapshot folds through. */
+  stateThroughIdOverride: unknown = undefined;
+  /** Replaces the answer of the floor query, which asks for the oldest row. */
+  floorOverride: { data: unknown; error: unknown } | null = null;
+  /** Hides every row from reads, while inserts still land. */
+  hideRows = false;
+  /** Called on each log page read, before it answers. */
+  onLogRead: (() => void) | null = null;
+  /** Set to make the next N publishes throw rather than answer. */
+  throwPublishes = 0;
+  rpcCalls = 0;
+  /** Channels opened, with their name and the arguments given. */
+  channelCalls: { name: string; args: unknown[] }[] = [];
+  /** `channel.on` registrations, as event and filter. */
+  onCalls: { event: string; filter: unknown }[] = [];
+  trackPayloads: unknown[] = [];
+  removeChannelCalls = 0;
+  /** Makes `presenceState()` throw. */
+  presenceThrows = false;
+  /** When false, `subscribe` reports nothing until the test says so. */
+  autoSubscribe = true;
+  /** Fails exactly the write with this number, counting every insert from 1. */
+  failNthWrite: number | null = null;
+  /** Holds log page reads open while set. */
+  readGate: Promise<void> | null = null;
+
   private realtimeHandler: RealtimeHandler | null = null;
   private presenceHandler: (() => void) | null = null;
   private subscribeCallback: ((status: string) => void) | null = null;
@@ -113,6 +147,11 @@ class FakeServer {
   /** Delivers a row over Realtime, as Postgres Changes would. */
   deliver(row: FakeRow): void {
     this.realtimeHandler?.({ new: { id: row.id, update: row.update } });
+  }
+
+  /** Delivers any payload at all, as a misbehaving channel might. */
+  deliverRaw(payload: unknown): void {
+    this.realtimeHandler?.(payload as { new: Record<string, unknown> });
   }
 
   /** Reports the channel as (re)subscribed. */
@@ -156,8 +195,11 @@ class FakeServer {
             // The provider reads `through_id` alone first, then the full state
             // only if the snapshot is ahead — the state can be megabytes.
             select: (columns: string) => ({
-              eq: () => ({
+              eq: (column: string, value: unknown) => ({
                 maybeSingle: async () => {
+                  this.queries.push(
+                    `${table}.select(${columns}).eq(${column}, ${String(value)}).maybeSingle()`,
+                  );
                   if (this.failReads > 0) {
                     this.failReads -= 1;
                     return { data: null, error: { message: 'snapshot boom' } };
@@ -173,7 +215,20 @@ class FakeServer {
                     };
                   }
                   this.snapshotStateReads += 1;
-                  return { data: this.snapshot, error: null };
+                  if (this.failStateReads > 0) {
+                    this.failStateReads -= 1;
+                    return { data: null, error: { message: 'state boom' } };
+                  }
+                  if (this.stateReadReturnsNull) {
+                    return { data: null, error: null };
+                  }
+                  return {
+                    data:
+                      this.stateThroughIdOverride === undefined
+                        ? this.snapshot
+                        : { ...this.snapshot, through_id: this.stateThroughIdOverride },
+                    error: null,
+                  };
                 },
               }),
             }),
@@ -182,20 +237,35 @@ class FakeServer {
 
         // trip_doc_updates
         const surviving = () =>
-          this.rows
-            .filter((row) => row.id > this.prunedBelow)
-            .sort((left, right) => left.id - right.id);
+          this.hideRows
+            ? []
+            : this.rows
+                .filter((row) => row.id > this.prunedBelow)
+                .sort((left, right) => left.id - right.id);
 
         return {
-          select: () => ({
-            eq: () => ({
-              gt: (_column: string, afterId: number) => ({
-                order: () => ({
+          select: (columns: string) => ({
+            eq: (column: string, value: unknown) => ({
+              gt: (gtColumn: string, afterId: number) => ({
+                order: (orderColumn: string, orderOptions: unknown) => ({
                   limit: async (count: number) => {
+                    this.queries.push(
+                      `${table}.select(${columns}).eq(${column}, ${String(value)})` +
+                        `.gt(${gtColumn}, ${afterId}).order(${orderColumn}, ` +
+                        `${JSON.stringify(orderOptions)}).limit(${count})`,
+                    );
                     this.readCalls += 1;
+                    this.onLogRead?.();
+                    if (this.readGate) {
+                      await this.readGate;
+                    }
                     if (this.failReads > 0) {
                       this.failReads -= 1;
                       return { data: null, error: { message: 'read boom' } };
+                    }
+                    if (this.failLogReads > 0) {
+                      this.failLogReads -= 1;
+                      return { data: null, error: { message: 'log boom' } };
                     }
                     const page = surviving()
                       .filter((row) => row.id > afterId)
@@ -208,21 +278,33 @@ class FakeServer {
               // No `gt`: the floor query, asking for the oldest surviving row.
               // Used to tell an unreadable snapshot the log can still cover from
               // one hiding rows that compaction pruned.
-              order: () => ({
+              order: (orderColumn: string, orderOptions: unknown) => ({
                 limit: async (count: number) => {
+                  this.queries.push(
+                    `${table}.select(${columns}).eq(${column}, ${String(value)})` +
+                      `.order(${orderColumn}, ${JSON.stringify(orderOptions)}).limit(${count})`,
+                  );
                   if (this.failReads > 0) {
                     this.failReads -= 1;
                     return { data: null, error: { message: 'floor boom' } };
+                  }
+                  if (this.floorOverride !== null) {
+                    return this.floorOverride;
                   }
                   return { data: surviving().slice(0, count), error: null };
                 },
               }),
             }),
           }),
-          insert: async (values: { update: string }) => {
+          insert: async (values: { trip_id: string; update: string }) => {
+            this.queries.push(`${table}.insert(trip_id=${values.trip_id})`);
             this.insertCalls += 1;
+            const number = this.insertCalls;
             if (this.writeGate) {
               await this.writeGate;
+            }
+            if (this.failNthWrite === number) {
+              return { error: { message: 'write boom' } };
             }
             if (this.failWrites > 0) {
               this.failWrites -= 1;
@@ -235,10 +317,12 @@ class FakeServer {
         };
       },
 
-      channel: (
-        _name: string,
-        options?: { config?: { presence?: { key?: string } } },
-      ) => {
+      channel: (...args: unknown[]) => {
+        const [name, options] = args as [
+          string,
+          { config?: { presence?: { key?: string } } } | undefined,
+        ];
+        this.channelCalls.push({ name, args });
         // Captured so a test can assert two tabs of one account collapse to a
         // single presence key rather than counting twice.
         this.presenceKey = options?.config?.presence?.key ?? null;
@@ -253,9 +337,10 @@ class FakeServer {
            */
           on: (
             event: string,
-            _filter: unknown,
+            filter: unknown,
             handler: RealtimeHandler | (() => void),
           ) => {
+            this.onCalls.push({ event, filter });
             if (event === 'presence') {
               this.presenceHandler = handler as () => void;
             } else {
@@ -268,10 +353,13 @@ class FakeServer {
               this.subscribeCallback = callback;
             }
             this.channelStatus = 'SUBSCRIBED';
-            callback?.('SUBSCRIBED');
+            if (this.autoSubscribe) {
+              callback?.('SUBSCRIBED');
+            }
             return channel;
           },
           track: async (payload: unknown) => {
+            this.trackPayloads.push(payload);
             // Realtime keys by the configured presence key, falling back to a
             // per-connection one.
             this.presence.set(this.presenceKey ?? 'anon-connection', payload);
@@ -283,12 +371,19 @@ class FakeServer {
             this.presenceHandler?.();
             return 'ok';
           },
-          presenceState: () => Object.fromEntries(this.presence),
+          presenceState: () => {
+            if (this.presenceThrows) {
+              throw new Error('presence boom');
+            }
+            return Object.fromEntries(this.presence);
+          },
         };
         return channel;
       },
 
-      removeChannel: async () => undefined,
+      removeChannel: async () => {
+        this.removeChannelCalls += 1;
+      },
 
       /**
        * `publish_trip_snapshot`, modelling the guards that matter to the client:
@@ -298,8 +393,13 @@ class FakeServer {
         name: string,
         args: { p_trip_id: string; p_state: string; p_through_id: number },
       ) => {
+        this.rpcCalls += 1;
         if (name !== 'publish_trip_snapshot') {
           return { data: null, error: { message: `no such rpc ${name}` } };
+        }
+        if (this.throwPublishes > 0) {
+          this.throwPublishes -= 1;
+          throw new Error('publish threw');
         }
         if (this.failPublishes > 0) {
           this.failPublishes -= 1;
@@ -1374,3 +1474,1354 @@ describe('coming back online', () => {
     expect(server.rows.length).toBeGreaterThan(0);
   });
 });
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+/**
+ * Lets IndexedDB finish while `setTimeout` is faked.
+ *
+ * fake-indexeddb schedules on `setImmediate`, which the fake timers below leave
+ * alone, so turning it is what lets a Dexie write complete between two timer
+ * advances.
+ */
+async function io(turns = 40): Promise<void> {
+  for (let index = 0; index < turns; index += 1) {
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+}
+
+/** Fakes the timers the provider schedules, leaving IndexedDB's own alone. */
+function fakeTimers(): void {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+}
+
+/** Advances fake time in small steps, letting IndexedDB run between them. */
+async function advance(ms: number, step = 50): Promise<void> {
+  for (let elapsed = 0; elapsed < ms; elapsed += step) {
+    await vi.advanceTimersByTimeAsync(Math.min(step, ms - elapsed));
+    await io(4);
+  }
+}
+
+function recordingProvider(server: FakeServer, doc: Y.Doc, userId?: string) {
+  const seen: SyncState[] = [];
+  const provider = track(
+    new SupabaseYjsProvider({
+      client: server.client as never,
+      doc,
+      tripId: TRIP_ID,
+      remoteTripId: REMOTE_TRIP_ID,
+      ...(userId === undefined ? {} : { userId }),
+      onStateChange: (next) => {
+        seen.push(next);
+      },
+    }),
+  );
+  return { provider, seen };
+}
+
+function decode(update: string): Uint8Array {
+  return Uint8Array.from(atob(update), (char) => char.charCodeAt(0));
+}
+
+describe('state, before and after start', () => {
+  it('reads as local before it starts', () => {
+    const provider = track(makeProvider(new FakeServer(), new Y.Doc()));
+
+    expect(provider.getState()).toEqual({ status: 'local', pendingCount: 0, onlineCount: null });
+  });
+
+  it('announces syncing first, and settles on synced when there is nothing to send', async () => {
+    const server = new FakeServer();
+    const { provider, seen } = recordingProvider(server, new Y.Doc());
+
+    await provider.start();
+    await settle();
+
+    expect(seen[0]?.status).toBe('syncing');
+    expect(provider.getState().status).toBe('synced');
+  });
+
+  it('records when it last read the log', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(1_700_000_000_000));
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState().lastSyncedAt).toBe(1_700_000_000_000);
+  });
+
+  it('records when a flush emptied the queue', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(1_700_000_000_000));
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    vi.setSystemTime(new Date(1_700_000_005_000));
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 0 && server.insertCalls > 0, 'the flush');
+    await settle();
+
+    expect(provider.getState().lastSyncedAt).toBe(1_700_000_005_000);
+  });
+});
+
+describe('presence keys', () => {
+  it('is a fixed function of the account and the trip', async () => {
+    const server = new FakeServer();
+    await track(makeProvider(server, new Y.Doc(), 'user-1')).start();
+
+    // FNV-1a of `user-1:<trip>`, pinned so a change in the hash is a decision.
+    expect(server.joinedPresenceKey).toBe('c24a1b91');
+  });
+
+  it('pads a short hash to eight characters', async () => {
+    const server = new FakeServer();
+    await track(makeProvider(server, new Y.Doc(), 'user-9')).start();
+
+    expect(server.joinedPresenceKey).toBe('0496be39');
+  });
+
+  it('differs between two accounts on one trip and one account on two trips', async () => {
+    const first = new FakeServer();
+    const second = new FakeServer();
+    const third = new FakeServer();
+    await track(makeProvider(first, new Y.Doc(), 'user-1')).start();
+    await track(makeProvider(second, new Y.Doc(), 'user-2')).start();
+    await track(
+      new SupabaseYjsProvider({
+        client: third.client as never,
+        doc: new Y.Doc(),
+        tripId: 'trip-local-3' as TripId,
+        remoteTripId: 'bbbbbbbb-0000-0000-0000-000000000002',
+        userId: 'user-1',
+      }),
+    ).start();
+
+    expect(second.joinedPresenceKey).not.toBe(first.joinedPresenceKey);
+    expect(third.joinedPresenceKey).not.toBe(first.joinedPresenceKey);
+  });
+
+  it('opens the channel with no presence key and no config when there is no account', async () => {
+    const server = new FakeServer();
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    expect(server.channelCalls).toEqual([{ name: `trip-doc:${REMOTE_TRIP_ID}`, args: [`trip-doc:${REMOTE_TRIP_ID}`] }]);
+    expect(server.joinedPresenceKey).toBeNull();
+  });
+});
+
+describe('the realtime channel', () => {
+  it('listens to inserts into this trip’s log, and to presence', async () => {
+    const server = new FakeServer();
+
+    await track(makeProvider(server, new Y.Doc(), 'user-1')).start();
+
+    expect(server.onCalls).toEqual([
+      {
+        event: 'postgres_changes',
+        filter: {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trip_doc_updates',
+          filter: `trip_id=eq.${REMOTE_TRIP_ID}`,
+        },
+      },
+      { event: 'presence', filter: { event: 'sync' } },
+    ]);
+    expect(server.trackPayloads).toEqual([{ joinedAt: expect.any(Number) }]);
+  });
+
+  it.each(['CLOSED', 'CHANNEL_ERROR', 'TIMED_OUT'])(
+    'reports the head count as unknown when the channel says %s',
+    async (status) => {
+      const server = new FakeServer();
+      const provider = track(makeProvider(server, new Y.Doc(), 'user-1'));
+      await provider.start();
+      await settle();
+      expect(provider.getState().onlineCount).toBe(1);
+
+      server.reportChannelStatus(status);
+
+      expect(provider.getState().onlineCount).toBeNull();
+    },
+  );
+
+  it('keeps the head count through a status that is not a failure', async () => {
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc(), 'user-1'));
+    await provider.start();
+    await settle();
+
+    server.reportChannelStatus('JOINING');
+
+    expect(provider.getState().onlineCount).toBe(1);
+  });
+
+  it('reads the head count as unknown when presence cannot be read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc(), 'user-1'));
+    await provider.start();
+    await settle();
+
+    server.presenceThrows = true;
+    server.addPresence('someone-else');
+
+    expect(provider.getState().onlineCount).toBeNull();
+    expect(warn).toHaveBeenCalledWith('[sync] could not read presence:', expect.any(Error));
+  });
+
+  it('pulls a debounced moment after it subscribes', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+    const before = server.readCalls;
+
+    server.reportSubscribed();
+    await advance(700);
+    expect(server.readCalls).toBe(before);
+    await advance(100);
+
+    expect(server.readCalls).toBe(before + 1);
+  });
+
+  it('pulls once for a burst of deliveries, after the last one', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await advance(800);
+    const before = server.readCalls;
+
+    server.deliver({ id: 900, update: 'not valid base64!!' });
+    await advance(400);
+    server.deliver({ id: 901, update: 'not valid base64!!' });
+    await advance(500);
+    // 900 ms after the first, 500 after the second: still waiting.
+    expect(server.readCalls).toBe(before);
+
+    await advance(300);
+    expect(server.readCalls).toBe(before + 1);
+  });
+
+  it('ignores a payload with no row on it, and still pulls', async () => {
+    fakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await advance(800);
+    const before = server.readCalls;
+
+    expect(() => server.deliverRaw({})).not.toThrow();
+    await advance(800);
+
+    expect(server.readCalls).toBe(before + 1);
+    expect(warn).not.toHaveBeenCalledWith('[sync] realtime payload did not apply:', expect.anything());
+  });
+
+  it('warns about a payload that decodes and does not apply', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+
+    server.deliver({ id: 900, update: encodeUpdate(new Uint8Array([255, 255, 255, 255])) });
+
+    expect(warn).toHaveBeenCalledWith('[sync] realtime payload did not apply:', expect.anything());
+  });
+
+  it('says nothing about an undecodable payload beyond dropping it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+
+    server.deliver({ id: 900, update: 'not valid base64!!' });
+
+    expect(warn).not.toHaveBeenCalledWith('[sync] realtime payload did not apply:', expect.anything());
+  });
+});
+
+describe('after destroy', () => {
+  it('queues nothing for an edit made after destroy', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    provider.destroy();
+    addGuest(doc, 'p1', 'After destroy');
+    await settle();
+
+    expect(await outbox.pendingCount(TRIP_ID)).toBe(0);
+  });
+
+  it('stops listening for the network coming back', async () => {
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const provider = track(makeProvider(new FakeServer(), new Y.Doc()));
+    await provider.start();
+
+    provider.destroy();
+
+    expect(remove).toHaveBeenCalledWith('online', expect.any(Function));
+  });
+
+  it('removes its channel once, and forgets the head count', async () => {
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc(), 'user-1'));
+    await provider.start();
+    await settle();
+    expect(provider.getState().onlineCount).toBe(1);
+
+    provider.destroy();
+    provider.destroy();
+
+    expect(server.removeChannelCalls).toBe(1);
+    expect(provider.getState().onlineCount).toBeNull();
+  });
+
+  it('applies nothing delivered after destroy', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    provider.destroy();
+
+    const remote = new Y.Doc();
+    addGuest(remote, 'p1', 'Late');
+    server.deliver(server.append(Y.encodeStateAsUpdate(remote)));
+
+    expect(guestNames(doc)).toEqual([]);
+  });
+
+  it('counts nobody once destroyed, whatever presence says', async () => {
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc(), 'user-1'));
+    await provider.start();
+    await settle();
+    provider.destroy();
+
+    server.addPresence('someone-else');
+
+    expect(provider.getState().onlineCount).toBeNull();
+  });
+
+  it('leaves no timer behind: a pending pull, a retry, or a hydration retry', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    // Empty, so a hydration retry is scheduled; a refused read, so a retry is.
+    server.failLogReads = 1;
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    await io();
+    server.deliver({ id: 900, update: 'not valid base64!!' });
+    expect(vi.getTimerCount()).toBeGreaterThanOrEqual(3);
+
+    provider.destroy();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('schedules nothing for a channel that comes back after destroy', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+    provider.destroy();
+
+    server.reportSubscribed();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('sends nothing queued by an edit made just before destroy', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    const before = server.insertCalls;
+
+    addGuest(doc, 'p1', 'Alice');
+    provider.destroy();
+    await settle();
+
+    expect(server.insertCalls).toBe(before);
+  });
+
+  it('stops sending the rest of the queue when destroyed mid-flush', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+
+    const release = server.gateWrites();
+    addGuest(doc, 'p1', 'Alice');
+    addGuest(doc, 'p2', 'Bob');
+    await waitUntil(() => server.insertCalls === 1, 'the first send to be in flight');
+    provider.destroy();
+    release();
+    await settle();
+
+    expect(server.insertCalls).toBe(1);
+  });
+
+  it('opens no channel and publishes no snapshot when destroyed during the first pull', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    for (let index = 0; index < 250; index += 1) {
+      addGuest(seed, `p${index}`, `Guest ${index}`);
+      server.append(Y.encodeStateAsUpdate(seed));
+    }
+    const provider = track(makeProvider(server, new Y.Doc()));
+    server.onLogRead = () => {
+      provider.destroy();
+    };
+
+    await provider.start();
+    await settle();
+
+    expect(server.channelCalls).toHaveLength(0);
+    expect(server.rpcCalls).toBe(0);
+  });
+
+  it('reads no further page once destroyed between pages', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    seed.on('update', (update: Uint8Array) => {
+      server.append(update);
+    });
+    for (let index = 0; index < 600; index += 1) {
+      addGuest(seed, `p${index}`, `Guest ${index}`);
+    }
+    const provider = track(makeProvider(server, new Y.Doc()));
+    server.onLogRead = () => {
+      provider.destroy();
+    };
+
+    await provider.start();
+
+    expect(server.readCalls).toBe(1);
+  });
+});
+
+describe('hydration retries', () => {
+  it('asks again on a bounded schedule while the document stays empty, then stops', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    // No subscribe callback, so its debounced pull does not land on the same tick.
+    server.autoSubscribe = false;
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    await io();
+    expect(server.readCalls).toBe(1);
+
+    await advance(700);
+    expect(server.readCalls).toBe(1);
+    await advance(100);
+    expect(server.readCalls).toBe(2);
+
+    // 1.5 s, 3 s, 6 s and 12 s after that, and then never again.
+    await advance(1_500 + 3_000 + 6_000 + 12_000 + 100);
+    expect(server.readCalls).toBe(6);
+    await advance(30_000, 1_000);
+    expect(server.readCalls).toBe(6);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not ask again for a document that already has content', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    server.autoSubscribe = false;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+    const before = server.readCalls;
+
+    await advance(30_000, 1_000);
+
+    expect(server.readCalls).toBe(before);
+  });
+});
+
+describe('pulling', () => {
+  it('asks for the marker, then the log after the cursor, of this trip', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await advanceCursor(TRIP_ID, 7);
+
+    await provider.start();
+
+    expect(server.queries.slice(0, 2)).toEqual([
+      `trip_doc_snapshots.select(through_id).eq(trip_id, ${REMOTE_TRIP_ID}).maybeSingle()`,
+      `trip_doc_updates.select(id, update).eq(trip_id, ${REMOTE_TRIP_ID})` +
+        '.gt(id, 7).order(id, {"ascending":true}).limit(500)',
+    ]);
+    expect(server.queries).toContain(`trip_doc_updates.insert(trip_id=${REMOTE_TRIP_ID})`);
+  });
+
+  it('reads one page for a short log, and no empty page after it', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.append(Y.encodeStateAsUpdate(seed));
+    const provider = track(makeProvider(server, new Y.Doc()));
+
+    await provider.start();
+
+    expect(server.readCalls).toBe(1);
+  });
+
+  it('does not run two pulls at once', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    const before = server.readCalls;
+
+    await Promise.all([provider.syncNow(), provider.syncNow()]);
+
+    expect(server.readCalls).toBe(before + 1);
+  });
+
+  it('does not download a snapshot that ends exactly at the cursor', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.snapshot = { state: encodeUpdate(Y.encodeStateAsUpdate(seed)), through_id: 5 };
+    server.nextId = 6;
+    await advanceCursor(TRIP_ID, 5);
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    expect(server.snapshotStateReads).toBe(0);
+  });
+
+  it('ignores a marker that is not a number', async () => {
+    const server = new FakeServer();
+    server.snapshot = { state: 'AAAA', through_id: '5' as unknown as number };
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    expect(server.snapshotStateReads).toBe(0);
+  });
+
+  it('downloads the snapshot state of this trip, and applies it', async () => {
+    const server = new FakeServer();
+    const snapshotDoc = new Y.Doc();
+    addGuest(snapshotDoc, 'p1', 'Alice');
+    server.snapshot = { state: encodeUpdate(Y.encodeStateAsUpdate(snapshotDoc)), through_id: 3 };
+    // The row after it carries only Bob, so Alice can come from the snapshot alone.
+    const before = Y.encodeStateVector(snapshotDoc);
+    addGuest(snapshotDoc, 'p2', 'Bob');
+    server.rows.push({ id: 4, update: encodeUpdate(Y.encodeStateAsUpdate(snapshotDoc, before)) });
+    server.nextId = 5;
+    const doc = new Y.Doc();
+
+    await track(makeProvider(server, doc)).start();
+
+    expect(guestNames(doc)).toEqual(['Alice', 'Bob']);
+    expect(server.queries).toContain(
+      `trip_doc_snapshots.select(state, through_id).eq(trip_id, ${REMOTE_TRIP_ID}).maybeSingle()`,
+    );
+  });
+
+  it('moves the cursor to the snapshot’s marker when no row follows it', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.snapshot = { state: encodeUpdate(Y.encodeStateAsUpdate(seed)), through_id: 100 };
+    server.nextId = 101;
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    expect((await readCursor(TRIP_ID)).lastSeenUpdateId).toBe(100);
+  });
+
+  it.each([
+    ['the marker read', { failReads: 1 }, 'snapshot marker read failed: snapshot boom'],
+    ['the state read', { failStateReads: 1 }, 'snapshot read failed: state boom'],
+    ['a log page read', { failLogReads: 1 }, 'log read failed: log boom'],
+  ])('reports offline, and why, when %s fails', async (_label, failure, message) => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.snapshot = { state: encodeUpdate(Y.encodeStateAsUpdate(seed)), through_id: 3 };
+    server.nextId = 4;
+    Object.assign(server, failure);
+    const doc = new Y.Doc();
+    addGuest(doc, 'p0', 'Local');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState()).toMatchObject({ status: 'offline', lastError: message });
+  });
+
+  it('carries on when the snapshot vanished between the two reads', async () => {
+    const server = new FakeServer();
+    server.snapshot = { state: 'AAAA', through_id: 3 };
+    server.stateReadReturnsNull = true;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p0', 'Local');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState().status).toBe('synced');
+  });
+
+  it('refuses an unreadable snapshot over an empty log', async () => {
+    const server = new FakeServer();
+    server.snapshot = { state: 'not valid base64!!', through_id: 3 };
+    const doc = new Y.Doc();
+    addGuest(doc, 'p0', 'Local');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState().status).toBe('offline');
+    expect(provider.getState().lastError).toContain(
+      'did not decode and the log has been pruned past the gap',
+    );
+    expect(server.queries).toContain(
+      `trip_doc_updates.select(id).eq(trip_id, ${REMOTE_TRIP_ID})` +
+        '.order(id, {"ascending":true}).limit(1)',
+    );
+  });
+
+  it('refuses an unreadable snapshot when the floor of the log is not a number', async () => {
+    const server = new FakeServer();
+    server.snapshot = { state: 'not valid base64!!', through_id: 3 };
+    server.floorOverride = { data: [{ id: '1' }], error: null };
+    const doc = new Y.Doc();
+    addGuest(doc, 'p0', 'Local');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState().status).toBe('offline');
+  });
+
+  it('reports a floor read that fails', async () => {
+    const server = new FakeServer();
+    server.snapshot = { state: 'not valid base64!!', through_id: 3 };
+    server.floorOverride = { data: null, error: { message: 'floor denied' } };
+    const doc = new Y.Doc();
+    addGuest(doc, 'p0', 'Local');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState().lastError).toBe('log floor read failed: floor denied');
+  });
+
+  it('says it falls back to the log for an unreadable snapshot the log covers', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.snapshot = { state: 'not valid base64!!', through_id: 1 };
+    server.rows.push({ id: 1, update: encodeUpdate(Y.encodeStateAsUpdate(seed)) });
+    server.nextId = 2;
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('did not decode; using the log'),
+      TRIP_ID,
+    );
+  });
+
+  it('names the row it skips, and the row that would not apply', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.rows.push({ id: 1, update: 'not valid base64!!' });
+    server.rows.push({ id: 2, update: encodeUpdate(new Uint8Array([255, 255, 255, 255])) });
+    server.rows.push({ id: 3, update: encodeUpdate(Y.encodeStateAsUpdate(seed)) });
+    server.nextId = 4;
+    const doc = new Y.Doc();
+
+    await track(makeProvider(server, doc)).start();
+
+    expect(guestNames(doc)).toEqual(['Alice']);
+    expect(warn).toHaveBeenCalledWith('[sync] skipping undecodable log row %d', 1);
+    expect(warn).not.toHaveBeenCalledWith('[sync] log row %d did not apply:', 1, expect.anything());
+    expect(warn).toHaveBeenCalledWith('[sync] log row %d did not apply:', 2, expect.anything());
+  });
+
+  it('publishes synced after a pull that recovers, with nothing else to do', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+
+    // A pull that fails, from the realtime path, which runs no flush after it.
+    server.failLogReads = 1;
+    server.deliver({ id: 900, update: 'not valid base64!!' });
+    await advance(800);
+    expect(provider.getState().status).toBe('offline');
+
+    server.deliver({ id: 901, update: 'not valid base64!!' });
+    await advance(800);
+
+    expect(provider.getState().status).toBe('synced');
+  });
+});
+
+describe('retries', () => {
+  it('backs off on a fixed schedule with jitter, and stays at a minute', async () => {
+    fakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const server = new FakeServer();
+    server.autoSubscribe = false;
+    server.failLogReads = 99;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    // Already on the server, so no successful push resets the count between.
+    await recordServerStateFor(doc);
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+    expect(server.readCalls).toBe(1);
+
+    // base * 1.15 with a jitter of 0.5: 1150, 2300, 5750, 17250, 34500, 69000, 69000.
+    let now = 0;
+    let due = 0;
+    for (const [index, delay] of [1_150, 2_300, 5_750, 17_250, 34_500, 69_000, 69_000].entries()) {
+      due += delay;
+      await advance(due - 30 - now, 1_000);
+      now = due - 30;
+      expect(server.readCalls).toBe(index + 1);
+      await advance(60, 20);
+      now += 60;
+      expect(server.readCalls).toBe(index + 2);
+    }
+  });
+
+  it('starts the backoff over once a pull succeeds and nothing is failing to send', async () => {
+    fakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const server = new FakeServer();
+    server.autoSubscribe = false;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    await recordServerStateFor(doc);
+    server.failLogReads = 1;
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+    // Failed once; the retry a second later succeeds.
+    await advance(1_100, 100);
+    expect(server.readCalls).toBe(2);
+
+    server.failLogReads = 1;
+    await provider.syncNow();
+    await io();
+    const before = server.readCalls;
+
+    // A first failure again, so a second, not two.
+    await advance(1_100, 100);
+    expect(server.readCalls).toBe(before + 1);
+  });
+
+  it('keeps backing off a failing push while pulls succeed', async () => {
+    fakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const server = new FakeServer();
+    server.autoSubscribe = false;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    await recordServerStateFor(doc);
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await io();
+
+    server.failWrites = 99;
+    addGuest(doc, 'p2', 'Bob');
+    await io();
+    expect(server.insertCalls).toBe(1);
+
+    // Retried after one second, then after two: a good pull in between does
+    // not make the push look healthy again.
+    await advance(1_100, 100);
+    expect(server.insertCalls).toBe(2);
+    await advance(1_500, 100);
+    expect(server.insertCalls).toBe(2);
+    await advance(600, 100);
+    expect(server.insertCalls).toBe(3);
+  });
+
+  it('keeps one retry timer when both directions fail at once', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    server.failLogReads = 99;
+    server.failWrites = 99;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+    await io();
+
+    // The channel's debounced pull is not scheduled on a fresh subscribe here:
+    // count only what is left once that one has fired.
+    await advance(800, 800);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('schedules no retry for a failure that lands after destroy', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const release = server.gateWrites();
+    server.failWrites = 99;
+    const provider = track(makeProvider(server, doc));
+    const started = provider.start();
+    await io();
+
+    provider.destroy();
+    release();
+    await started;
+    await io();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('reports a failed push as offline, with its reason', async () => {
+    const server = new FakeServer();
+    server.failWrites = 99;
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const provider = track(makeProvider(server, doc));
+
+    await provider.start();
+
+    expect(provider.getState()).toMatchObject({
+      status: 'offline',
+      lastError: 'log write failed: write boom',
+    });
+  });
+
+  it('reports a failed flush with its reason and what is still waiting', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    server.failWrites = 99;
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => provider.getState().pendingCount === 1, 'the edit to be counted');
+    await settle();
+
+    expect(provider.getState()).toMatchObject({
+      status: 'offline',
+      pendingCount: 1,
+      lastError: 'log write failed: write boom',
+    });
+  });
+
+  it('does not try again in the same flush after a failure, even with more queued behind it', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+
+    const release = server.gateWrites();
+    server.failWrites = 99;
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => server.insertCalls === 1, 'the first send to be in flight');
+    // Queued while that send is in flight, so the running flush is asked again.
+    addGuest(doc, 'p2', 'Bob');
+    await settle(6);
+    release();
+    await settle();
+
+    expect(server.insertCalls).toBe(1);
+  });
+});
+
+describe('the queue and the server state', () => {
+  it('records the document as the server’s once an edit has gone up', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 0 && server.insertCalls === 1, 'the flush');
+    await settle();
+
+    const cursor = await readCursor(TRIP_ID);
+    expect(Array.from(cursor.serverStateVector!)).toEqual(Array.from(Y.encodeStateVector(doc)));
+  });
+
+  it('records the document as the server’s after recovering an edit the queue lost', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    const enqueue = vi.spyOn(outbox, 'enqueue').mockRejectedValueOnce(new Error('storage evicted'));
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => server.insertCalls === 1, 'the reconcile to send it');
+    enqueue.mockRestore();
+    await settle();
+
+    // Then one more edit, sent the ordinary way.
+    addGuest(doc, 'p2', 'Bob');
+    await waitUntil(() => server.insertCalls === 2, 'the second edit');
+    await settle();
+
+    const cursor = await readCursor(TRIP_ID);
+    expect(Array.from(cursor.serverStateVector!)).toEqual(Array.from(Y.encodeStateVector(doc)));
+    expect(error).toHaveBeenCalledWith('[sync] failed to queue an update:', expect.any(Error));
+  });
+
+  it('retires the rows queued before start once the diff carried them', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    await outbox.enqueue(TRIP_ID, Y.encodeStateAsUpdate(doc));
+
+    await track(makeProvider(server, doc)).start();
+    await settle();
+
+    expect(server.insertCalls).toBe(1);
+    expect(await outbox.pendingCount(TRIP_ID)).toBe(0);
+  });
+
+  it('sends what is queued even when the server already holds the document', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    await recordServerStateFor(doc);
+    await outbox.enqueue(TRIP_ID, Y.encodeStateAsUpdate(doc));
+
+    await track(makeProvider(server, doc)).start();
+    await settle();
+
+    expect(server.insertCalls).toBe(1);
+    expect(await outbox.pendingCount(TRIP_ID)).toBe(0);
+  });
+
+  it('does not send one row twice when two edits overlap a send', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+
+    const release = server.gateWrites();
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => server.insertCalls === 1, 'the first send to be in flight');
+    addGuest(doc, 'p2', 'Bob');
+    await settle(6);
+    release();
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 0, 'the queue to drain');
+    await settle();
+
+    expect(server.insertCalls).toBe(2);
+  });
+
+  it('runs one reconcile at a time', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const release = server.gateWrites();
+    const provider = track(makeProvider(server, doc));
+    const started = provider.start();
+    await waitUntil(() => server.insertCalls === 1, 'the first upload to be in flight');
+
+    // An edit whose queue row fails asks for a reconcile of its own.
+    const enqueue = vi.spyOn(outbox, 'enqueue').mockRejectedValueOnce(new Error('storage evicted'));
+    addGuest(doc, 'p2', 'Bob');
+    await settle(6);
+    enqueue.mockRestore();
+
+    expect(server.insertCalls).toBe(1);
+    release();
+    await started;
+    expect(error).toHaveBeenCalled();
+  });
+
+  it('says it is syncing while a send is in flight, whatever else finishes', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+
+    const release = server.gateWrites();
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => server.insertCalls === 1, 'the send to be in flight');
+    await provider.syncNow();
+
+    expect(provider.getState().status).toBe('syncing');
+    release();
+    await settle();
+  });
+
+  it('publishes syncing when a flush starts sending', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const { provider, seen } = recordingProvider(server, doc);
+    await provider.start();
+    await settle();
+    const before = seen.length;
+
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 0 && server.insertCalls === 1, 'the flush');
+    await settle();
+
+    expect(seen.slice(before).map((state) => state.status)).toContain('syncing');
+  });
+});
+
+describe('what a consumer is told', () => {
+  it('is told when only the count of waiting edits changes', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const { provider, seen } = recordingProvider(server, doc);
+    await provider.start();
+    server.failWrites = 99;
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => provider.getState().pendingCount === 1, 'one waiting');
+    await settle();
+    const before = seen.length;
+
+    addGuest(doc, 'p2', 'Bob');
+    await waitUntil(() => provider.getState().pendingCount === 2, 'two waiting');
+
+    expect(seen.slice(before).some((state) => state.pendingCount === 2)).toBe(true);
+  });
+
+  it('is told when only the head count changes', async () => {
+    const server = new FakeServer();
+    const { provider, seen } = recordingProvider(server, new Y.Doc(), 'user-1');
+    await provider.start();
+    await settle();
+    const before = seen.length;
+
+    server.addPresence('someone-else');
+
+    expect(seen.slice(before)).toEqual([expect.objectContaining({ onlineCount: 2 })]);
+  });
+
+  it('is told when only the reason for being offline changes', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    server.failLogReads = 1;
+    const { provider, seen } = recordingProvider(server, doc);
+    await provider.start();
+    await settle();
+    expect(provider.getState()).toMatchObject({ status: 'offline', lastError: 'log read failed: log boom' });
+    const before = seen.length;
+
+    server.failReads = 1;
+    await provider.syncNow();
+
+    expect(seen.slice(before)).toContainEqual(
+      expect.objectContaining({ lastError: 'snapshot marker read failed: snapshot boom' }),
+    );
+  });
+});
+
+describe('compaction, at its edges', () => {
+  function seedRows(server: FakeServer, rows: number, seed = new Y.Doc()): Y.Doc {
+    for (let index = 0; index < rows; index += 1) {
+      const before = Y.encodeStateVector(seed);
+      addGuest(seed, `p${server.nextId}`, `Guest ${server.nextId}`);
+      server.append(Y.encodeStateAsUpdate(seed, before));
+    }
+    return seed;
+  }
+
+  it('compacts at exactly two hundred rows', async () => {
+    const server = new FakeServer();
+    seedRows(server, 200);
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    expect(server.snapshotPublishes).toHaveLength(1);
+  });
+
+  it('counts rows it sent towards the threshold', async () => {
+    const server = new FakeServer();
+    seedRows(server, 199);
+    const doc = new Y.Doc();
+    addGuest(doc, 'local', 'Local');
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    expect(server.snapshotPublishes).toHaveLength(0);
+
+    await provider.syncNow();
+
+    expect(server.snapshotPublishes).toHaveLength(1);
+  });
+
+  it('does not compact a log it has read nothing of', async () => {
+    const server = new FakeServer();
+    server.hideRows = true;
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    const release = server.gateWrites();
+    for (let index = 0; index < 205; index += 1) {
+      addGuest(doc, `p${index}`, `Guest ${index}`);
+    }
+    await settle(6);
+    release();
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 0, 'the queue to drain', 3_000);
+    await provider.syncNow();
+
+    expect(server.rpcCalls).toBe(0);
+  });
+
+  it('tries again on the next pull after a refused publish, and only until one lands', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    seedRows(server, 250);
+    server.failPublishes = 1;
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    expect(server.snapshotPublishes).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith('[sync] could not publish a snapshot:', 'publish boom');
+
+    await provider.syncNow();
+    expect(server.snapshotPublishes).toHaveLength(1);
+    const calls = server.rpcCalls;
+
+    await provider.syncNow();
+    expect(server.rpcCalls).toBe(calls);
+  });
+
+  it('survives a publish that throws, and tries again later', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    seedRows(server, 250);
+    server.throwPublishes = 1;
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    expect(warn).toHaveBeenCalledWith('[sync] snapshot publish threw:', expect.any(Error));
+
+    await provider.syncNow();
+
+    expect(server.snapshotPublishes).toHaveLength(1);
+  });
+
+  it('compacts again once it has seen enough more of the log', async () => {
+    const server = new FakeServer();
+    const seed = seedRows(server, 250);
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    expect(server.snapshotPublishes).toHaveLength(1);
+
+    seedRows(server, 250, seed);
+    await provider.syncNow();
+
+    expect(server.snapshotPublishes).toHaveLength(2);
+    expect(server.rpcCalls).toBe(2);
+  });
+
+  it('publishes the trip, its state and its cursor', async () => {
+    const server = new FakeServer();
+    seedRows(server, 200);
+    const doc = new Y.Doc();
+
+    await track(makeProvider(server, doc)).start();
+
+    const published = server.snapshotPublishes[0]!;
+    expect(published.trip_id).toBe(REMOTE_TRIP_ID);
+    expect(published.through_id).toBe(200);
+    const rebuilt = new Y.Doc();
+    Y.applyUpdate(rebuilt, decode(published.state));
+    expect(rebuilt.getMap('guestsById').size).toBe(200);
+  });
+});
+
+describe('health after a partial send, and after recovery', () => {
+  it('stays offline when one row went up and the next one did not', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+
+    // Both rows are read by one flush: the first send is held until both queue.
+    const release = server.gateWrites();
+    server.failNthWrite = 2;
+    addGuest(doc, 'p1', 'Alice');
+    addGuest(doc, 'p2', 'Bob');
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 2, 'both to queue');
+    release();
+    await waitUntil(() => server.insertCalls >= 2, 'the second send');
+    await settle();
+
+    expect(provider.getState()).toMatchObject({ status: 'offline', pendingCount: 1 });
+  });
+
+  it('reads as synced again once a retry sends what was waiting', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    server.failWrites = 1;
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => provider.getState().status === 'offline', 'the failure');
+
+    await provider.syncNow();
+    await settle();
+
+    expect(provider.getState()).toMatchObject({ status: 'synced', pendingCount: 0 });
+  });
+
+  it('does not claim an edit whose queue row is still being written was sent', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+
+    // Alice queues at once; Bob's queue row fails, slowly, after Alice's
+    // flush has finished and found the queue empty.
+    const enqueue = outbox.enqueue;
+    vi.spyOn(outbox, 'enqueue')
+      .mockImplementationOnce(enqueue)
+      .mockImplementationOnce(async () => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 60);
+        });
+        throw new Error('storage evicted');
+      });
+    addGuest(doc, 'p1', 'Alice');
+    addGuest(doc, 'p2', 'Bob');
+    await waitUntil(() => error.mock.calls.length > 0, 'Bob to fail', 200);
+    await waitUntil(() => server.rows.length >= 2, 'Bob to be sent by the backstop', 200);
+
+    const rebuilt = new Y.Doc();
+    for (const row of server.rows) {
+      Y.applyUpdate(rebuilt, decode(row.update));
+    }
+    expect(guestNames(rebuilt)).toEqual(['Alice', 'Bob']);
+  });
+
+  it('tells a consumer about one more waiting edit while a send is in flight', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const { provider, seen } = recordingProvider(server, doc);
+    await provider.start();
+    await settle();
+
+    const release = server.gateWrites();
+    addGuest(doc, 'p1', 'Alice');
+    await waitUntil(() => server.insertCalls === 1, 'the first send in flight');
+    addGuest(doc, 'p2', 'Bob');
+    await waitUntil(async () => (await outbox.pendingCount(TRIP_ID)) === 2, 'Bob to queue');
+    await settle(4);
+
+    expect(seen.some((state) => state.pendingCount === 2)).toBe(true);
+    release();
+    await settle();
+  });
+
+  it('says syncing while a failing pull is still running', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+    const { provider, seen } = recordingProvider(server, doc);
+    await provider.start();
+    await settle();
+    expect(provider.getState().status).toBe('synced');
+    const before = seen.length;
+
+    server.failLogReads = 1;
+    await provider.syncNow();
+
+    expect(seen.slice(before).map((state) => state.status)).toContain('syncing');
+  });
+
+  it('publishes nothing about a flush that would start after destroy', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const { provider, seen } = recordingProvider(server, doc);
+    await provider.start();
+    await settle();
+
+    addGuest(doc, 'p1', 'Alice');
+    provider.destroy();
+    const before = seen.length;
+    await settle();
+
+    expect(seen.slice(before).map((state) => state.status)).not.toContain('syncing');
+  });
+
+  it('schedules no hydration retry for a pull that ends after destroy', async () => {
+    fakeTimers();
+    const server = new FakeServer();
+    server.autoSubscribe = false;
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    await io();
+
+    let release: () => void = () => {};
+    server.readGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await advance(800);
+    expect(server.readCalls).toBe(2);
+    provider.destroy();
+    server.readGate = null;
+    release();
+    await io();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+/** Records the document's own vector as what the server holds. */
+async function recordServerStateFor(doc: Y.Doc): Promise<void> {
+  const { recordServerState } = await import('@/lib/sync/cursors');
+  await recordServerState(TRIP_ID, Y.encodeStateVector(doc));
+}

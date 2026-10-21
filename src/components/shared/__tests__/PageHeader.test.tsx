@@ -78,3 +78,29 @@ describe('PageHeader', () => {
     expect(header?.className).toContain('mt-8');
   });
 });
+
+describe('PageHeader drawing', () => {
+  it('spaces the header, and draws the back link as a quiet focusable link', () => {
+    const { container } = render(<PageHeader title="Rooms" backLink="/trips" />);
+
+    expect(container.querySelector('header')).toHaveClass('flex', 'flex-col', 'gap-4', 'pb-4', 'md:pb-6');
+    const back = screen.getByRole('link', { name: 'common.back' });
+    expect(back).toHaveAttribute('href', '/trips');
+    expect(back).toHaveClass(
+      'inline-flex', 'items-center', 'gap-1.5', 'text-sm', 'text-muted-foreground',
+      'transition-colors', 'hover:text-foreground',
+      'focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-ring', 'focus-visible:ring-offset-2',
+      'rounded-sm',
+    );
+    expect(back.querySelector('svg')).toHaveClass('size-4');
+  });
+
+  it('draws a clickable title as a plain, focusable button', () => {
+    render(<PageHeader title="Rooms" onTitleClick={() => undefined} />);
+
+    expect(screen.getByRole('button', { name: 'Rooms' })).toHaveClass(
+      'rounded-sm', 'text-left',
+      'focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-ring', 'focus-visible:ring-offset-2',
+    );
+  });
+});

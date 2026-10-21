@@ -83,3 +83,13 @@ describe('repositoryError', () => {
     expect(repositoryError('Failed', 'nope')).toBeInstanceOf(Error);
   });
 });
+
+describe('describeCause on blank text', () => {
+  it('falls back to the value itself for a whitespace-only string', () => {
+    expect(describeCause('   ')).toBe('   ');
+  });
+
+  it('trims a string with words in it', () => {
+    expect(describeCause('  disk full  ')).toBe('disk full');
+  });
+});

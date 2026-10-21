@@ -125,3 +125,25 @@ describe('UnsavedChangesDialog', () => {
     expect(onLeave).not.toHaveBeenCalled();
   });
 });
+
+describe('UnsavedChangesDialog freshness', () => {
+  it('answers through the newest onLeave and onStay', async () => {
+    const firstLeave = vi.fn();
+    const firstStay = vi.fn();
+    const secondLeave = vi.fn();
+    const secondStay = vi.fn();
+    const { rerender, user } = render(
+      <UnsavedChangesDialog open onLeave={firstLeave} onStay={firstStay} />,
+    );
+    rerender(<UnsavedChangesDialog open onLeave={secondLeave} onStay={secondStay} />);
+
+    await user.click(screen.getByRole('button', { name: 'unsaved.stay' }));
+    expect(secondStay).toHaveBeenCalledTimes(1);
+    expect(firstStay).not.toHaveBeenCalled();
+
+    rerender(<UnsavedChangesDialog open onLeave={secondLeave} onStay={secondStay} />);
+    await user.click(screen.getByRole('button', { name: 'unsaved.leave' }));
+    expect(secondLeave).toHaveBeenCalledTimes(1);
+    expect(firstLeave).not.toHaveBeenCalled();
+  });
+});

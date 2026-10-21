@@ -14,6 +14,7 @@ import {
   reassembleFrames,
 } from '@/lib/sharing/codec';
 import type { AppChangeset } from '@/lib/sharing/types';
+import { MAX_QR_BYTES } from '@/lib/sharing/types';
 import type {
   HexColor,
   ISODateString,
@@ -280,5 +281,68 @@ describe('encode/decode + frame roundtrip', () => {
     expect(decoded.tripId).toBe(original.tripId);
     expect(decoded.added.persons[0]?.name).toBe('Alice');
     expect(decoded.added.transports[0]?.location).toBe('Gare de Vannes');
+  });
+});
+
+describe('codec: boundaries', () => {
+  /** Bytes whose base64 spelling uses both `+` and `/`, so the URL-safe swap has work to do. */
+  const awkwardName = Array.from({ length: 64 }, (_, i) => String.fromCharCode(0x7c0 + i)).join('');
+
+  it.each(['', 'a', 'aa'])(
+    'round-trips a payload that needs the URL-safe alphabet (suffix %j)',
+    (suffix) => {
+      const changeset: AppChangeset = { ...makeMinimalChangeset(), shareId: `${awkwardName}${suffix}` };
+
+      const encoded = encodeChangeset(changeset);
+
+      expect(encoded).toContain('-');
+      expect(encoded).toContain('_');
+      expect(decodeChangeset(encoded).shareId).toBe(changeset.shareId);
+    },
+  );
+
+  it('reads a two-byte payload as a changeset rather than as too short', () => {
+    // [version, one byte]: long enough to be parsed, and a lone byte is no
+    // valid message, so what fails is the parse and not the length check.
+    expect(() => decodeChangeset('AQA')).toThrow();
+    expect(() => decodeChangeset('AQA')).not.toThrow('too short');
+  });
+
+  it('keeps a payload of exactly the QR limit in one frame', () => {
+    const exact = 'x'.repeat(MAX_QR_BYTES);
+
+    expect(splitIntoFrames(exact)).toEqual([exact]);
+  });
+
+  it('splits a payload one character over the limit', () => {
+    expect(splitIntoFrames('x'.repeat(MAX_QR_BYTES + 1))).toHaveLength(2);
+  });
+
+  it('never makes a frame longer than the QR limit', () => {
+    for (const frame of splitIntoFrames('x'.repeat(MAX_QR_BYTES * 3))) {
+      expect(frame.length).toBeLessThanOrEqual(MAX_QR_BYTES);
+    }
+  });
+
+  it('parses multi-digit frame numbers', () => {
+    expect(parseFrame('F10/12:abc')).toEqual({ index: 10, total: 12, data: 'abc' });
+  });
+
+  it('refuses a frame with text before its prefix', () => {
+    expect(parseFrame('xF0/2:abc')).toBeNull();
+  });
+
+  it('refuses a frame whose data runs onto a second line', () => {
+    expect(parseFrame('F0/2:ab\ncd')).toBeNull();
+  });
+
+  it('refuses to reassemble more frames than the total', () => {
+    const frames = new Map([
+      [0, 'a'],
+      [1, 'b'],
+      [2, 'c'],
+    ]);
+
+    expect(reassembleFrames(frames, 2)).toBeNull();
   });
 });

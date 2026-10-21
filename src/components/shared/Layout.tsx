@@ -17,7 +17,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronLeft,
@@ -123,7 +123,15 @@ interface LayoutProps {
  * Navigation items that don't require a trip (always visible).
  */
 const GLOBAL_NAV_ITEMS: readonly NavItem[] = [
-  { labelKey: 'trips.title', pathSuffix: '', icon: Luggage, requiresTrip: false },
+  // Current on the list and the new-trip form only: a trip's own pages live
+  // under `/trips/:tripId/…`, below the list in the URL but not part of it.
+  {
+    labelKey: 'trips.title',
+    pathSuffix: '',
+    icon: Luggage,
+    requiresTrip: false,
+    currentOn: ['/trips', '/trips/new'],
+  },
   // Guest groups sit here rather than beside "Guests": they belong to the
   // account, are edited with no trip selected, and outlive every trip they were
   // imported into.
@@ -197,8 +205,18 @@ const FOCUSED_FORM_PATHS: readonly string[] = ['/trips/new'] as const;
  * A trailing slash is the same route, so it is trimmed before the comparison.
  */
 function isFocusedFormPath(pathname: string): boolean {
+  return FOCUSED_FORM_PATHS.includes(normalizePathname(pathname));
+}
+
+/**
+ * A path as the navigation compares it: no trailing slash, lower case.
+ *
+ * The router matches case-insensitively and treats a trailing slash as the
+ * same route, so every comparison here does too.
+ */
+function normalizePathname(pathname: string): string {
   const path = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
-  return FOCUSED_FORM_PATHS.includes(path);
+  return path.toLowerCase();
 }
 
 /**
@@ -233,6 +251,34 @@ function buildNavPath(item: NavItem, tripId: string | null): string {
     return '/trips';
   }
   return `/${item.pathSuffix}`;
+}
+
+/**
+ * Whether the page at `pathname` is the one a navigation entry leads to.
+ *
+ * The one answer the bottom bar, the "More" sheet and the desktop rail all
+ * use. A trip-gated entry with no trip is never current: its path falls back
+ * to `/trips`, which every page under the trip list would otherwise match. An
+ * entry with {@link NavItem.currentOn} is current on exactly those paths;
+ * every other entry on its own path and the pages below it. A prefix match on
+ * `/trips` used to claim every trip page for "My trips", so the bottom bar
+ * drew two current tabs on the calendar.
+ *
+ * @param item - The navigation item
+ * @param tripId - Current trip ID or null
+ * @param pathname - The current location's path
+ * @returns Whether the entry is the current page
+ */
+function isNavItemCurrent(item: NavItem, tripId: string | null, pathname: string): boolean {
+  if (item.requiresTrip && !tripId) {
+    return false;
+  }
+  const path = normalizePathname(pathname);
+  if (item.currentOn !== undefined) {
+    return item.currentOn.includes(path);
+  }
+  const target = normalizePathname(buildNavPath(item, tripId));
+  return path === target || path.startsWith(`${target}/`);
 }
 
 // ============================================================================
@@ -370,10 +416,7 @@ const MobileNav = memo(function MobileNav({
 
   // Check if any "More" item's route is currently active
   const isMoreItemActive = useMemo(() => {
-    return sheetItems.some((item) => {
-      const path = buildNavPath(item, tripId);
-      return location.pathname === path || location.pathname.startsWith(path + '/');
-    });
+    return sheetItems.some((item) => isNavItemCurrent(item, tripId, location.pathname));
   }, [sheetItems, tripId, location.pathname]);
 
   return (
@@ -393,7 +436,9 @@ const MobileNav = memo(function MobileNav({
         <ul className="flex h-16 items-center justify-around">
           {primaryItems.map((item) => {
             const path = buildNavPath(item, tripId),
-             isDisabled = item.requiresTrip && !tripId;
+             isDisabled = item.requiresTrip && !tripId,
+             isCurrent = isNavItemCurrent(item, tripId, location.pathname),
+             Icon = isCurrent ? (item.activeIcon ?? item.icon) : item.icon;
 
             return (
               <li key={item.pathSuffix} className="flex-1">
@@ -406,52 +451,38 @@ const MobileNav = memo(function MobileNav({
                   `aria-disabled`, says why through `aria-describedby`, and is
                   stopped from navigating in the handler instead.
                 */}
-                <NavLink
+                <Link
                   to={path}
                   onClick={(e) => { if (isDisabled) e.preventDefault(); }}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
-                      'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      isActive && !isDisabled
-                        ? 'text-primary font-medium'
-                        : 'text-muted-foreground',
-                      // No hover affordance on something that cannot be used.
-                      isDisabled && 'cursor-not-allowed opacity-50 hover:text-muted-foreground',
-                    )
-                  }
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
+                    'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isCurrent ? 'text-primary font-medium' : 'text-muted-foreground',
+                    // No hover affordance on something that cannot be used.
+                    isDisabled && 'cursor-not-allowed opacity-50 hover:text-muted-foreground',
+                  )}
                   aria-disabled={isDisabled || undefined}
                   /*
-                    `buildNavPath` falls back to '/trips' for every trip-gated
-                    item while no trip is chosen, and `NavLink` has no `end`, so
-                    on the trips page react-router marked all three of them
-                    current at once. Tabbing the bar then announced three
-                    consecutive "current page" links on the one screen where
-                    none of them works. 'false' is a real `aria-current` value
-                    and the only way to override NavLink's own default.
+                    Decided by `isNavItemCurrent`, not by react-router's own
+                    match: every trip-gated item falls back to '/trips' while no
+                    trip is chosen, and a prefix match then marked all of them
+                    current at once on the one screen where none of them works.
                   */
-                  aria-current={isDisabled ? 'false' : 'page'}
+                  aria-current={isCurrent ? 'page' : undefined}
                   aria-describedby={isDisabled ? disabledHintId : undefined}
                 >
-                  {({ isActive }) => {
-                    // The current tab is drawn filled, not merely tinted. One
-                    // coloured outline among four outlines is easy to miss on a
-                    // phone; a solid glyph is the difference people actually
-                    // see, and it does not depend on telling two colours apart.
-                    const isCurrent = isActive && !isDisabled,
-                     Icon = isCurrent ? (item.activeIcon ?? item.icon) : item.icon;
-
-                    return (
-                      <>
-                        <Icon
-                          className={cn('h-5 w-5', isCurrent && 'text-primary')}
-                          aria-hidden="true"
-                        />
-                        <span>{t(item.labelKey)}</span>
-                      </>
-                    );
-                  }}
-                </NavLink>
+                  {/*
+                    The current tab is drawn filled, not merely tinted. One
+                    coloured outline among four outlines is easy to miss on a
+                    phone; a solid glyph is the difference people actually see,
+                    and it does not depend on telling two colours apart.
+                  */}
+                  <Icon
+                    className={cn('h-5 w-5', isCurrent && 'text-primary')}
+                    aria-hidden="true"
+                  />
+                  <span>{t(item.labelKey)}</span>
+                </Link>
               </li>
             );
           })}
@@ -527,7 +558,7 @@ const MobileNav = memo(function MobileNav({
               {sheetItems.map((item) => {
                 const path = buildNavPath(item, tripId);
                 const isDisabled = item.requiresTrip && !tripId;
-                const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
+                const isActive = isNavItemCurrent(item, tripId, location.pathname);
 
                 return (
                   <li key={`${item.requiresTrip ? 'trip' : 'global'}-${item.pathSuffix || 'trips'}`}>
@@ -547,14 +578,14 @@ const MobileNav = memo(function MobileNav({
                         'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm min-h-[44px] transition-colors',
                         'hover:bg-accent hover:text-accent-foreground',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        isActive && !isDisabled
+                        isActive
                           ? 'bg-accent text-accent-foreground font-medium'
                           : 'text-foreground',
                         isDisabled &&
                           'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
                       )}
                     >
-                      <item.icon className={cn('h-5 w-5 shrink-0', isActive && !isDisabled && 'text-primary')} aria-hidden="true" />
+                      <item.icon className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')} aria-hidden="true" />
                       <span>{t(item.labelKey)}</span>
                     </button>
                   </li>
@@ -717,8 +748,10 @@ const NavLinkItem = memo(function NavLinkItem({
   readonly isCollapsed: boolean;
 }): React.ReactElement {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
   const path = buildNavPath(item, tripId);
   const isDisabled = item.requiresTrip && !tripId;
+  const isCurrent = isNavItemCurrent(item, tripId, pathname);
   const label = String(t(item.labelKey));
 
   const linkRef = useRef<HTMLAnchorElement>(null);
@@ -824,32 +857,29 @@ const NavLinkItem = memo(function NavLinkItem({
         control has to stay focusable to be discoverable, and `aria-disabled`
         plus a described reason is what tells the user why it will not move.
       */}
-      <NavLink
+      <Link
         ref={linkRef}
         to={path}
         onClick={(e) => {
           if (isDisabled) e.preventDefault();
         }}
         aria-label={isCollapsed ? label : undefined}
-        className={({ isActive }) =>
-          cn(
+        className={cn(
             'flex items-center rounded-lg transition-colors',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
             isCollapsed
               ? 'size-9 shrink-0 justify-center'
               : 'min-h-9 gap-3 px-3 py-2',
-            isActive && !isDisabled
+            isCurrent
               ? 'bg-primary/14 text-primary font-medium shadow-sm ring-1 ring-primary/20'
               : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground',
-            isActive && !isDisabled && 'hover:bg-primary/20 hover:text-primary',
+            isCurrent && 'hover:bg-primary/20 hover:text-primary',
             isDisabled &&
               'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground',
-          )
-        }
+          )}
         aria-disabled={isDisabled || undefined}
-        // See the mobile bar: every trip-gated path collapses to '/trips'
-        // without a trip, so react-router would mark them all current at once.
-        aria-current={isDisabled ? 'false' : 'page'}
+        // The same answer as the mobile bar's, from `isNavItemCurrent`.
+        aria-current={isCurrent ? 'page' : undefined}
         aria-describedby={describedBy}
         onMouseEnter={isCollapsed ? openCollapsedTooltip : undefined}
         onMouseLeave={isCollapsed ? scheduleCloseCollapsedTooltip : undefined}
@@ -858,7 +888,7 @@ const NavLinkItem = memo(function NavLinkItem({
       >
         <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         {!isCollapsed ? <span className="truncate">{label}</span> : null}
-      </NavLink>
+      </Link>
       {isDisabled ? (
         <span id={disabledHintId} className="sr-only">
           {t('nav.requiresTrip', 'Choose a trip first to open this section')}

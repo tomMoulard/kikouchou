@@ -11,7 +11,7 @@
  */
 
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@/test/utils';
+import { act, render, screen, waitFor, within } from '@/test/utils';
 import userEvent from '@testing-library/user-event';
 
 import { PHONE_MEDIA_QUERY } from '@/hooks/usePhoneViewport';
@@ -821,5 +821,325 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 18),
       });
     });
+  });
+});
+
+describe('DateRangePicker misuse', () => {
+  it('warns in development when the earliest date is after the latest', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <DateRangePicker
+        value={undefined}
+        onChange={vi.fn()}
+        minDate={new Date(2024, 6, 31)}
+        maxDate={new Date(2024, 6, 1)}
+      />,
+      { withProviders: false },
+    );
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      'DateRangePicker: minDate is after maxDate, all dates will be disabled',
+    );
+    consoleWarn.mockRestore();
+  });
+
+  it('stays quiet about backwards limits in a production build', () => {
+    // The warning is for whoever wires the picker up, not for a visitor.
+    vi.stubEnv('DEV', false);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <DateRangePicker
+          value={undefined}
+          onChange={vi.fn()}
+          minDate={new Date(2024, 6, 31)}
+          maxDate={new Date(2024, 6, 1)}
+        />,
+        { withProviders: false },
+      );
+
+      expect(consoleWarn).not.toHaveBeenCalled();
+    } finally {
+      consoleWarn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not warn about a range that is the right way round', () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <DateRangePicker
+        value={undefined}
+        onChange={vi.fn()}
+        minDate={new Date(2024, 6, 1)}
+        maxDate={new Date(2024, 6, 31)}
+      />,
+      { withProviders: false },
+    );
+
+    expect(consoleWarn).not.toHaveBeenCalled();
+    consoleWarn.mockRestore();
+  });
+});
+
+describe('DateRangePicker, more of it', () => {
+  const july = (day: number): Date => new Date(2024, 6, day);
+  const invalid = (): Date => new Date(Number.NaN);
+
+  /** Waits past the frame in which a completed range closes the popover. */
+  async function nextFrame(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it('treats an unreadable start date as no selection', () => {
+    render(<DateRangePicker value={{ from: invalid(), to: undefined }} onChange={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    const trigger = screen.getByRole('button', { name: 'dateRangePicker.ariaLabel' });
+    expect(trigger).toHaveTextContent('dateRangePicker.placeholder');
+    expect(trigger).toHaveClass('w-full', 'justify-start', 'text-left', 'font-normal', 'text-muted-foreground');
+    expect(trigger.querySelector('svg')).toHaveClass('mr-2', 'h-4', 'w-4', 'shrink-0');
+    expect(screen.getByText('dateRangePicker.placeholder')).toHaveClass('truncate');
+  });
+
+  it('asks for an end date when the end date cannot be read', () => {
+    render(<DateRangePicker value={{ from: july(15), to: invalid() }} onChange={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    expect(screen.getByRole('button', { name: 'dateRangePicker.ariaLabel' })).toHaveTextContent(
+      'dateRangePicker.selectEndDate',
+    );
+  });
+
+  it('ignores limits it cannot read, and leaves every day open without any', async () => {
+    const user = userEvent.setup();
+    render(
+      <DateRangePicker
+        value={{ from: july(15), to: july(16) }}
+        onChange={vi.fn()}
+        minDate={invalid()}
+        maxDate={invalid()}
+      />,
+      { withProviders: false },
+    );
+
+    await openCalendar(user);
+
+    expect(dayButton('2024-07-01')).not.toBeDisabled();
+    expect(dayButton('2024-07-31')).not.toBeDisabled();
+  });
+
+  it('opens on this month when neither the selection nor the earliest date can be read', async () => {
+    // Only Date is faked: the user events still run on real timers.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2025, 10, 20, 12, 0) });
+    try {
+      const user = userEvent.setup();
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} minDate={invalid()} />, {
+        withProviders: false,
+      });
+
+      await openCalendar(user);
+
+      expect(dayCell('2025-11-20')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips a booked range it cannot read and marks the rest', async () => {
+    const user = userEvent.setup();
+    render(
+      <DateRangePicker
+        value={{ from: july(15), to: july(16) }}
+        onChange={vi.fn()}
+        bookedRanges={[
+          { from: invalid(), to: july(3) },
+          { from: july(10), to: invalid() },
+          { from: july(10), to: july(12) },
+        ]}
+      />,
+      { withProviders: false },
+    );
+
+    await openCalendar(user);
+
+    const booked = Array.from(document.querySelectorAll('.rdp-day-booked'));
+    expect(booked.map((el) => el.textContent)).toEqual(['10', '11']);
+  });
+
+  it('opens on the month of a start date that arrived after mount, and clears through the newest handler', async () => {
+    const user = userEvent.setup();
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { rerender } = render(<DateRangePicker value={undefined} onChange={first} />, {
+      withProviders: false,
+    });
+
+    // A form that loads its record after the first render hands the picker
+    // its value, and a new handler with it.
+    rerender(<DateRangePicker value={{ from: new Date(2023, 1, 10), to: undefined }} onChange={latest} />);
+    await openCalendar(user);
+
+    expect(dayCell('2023-02-10')).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'dateRangePicker.clear' }));
+    expect(latest).toHaveBeenCalledWith(undefined);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('opens on the month of the start date', async () => {
+    const user = userEvent.setup();
+    render(<DateRangePicker value={{ from: new Date(2023, 1, 10), to: undefined }} onChange={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    await openCalendar(user);
+
+    expect(dayCell('2023-02-10')).toBeInTheDocument();
+  });
+
+  it('warns only about two readable limits the wrong way round', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const [minDate, maxDate] of [
+      [july(31), undefined],
+      [undefined, july(1)],
+      [invalid(), july(1)],
+      [july(31), invalid()],
+      [july(1), july(1)],
+    ] as const) {
+      const { unmount } = render(
+        <DateRangePicker value={undefined} onChange={vi.fn()} minDate={minDate} maxDate={maxDate} />,
+        { withProviders: false },
+      );
+      unmount();
+    }
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('follows new limits', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <DateRangePicker value={{ from: july(15), to: july(16) }} onChange={vi.fn()} />,
+      { withProviders: false },
+    );
+    rerender(
+      <DateRangePicker
+        value={{ from: july(15), to: july(16) }}
+        onChange={vi.fn()}
+        minDate={july(10)}
+        maxDate={july(20)}
+      />,
+    );
+
+    await openCalendar(user);
+
+    expect(dayButton('2024-07-05')).toBeDisabled();
+    expect(dayButton('2024-07-25')).toBeDisabled();
+  });
+
+  it('marks no booking for a booked range it cannot read', async () => {
+    const user = userEvent.setup();
+    render(
+      <DateRangePicker
+        value={{ from: july(15), to: july(16) }}
+        onChange={vi.fn()}
+        bookedRanges={[
+          { from: invalid(), to: invalid() },
+          { from: july(3), to: invalid() },
+        ]}
+      />,
+      { withProviders: false },
+    );
+
+    await openCalendar(user);
+
+    expect(screen.queryByText('dateRangePicker.alreadyBooked')).not.toBeInTheDocument();
+  });
+
+  it('shows bookings that arrive after it opened', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <DateRangePicker value={{ from: july(15), to: july(16) }} onChange={vi.fn()} />,
+      { withProviders: false },
+    );
+    rerender(
+      <DateRangePicker
+        value={{ from: july(15), to: july(16) }}
+        onChange={vi.fn()}
+        bookedRanges={[{ from: july(3), to: july(5) }]}
+      />,
+    );
+
+    await openCalendar(user);
+
+    expect(screen.getByText('dateRangePicker.alreadyBooked')).toBeInTheDocument();
+    expect(dayCell('2024-07-03')).toHaveClass('rdp-day-booked');
+  });
+
+  it('stays open a frame after the first click, and reports it to the newest onChange', async () => {
+    const user = userEvent.setup();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(
+      <DateRangePicker value={undefined} onChange={first} minDate={july(1)} maxDate={july(31)} />,
+      { withProviders: false },
+    );
+    rerender(<DateRangePicker value={undefined} onChange={second} minDate={july(1)} maxDate={july(31)} />);
+
+    await openCalendar(user);
+    await user.click(dayButton('2024-07-15'));
+    await nextFrame();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(second).toHaveBeenCalledWith({ from: july(15), to: july(15) });
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('labels the clear button and the popover', async () => {
+    const user = userEvent.setup();
+    render(<DateRangePicker value={{ from: july(15), to: july(16) }} onChange={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    await openCalendar(user);
+
+    const dialog = screen.getByRole('dialog', { name: 'dateRangePicker.calendarDialog' });
+    // A popover on a laptop, so no dialog heading.
+    expect(within(dialog).queryByRole('heading')).not.toBeInTheDocument();
+    const clear = within(dialog).getByRole('button', { name: 'dateRangePicker.clear' });
+    expect(clear).toHaveTextContent('dateRangePicker.clear');
+    // The visible text alone would give the same name, so the label is pinned too.
+    expect(clear).toHaveAttribute('aria-label', 'dateRangePicker.clear');
+    expect(clear).toHaveClass('h-9', 'px-2', 'text-xs', 'md:h-7');
+    expect(clear.querySelector('svg')).toHaveClass('h-3', 'w-3', 'mr-1');
+  });
+});
+
+describe('DateRangePicker taking a range back', () => {
+  it('reports no range when the one chosen day is clicked again', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <DateRangePicker
+        value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 15) }}
+        onChange={onChange}
+        minDate={new Date(2024, 6, 1)}
+        maxDate={new Date(2024, 6, 31)}
+      />,
+      { withProviders: false },
+    );
+
+    await openCalendar(user);
+    await user.click(dayButton('2024-07-15'));
+
+    expect(onChange).toHaveBeenCalledWith(undefined);
   });
 });

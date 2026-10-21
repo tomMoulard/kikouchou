@@ -8,7 +8,7 @@
  * @module lib/db/repositories/__tests__/ride-repository.test
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
 import { createPerson, deletePerson } from '@/lib/db/repositories/person-repository';
@@ -16,8 +16,10 @@ import {
   createRide,
   deleteRideWithOwnershipCheck,
   getRideById,
+  getRideCount,
   getRidesByDriverId,
   getRidesByTripId,
+  getRidesByVehicleId,
   getTransportIdsForRide,
   setTransportRide,
   updateRideWithOwnershipCheck,
@@ -29,6 +31,8 @@ import {
 import {
   createVehicle,
   deleteVehicleWithOwnershipCheck,
+  getVehicleCount,
+  getVehiclesByOwnerId,
   getVehiclesByTripId,
   updateVehicleWithOwnershipCheck,
 } from '@/lib/db/repositories/vehicle-repository';
@@ -432,5 +436,312 @@ describe('ownership of a vehicle id across trips', () => {
     await expect(
       deleteVehicleWithOwnershipCheck(vehicle.id as VehicleId, other.id),
     ).rejects.toThrow(/does not belong to current trip/);
+  });
+});
+
+// ============================================================================
+// Reads of rows other writers stored
+// ============================================================================
+
+/** A row as the Yjs projection or the share merge would store it: unsanitised. */
+async function storeRawRide(row: Record<string, unknown> & { readonly id: string }): Promise<RideId> {
+  const ride = {
+    tripId,
+    direction: 'pickup',
+    meetDatetime: '2026-07-15T15:02:00.000Z',
+    location: 'Lyon Part-Dieu',
+    ...row,
+  };
+  await db.rides.put(ride as never);
+  return ride.id as RideId;
+}
+
+describe('reading rides back', () => {
+  it('re-expresses a stored offset time as a UTC instant and keeps the rest', async () => {
+    const id = await storeRawRide({
+      id: 'ride-offset',
+      meetDatetime: '2026-07-15T17:02:00+02:00',
+      notes: 'bring bread',
+    });
+
+    expect(await getRideById(id)).toEqual({
+      id,
+      tripId,
+      direction: 'pickup',
+      meetDatetime: '2026-07-15T15:02:00.000Z',
+      location: 'Lyon Part-Dieu',
+      notes: 'bring bread',
+    });
+  });
+
+  it('orders by instant, then by id, and puts unplaceable rows last', async () => {
+    // Stored strings sort differently from instants: the `+02:00` spelling of
+    // ten o'clock sorts after the `Z` one, and a value starting with `!` sorts
+    // before every date. The ids are cased so the store's binary order and
+    // `localeCompare` disagree, which is what the tie-break has to settle.
+    await storeRawRide({ id: 'B-tie', meetDatetime: '2026-07-15T10:00:00.000Z' });
+    await storeRawRide({ id: 'a-tie', meetDatetime: '2026-07-15T12:00:00+02:00' });
+    await storeRawRide({ id: 'early', meetDatetime: '2026-07-15T09:00:00.000Z' });
+    await storeRawRide({ id: 'late', meetDatetime: '2026-07-15T11:00:00.000Z' });
+    await storeRawRide({ id: 'Z-unplaceable', meetDatetime: '!not a time' });
+    await storeRawRide({ id: 'y-unplaceable', meetDatetime: '!never' });
+
+    expect((await getRidesByTripId(tripId)).map((ride) => ride.id)).toEqual([
+      'early',
+      'a-tie',
+      'B-tie',
+      'late',
+      'y-unplaceable',
+      'Z-unplaceable',
+    ]);
+  });
+
+  it('finds the rides a guest drives, and only those', async () => {
+    const driving = await makeRide({ driverId: alice });
+    await makeRide({ driverId: guillaume });
+
+    expect((await getRidesByDriverId(alice)).map((ride) => ride.id)).toEqual([driving]);
+  });
+
+  it('finds the rides that use a car, and counts the trip\'s rides', async () => {
+    const vehicle = await createVehicle(tripId, { name: 'Espace' });
+    const inCar = await makeRide({ vehicleId: vehicle.id });
+    await makeRide();
+
+    expect((await getRidesByVehicleId(vehicle.id)).map((ride) => ride.id)).toEqual([inCar]);
+    expect(await getRideCount(tripId)).toBe(2);
+  });
+});
+
+// ============================================================================
+// Write failures and refusals
+// ============================================================================
+
+describe('ride writes that cannot happen', () => {
+  it('names the ride it failed to create', async () => {
+    vi.spyOn(db.rides, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(makeRide()).rejects.toThrow('Failed to create pickup ride at "Lyon Part-Dieu"');
+  });
+
+  it('refuses to update a ride that does not exist', async () => {
+    await expect(
+      updateRideWithOwnershipCheck('ride-missing' as RideId, tripId, { notes: 'x' }),
+    ).rejects.toThrow('Ride with ID "ride-missing" not found');
+  });
+
+  it('refuses to move a leg that does not exist', async () => {
+    await expect(
+      setTransportRide('leg-missing' as never, tripId, undefined),
+    ).rejects.toThrow('Transport with ID "leg-missing" not found');
+  });
+
+  it('refuses to move another trip\'s leg', async () => {
+    const legId = await makeLeg(alice);
+    const other = await createTrip({
+      name: 'Other',
+      startDate: toISODateStringFromString('2026-08-01'),
+      endDate: toISODateStringFromString('2026-08-05'),
+    });
+
+    await expect(setTransportRide(legId as never, other.id, undefined)).rejects.toThrow(
+      'Cannot change ride: transport does not belong to current trip',
+    );
+  });
+
+  it('refuses to put a leg in a ride that does not exist', async () => {
+    const legId = await makeLeg(alice);
+
+    await expect(
+      setTransportRide(legId as never, tripId, 'ride-missing' as RideId),
+    ).rejects.toThrow('Ride with ID "ride-missing" not found');
+  });
+
+  it('refuses to delete a ride that does not exist', async () => {
+    await expect(
+      deleteRideWithOwnershipCheck('ride-missing' as RideId, tripId),
+    ).rejects.toThrow('Ride with ID "ride-missing" not found');
+  });
+
+  it('refuses to delete another trip\'s ride, and keeps it', async () => {
+    const rideId = await makeRide();
+    const other = await createTrip({
+      name: 'Other',
+      startDate: toISODateStringFromString('2026-08-01'),
+      endDate: toISODateStringFromString('2026-08-05'),
+    });
+
+    await expect(deleteRideWithOwnershipCheck(rideId, other.id)).rejects.toThrow(
+      'Cannot delete ride: ride does not belong to current trip',
+    );
+    expect(await db.rides.get(rideId)).toBeDefined();
+  });
+});
+
+// ============================================================================
+// Partial updates touch the fields they name, and sanitise those
+// ============================================================================
+
+describe('updateRideWithOwnershipCheck: field by field', () => {
+  it('sanitises each field the patch names', async () => {
+    const rideId = await makeRide();
+
+    await updateRideWithOwnershipCheck(rideId, tripId, {
+      location: '  Lyon Perrache  ',
+      leadTimeMinutes: 10_000_000,
+      notes: '  bring bread  ',
+      meetDatetime: '2026-07-15T19:02:00+02:00',
+    });
+
+    expect(await db.rides.get(rideId)).toMatchObject({
+      location: 'Lyon Perrache',
+      leadTimeMinutes: 24 * 60,
+      notes: 'bring bread',
+      meetDatetime: '2026-07-15T17:02:00.000Z',
+    });
+  });
+
+  it('rewrites no field the patch does not name', async () => {
+    const rideId = await storeRawRide({
+      id: 'ride-raw',
+      location: '  Lyon  ',
+      leadTimeMinutes: 99_999,
+      notes: '  as stored  ',
+    });
+
+    await updateRideWithOwnershipCheck(rideId, tripId, { driverId: alice });
+
+    expect(await db.rides.get(rideId)).toMatchObject({
+      location: '  Lyon  ',
+      leadTimeMinutes: 99_999,
+      notes: '  as stored  ',
+      driverId: alice,
+    });
+  });
+});
+
+// ============================================================================
+// Vehicles
+// ============================================================================
+
+describe('vehicle reads and writes', () => {
+  it('orders by name whatever order the store returns, ties by id', async () => {
+    // Primary keys chosen so the store's order is the reverse of the right one,
+    // and so binary order and `localeCompare` disagree on the tie.
+    await db.vehicles.bulkPut([
+      { id: 'A-zoe', tripId, name: 'Zoe' },
+      { id: 'B-clio', tripId, name: 'Clio' },
+      { id: 'a-clio', tripId, name: 'Clio' },
+    ] as never);
+
+    expect((await getVehiclesByTripId(tripId)).map((vehicle) => vehicle.id)).toEqual([
+      'a-clio',
+      'B-clio',
+      'A-zoe',
+    ]);
+  });
+
+  it('finds the cars a guest owns, and counts the trip\'s cars', async () => {
+    const owned = await createVehicle(tripId, { name: 'Espace', ownerId: alice });
+    await createVehicle(tripId, { name: 'Clio', ownerId: guillaume });
+
+    expect((await getVehiclesByOwnerId(alice)).map((vehicle) => vehicle.id)).toEqual([
+      owned.id,
+    ]);
+    expect(await getVehicleCount(tripId)).toBe(2);
+  });
+
+  it('names the car it failed to create', async () => {
+    vi.spyOn(db.vehicles, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(createVehicle(tripId, { name: '  Espace ' })).rejects.toThrow(
+      'Failed to create vehicle "Espace"',
+    );
+  });
+
+  it('refuses to update a car that does not exist', async () => {
+    await expect(
+      updateVehicleWithOwnershipCheck('vehicle-missing' as VehicleId, tripId, { notes: 'x' }),
+    ).rejects.toThrow('Vehicle with ID "vehicle-missing" not found');
+  });
+
+  it('refuses to update another trip\'s car', async () => {
+    const vehicle = await createVehicle(tripId, { name: 'Espace' });
+    const other = await createTrip({
+      name: 'Other',
+      startDate: toISODateStringFromString('2026-08-01'),
+      endDate: toISODateStringFromString('2026-08-05'),
+    });
+
+    await expect(
+      updateVehicleWithOwnershipCheck(vehicle.id, other.id, { name: 'Hijacked' }),
+    ).rejects.toThrow('Cannot update vehicle: vehicle does not belong to current trip');
+    expect((await db.vehicles.get(vehicle.id))?.name).toBe('Espace');
+  });
+
+  it('refuses to delete a car that does not exist', async () => {
+    await expect(
+      deleteVehicleWithOwnershipCheck('vehicle-missing' as VehicleId, tripId),
+    ).rejects.toThrow('Vehicle with ID "vehicle-missing" not found');
+  });
+
+  it('sanitises each field a patch names', async () => {
+    const vehicle = await createVehicle(tripId, { name: 'Espace' });
+
+    await updateVehicleWithOwnershipCheck(vehicle.id, tripId, {
+      name: '  Clio  ',
+      seatCount: 10_000,
+      childSeats: ['booster', 'hoverboard' as never],
+      luggageNotes: '  roof box  ',
+      notes: '  diesel  ',
+    });
+
+    expect(await db.vehicles.get(vehicle.id)).toMatchObject({
+      name: 'Clio',
+      seatCount: 99,
+      childSeats: ['booster'],
+      luggageNotes: 'roof box',
+      notes: 'diesel',
+    });
+  });
+
+  it('rewrites no field a patch does not name', async () => {
+    const raw = {
+      id: 'vehicle-raw',
+      tripId,
+      name: '  Espace  ',
+      seatCount: 500,
+      childSeats: ['hoverboard'],
+      luggageNotes: '  as stored  ',
+      notes: '  as stored  ',
+    };
+    await db.vehicles.put(raw as never);
+
+    await updateVehicleWithOwnershipCheck('vehicle-raw' as VehicleId, tripId, {
+      ownerId: alice,
+    });
+
+    expect(await db.vehicles.get('vehicle-raw')).toEqual({ ...raw, ownerId: alice });
+  });
+});
+
+describe('reading rides back, the edges', () => {
+  it('puts unplaceable rows after every placeable one, in id order', async () => {
+    // Stored after the dates (`z` sorts after `2`) and in the reverse of id order.
+    await storeRawRide({ id: 'm-placeable', meetDatetime: '2026-07-15T10:00:00.000Z' });
+    await storeRawRide({ id: 'c-unplaceable', meetDatetime: 'zz-0' });
+    await storeRawRide({ id: 'b-unplaceable', meetDatetime: 'zz-1' });
+    await storeRawRide({ id: 'a-unplaceable', meetDatetime: 'zz-2' });
+
+    expect((await getRidesByTripId(tripId)).map((ride) => ride.id)).toEqual([
+      'm-placeable',
+      'a-unplaceable',
+      'b-unplaceable',
+      'c-unplaceable',
+    ]);
+  });
+
+  it('answers nothing for a ride that does not exist', async () => {
+    expect(await getRideById('ride-missing' as RideId)).toBeUndefined();
   });
 });

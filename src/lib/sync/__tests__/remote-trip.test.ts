@@ -20,9 +20,10 @@
  * @module lib/sync/__tests__/remote-trip.test
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
+import { argsOf, fakeSupabase, hasCall } from './support/fake-supabase';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { updateSettings } from '@/lib/db/repositories/settings-repository';
 import { readCursor, recordServerState } from '@/lib/sync/cursors';
@@ -420,5 +421,370 @@ describe('listRemoteTripsMissingLocally', () => {
     const missing = await listRemoteTripsMissingLocally(client);
 
     expect(missing[0]?.name).toHaveLength(200);
+  });
+});
+
+// ============================================================================
+// What goes over the wire
+// ============================================================================
+
+/** A server row for the recording double: the preview as the server holds it. */
+function previewRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: REMOTE_ID,
+    name: TRIP_NAME,
+    start_date: TRIP_START,
+    end_date: TRIP_END,
+    ...overrides,
+  };
+}
+
+/** Answers the existence check with `rows` and every update with one row. */
+function existenceClient(rows: unknown) {
+  return fakeSupabase((query) => {
+    if (hasCall(query, 'update')) {
+      return { data: [{ id: REMOTE_ID }], error: null };
+    }
+    return { data: rows, error: null };
+  });
+}
+
+describe('ensureRemoteTrip, recorded', () => {
+  it('reports no account when either the client or the user is missing', async () => {
+    const trip = await makeSharedTrip();
+    const { client } = fakeSupabase(() => ({ data: null, error: null }));
+
+    expect(await ensureRemoteTrip(client, null, trip.id)).toEqual({ status: 'unauthenticated' });
+    expect(await ensureRemoteTrip(null, 'user-1', trip.id)).toEqual({
+      status: 'unauthenticated',
+    });
+  });
+
+  it('reports a trip that is not on this device', async () => {
+    const { client, queries } = fakeSupabase(() => ({ data: null, error: null }));
+
+    expect(await ensureRemoteTrip(client, 'user-1', 'no-such-trip' as Trip['id'])).toEqual({
+      status: 'missing',
+    });
+    expect(queries).toHaveLength(0);
+  });
+
+  it('says why the sample trip cannot be shared', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    await updateSettings({ sampleTripId: trip.id });
+    const { client } = fakeSupabase(() => ({ data: null, error: null }));
+
+    expect(await ensureRemoteTrip(client, 'user-1', trip.id)).toEqual({
+      status: 'error',
+      message: 'The sample trip stays on this device and cannot be shared.',
+    });
+  });
+
+  it('inserts a trip that was never shared without looking anything up first', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    // Straight into Dexie, past the repository's sanitiser, as a peer's
+    // document can write it.
+    await db.trips.update(trip.id, { name: '  Brittany  ' });
+    const { client, described } = fakeSupabase(() => ({ data: { id: FRESH_ID }, error: null }));
+
+    const result = await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(result).toEqual({ status: 'ready', remoteTripId: FRESH_ID });
+    expect(described()).toEqual([
+      'trips.insert(' +
+        JSON.stringify({
+          local_id: trip.id,
+          owner_id: 'user-1',
+          name: 'Brittany',
+          start_date: TRIP_START,
+          end_date: TRIP_END,
+        }) +
+        ').select(id).single()',
+    ]);
+  });
+
+  it('clips a long name made only of whitespace without trimming it to nothing', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    await db.trips.update(trip.id, { name: ' '.repeat(260) });
+    const { client, queries } = fakeSupabase(() => ({ data: { id: FRESH_ID }, error: null }));
+
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    const [values] = argsOf(queries[0]!, 'insert') as [Record<string, unknown>];
+    expect(values.name).toBe(' '.repeat(200));
+  });
+
+  it('checks the linked row by id and reads its preview back', async () => {
+    const trip = await makeSharedTrip();
+    const { client, described } = existenceClient([previewRow()]);
+
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(described()).toEqual([
+      `trips.select(id, name, start_date, end_date).eq(id, ${REMOTE_ID}).limit(1)`,
+    ]);
+  });
+
+  it.each([
+    ['the name', { name: 'Renamed' }],
+    ['the start date', { start_date: '2026-07-14' }],
+    ['the end date', { end_date: '2026-07-23' }],
+    ['a missing name', { name: undefined }],
+  ])('republishes the preview when only %s differs', async (_label, overrides) => {
+    const trip = await makeSharedTrip();
+    const { client, described } = existenceClient([previewRow(overrides)]);
+
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(described()[1]).toBe(
+      'trips.update(' +
+        JSON.stringify({ name: TRIP_NAME, start_date: TRIP_START, end_date: TRIP_END }) +
+        `).eq(id, ${REMOTE_ID}).select(id)`,
+    );
+  });
+
+  it('treats a blank row as present, and republishes over it', async () => {
+    const trip = await makeSharedTrip();
+    const { client, described } = existenceClient([null]);
+
+    const result = await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(result).toEqual({ status: 'ready', remoteTripId: REMOTE_ID });
+    expect(described()).toHaveLength(2);
+    expect(described()[1]).toContain('trips.update(');
+  });
+
+  it('keeps the link when the existence check throws', async () => {
+    const trip = await makeSharedTrip();
+    const { client } = fakeSupabase(() => {
+      throw new Error('Failed to fetch');
+    });
+
+    expect(await ensureRemoteTrip(client, 'user-1', trip.id)).toEqual({
+      status: 'ready',
+      remoteTripId: REMOTE_ID,
+    });
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBe(REMOTE_ID);
+  });
+
+  it('says out loud that the row is gone, and forgets it even when the new insert fails', async () => {
+    const trip = await makeSharedTrip();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { client } = fakeSupabase((query) =>
+      hasCall(query, 'insert')
+        ? { data: null, error: { message: 'insert refused', code: '42501' } }
+        : { data: [], error: null },
+    );
+
+    const result = await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(result).toEqual({ status: 'error', message: 'insert refused' });
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBeUndefined();
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('is gone'), trip.id);
+  });
+
+  it.each([
+    ['no data at all', null],
+    ['an id that is not a string', { id: 5 }],
+  ])('refuses an insert answer with %s', async (_label, data) => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client } = fakeSupabase(() => ({ data, error: null }));
+
+    expect(await ensureRemoteTrip(client, 'user-1', trip.id)).toEqual({
+      status: 'error',
+      message: 'server did not return a trip id',
+    });
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBeUndefined();
+  });
+
+  it('recovers the existing row after a duplicate-key insert', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client, described } = fakeSupabase((query) =>
+      hasCall(query, 'insert')
+        ? { data: null, error: { message: 'duplicate key', code: '23505' } }
+        : { data: { id: 'existing-row' }, error: null },
+    );
+
+    const result = await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(result).toEqual({ status: 'ready', remoteTripId: 'existing-row' });
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBe('existing-row');
+    expect(described()[1]).toBe(
+      `trips.select(id).eq(owner_id, user-1).eq(local_id, ${trip.id}).maybeSingle()`,
+    );
+  });
+
+  it.each([
+    ['the lookup fails', { data: { id: 'existing-row' }, error: { message: 'denied' } }],
+    ['the lookup finds nothing', { data: null, error: null }],
+    ['the lookup returns no string id', { data: { id: 7 }, error: null }],
+  ])('reports the duplicate-key error when %s', async (_label, lookup) => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client } = fakeSupabase((query) =>
+      hasCall(query, 'insert')
+        ? { data: null, error: { message: 'duplicate key', code: '23505' } }
+        : lookup,
+    );
+
+    expect(await ensureRemoteTrip(client, 'user-1', trip.id)).toEqual({
+      status: 'error',
+      message: 'duplicate key',
+    });
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBeUndefined();
+  });
+
+  it('does not look for an existing row after any other insert error', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client, queries } = fakeSupabase((query) =>
+      hasCall(query, 'insert')
+        ? { data: null, error: { message: 'check violated', code: '23514' } }
+        : { data: { id: 'existing-row' }, error: null },
+    );
+
+    expect(await ensureRemoteTrip(client, 'user-1', trip.id)).toEqual({
+      status: 'error',
+      message: 'check violated',
+    });
+    expect(queries).toHaveLength(1);
+  });
+
+  it.each([
+    ['an Error', new Error('Failed to fetch'), 'Failed to fetch'],
+    ['a plain value', 'offline', 'offline'],
+  ])('reports an insert that throws %s', async (_label, thrown, message) => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client } = fakeSupabase(() => {
+      throw thrown;
+    });
+
+    expect(await ensureRemoteTrip(client, 'user-1', trip.id)).toEqual({
+      status: 'error',
+      message,
+    });
+  });
+});
+
+describe('syncRemoteTripMetadata, recorded', () => {
+  it('skips without a client', async () => {
+    const trip = await makeSharedTrip();
+
+    expect(await syncRemoteTripMetadata(null, trip)).toEqual({ status: 'skipped' });
+  });
+
+  it('reports a server error and warns', async () => {
+    const trip = await makeSharedTrip();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client } = fakeSupabase(() => ({ data: null, error: { message: 'denied' } }));
+
+    expect(await syncRemoteTripMetadata(client, trip)).toEqual({
+      status: 'error',
+      message: 'denied',
+    });
+    expect(warn).toHaveBeenCalledWith('[sync] trip preview update failed:', 'denied');
+  });
+
+  it('says so when the update matched no row', async () => {
+    const trip = await makeSharedTrip();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { client } = fakeSupabase(() => ({ data: [], error: null }));
+
+    await syncRemoteTripMetadata(client, trip);
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('was not updated'), REMOTE_ID);
+  });
+
+  it('warns with the text of a thrown non-Error', async () => {
+    const trip = await makeSharedTrip();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client } = fakeSupabase(() => {
+      throw 'offline';
+    });
+
+    expect(await syncRemoteTripMetadata(client, trip)).toEqual({
+      status: 'error',
+      message: 'offline',
+    });
+    expect(warn).toHaveBeenCalledWith('[sync] trip preview update failed:', 'offline');
+  });
+});
+
+describe('listRemoteTripsMissingLocally, recorded', () => {
+  it('lists nothing without a client', async () => {
+    expect(await listRemoteTripsMissingLocally(null)).toEqual([]);
+  });
+
+  it('reads the id and name of every visible trip', async () => {
+    const { client, described } = fakeSupabase(() => ({ data: [], error: null }));
+
+    await listRemoteTripsMissingLocally(client);
+
+    expect(described()).toEqual(['trips.select(id, name)']);
+  });
+
+  it('lists nothing when the read reports an error, even with rows', async () => {
+    const { client } = fakeSupabase(() => ({
+      data: [{ id: FRESH_ID, name: 'Alps' }],
+      error: { message: 'denied' },
+    }));
+
+    expect(await listRemoteTripsMissingLocally(client)).toEqual([]);
+  });
+
+  it('lists nothing when the read answers no array', async () => {
+    const { client } = fakeSupabase(() => ({ data: null, error: null }));
+
+    expect(await listRemoteTripsMissingLocally(client)).toEqual([]);
+  });
+
+  it('lists nothing when the read throws', async () => {
+    const { client } = fakeSupabase(() => {
+      throw new Error('Failed to fetch');
+    });
+
+    expect(await listRemoteTripsMissingLocally(client)).toEqual([]);
+  });
+
+  it('drops a row whose id is not a string', async () => {
+    const { client } = fakeSupabase(() => ({
+      data: [
+        { id: 5, name: 'Numbered' },
+        { id: FRESH_ID, name: 'Alps' },
+      ],
+      error: null,
+    }));
+
+    expect(await listRemoteTripsMissingLocally(client)).toEqual([{ id: FRESH_ID, name: 'Alps' }]);
   });
 });

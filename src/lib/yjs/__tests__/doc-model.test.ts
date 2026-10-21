@@ -9,16 +9,18 @@
  * @module lib/yjs/__tests__/doc-model.test
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import {
   DOC_SCHEMA_VERSION,
   deleteDocEntity,
+  isDeepEqual,
   migrateLegacyArrayCollections,
   readDocCollection,
   readDocSchemaVersion,
   replaceDocCollection,
+  stampDocSchemaVersion,
   upsertDocEntity,
 } from '@/lib/yjs/doc-model';
 
@@ -429,5 +431,161 @@ describe('migrateLegacyArrayCollections', () => {
 
     expect(migrateLegacyArrayCollections(doc)).toBe(false);
     expect(names(doc)).toEqual(['Alice']);
+  });
+});
+
+describe('readDocCollection: every collection has its own order', () => {
+  // Written in an order that is neither the sorted one nor the id order, so a
+  // missing or broken comparator shows. `d` lacks the field and sorts first,
+  // `a` and `c` tie on it and break on id.
+  it.each([
+    ['roomAssignments', 'startDate'],
+    ['transport', 'datetime'],
+    ['rides', 'meetDatetime'],
+    ['vehicles', 'name'],
+    ['activities', 'startDatetime'],
+    ['expenses', 'date'],
+  ] as const)('orders %s by %s, then by id', (collection, field) => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, collection, { id: 'c', [field]: '2026-07-02' });
+    upsertDocEntity(doc, collection, { id: 'b', [field]: '2026-07-01' });
+    upsertDocEntity(doc, collection, { id: 'a', [field]: '2026-07-02' });
+    upsertDocEntity(doc, collection, { id: 'd' });
+
+    expect(readDocCollection(doc, collection).map((row) => row.id)).toEqual([
+      'd',
+      'b',
+      'a',
+      'c',
+    ]);
+  });
+
+  it('orders rooms by their order number, then by id', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'rooms', { id: 'c', order: 3 });
+    upsertDocEntity(doc, 'rooms', { id: 'b', order: 1 });
+    upsertDocEntity(doc, 'rooms', { id: 'a', order: 3 });
+    upsertDocEntity(doc, 'rooms', { id: 'e', order: 2 });
+    upsertDocEntity(doc, 'rooms', { id: 'd' });
+
+    expect(readDocCollection(doc, 'rooms').map((row) => row.id)).toEqual([
+      'd',
+      'b',
+      'e',
+      'a',
+      'c',
+    ]);
+  });
+});
+
+describe('deleteDocEntity', () => {
+  it('removes the row it names and leaves the others', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: 'Alice' });
+    upsertDocEntity(doc, 'guests', { id: 'p2', name: 'Bob' });
+
+    deleteDocEntity(doc, 'guests', 'p1');
+
+    expect(readDocCollection(doc, 'guests').map((row) => row.id)).toEqual(['p2']);
+  });
+
+  it('does nothing for an id the collection does not hold', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: 'Alice' });
+
+    deleteDocEntity(doc, 'guests', 'ghost');
+
+    expect(readDocCollection(doc, 'guests').map((row) => row.id)).toEqual(['p1']);
+  });
+});
+
+describe('migrateLegacyArrayCollections: rows it cannot read', () => {
+  it('skips an empty slot and carries the rows around it', () => {
+    const doc = new Y.Doc();
+    doc.getArray('guests').push([null, { id: 'p1', name: 'Alice', color: '#f00' }]);
+
+    expect(migrateLegacyArrayCollections(doc)).toBe(true);
+    expect(readDocCollection(doc, 'guests').map((row) => row.id)).toEqual(['p1']);
+  });
+});
+
+describe('readDocCollection: a row missing its sort field, written first', () => {
+  it.each([
+    ['roomAssignments', 'startDate'],
+    ['transport', 'datetime'],
+    ['rides', 'meetDatetime'],
+    ['vehicles', 'name'],
+    ['activities', 'startDatetime'],
+    ['expenses', 'date'],
+  ] as const)('still sorts the %s row with no %s first', (collection, field) => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, collection, { id: 'd' });
+    upsertDocEntity(doc, collection, { id: 'b', [field]: '2026-07-01' });
+    upsertDocEntity(doc, collection, { id: 'a', [field]: '2026-07-02' });
+
+    expect(readDocCollection(doc, collection).map((row) => row.id)).toEqual(['d', 'b', 'a']);
+  });
+});
+
+describe('doc-model: the shape written to the shared document', () => {
+  it('orders guests by id', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'guests', { id: 'c', name: 'Carol' });
+    upsertDocEntity(doc, 'guests', { id: 'a', name: 'Alice' });
+    upsertDocEntity(doc, 'guests', { id: 'b', name: 'Bob' });
+
+    expect(readDocCollection(doc, 'guests').map((row) => row.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('files a row under its key and writes no id field inside it', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: 'Alice' });
+
+    const row = doc.getMap('guestsById').get('p1') as Y.Map<unknown>;
+    expect([...row.keys()]).toEqual(['name']);
+  });
+
+  it('deletes a cleared field from the row rather than storing undefined', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: 'Alice', notes: 'gluten free' });
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: 'Alice', notes: undefined });
+
+    const row = doc.getMap('guestsById').get('p1') as Y.Map<unknown>;
+    expect(row.has('notes')).toBe(false);
+    expect(readDocCollection(doc, 'guests')[0]).toEqual({ id: 'p1', name: 'Alice' });
+  });
+
+  it('reads a field a peer stored as undefined as absent', () => {
+    const doc = new Y.Doc();
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: 'Alice' });
+    (doc.getMap('guestsById').get('p1') as Y.Map<unknown>).set('notes', undefined);
+
+    expect(readDocCollection(doc, 'guests')[0]).not.toHaveProperty('notes');
+  });
+
+  it('stamps the schema version once, and does not rewrite it', () => {
+    const doc = new Y.Doc();
+    stampDocSchemaVersion(doc);
+    const updates = vi.fn();
+    doc.on('update', updates);
+
+    stampDocSchemaVersion(doc);
+
+    expect(updates).not.toHaveBeenCalled();
+    expect(readDocSchemaVersion(doc)).toBe(DOC_SCHEMA_VERSION);
+  });
+});
+
+describe('isDeepEqual', () => {
+  it('ignores key order inside objects, nested ones included', () => {
+    expect(isDeepEqual({ a: 1, b: { c: 2, d: 3 } }, { b: { d: 3, c: 2 }, a: 1 })).toBe(true);
+  });
+
+  it('tells a list from an object with the same keys', () => {
+    expect(isDeepEqual(['a'], { 0: 'a' })).toBe(false);
+  });
+
+  it('keeps the order of a list', () => {
+    expect(isDeepEqual([1, 2], [2, 1])).toBe(false);
   });
 });

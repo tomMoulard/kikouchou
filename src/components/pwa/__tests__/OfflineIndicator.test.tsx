@@ -12,6 +12,7 @@ import { render, screen, act } from '@testing-library/react';
 import { CheckCircle2, WifiOff } from 'lucide-react';
 
 import { OfflineIndicator } from '@/components/pwa/OfflineIndicator';
+import { statusVariants } from '@/components/ui/status.variants';
 
 // ============================================================================
 // Mocks
@@ -24,10 +25,11 @@ vi.mock('@/hooks/useOnlineStatus', () => ({
 }));
 
 // Mock react-i18next
+const { translate } = vi.hoisted(() => ({
+  translate: vi.fn((key: string, fallback?: string) => fallback ?? key),
+}));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, fallback?: string) => fallback ?? key,
-  }),
+  useTranslation: () => ({ t: translate }),
 }));
 
 // ============================================================================
@@ -322,3 +324,115 @@ describe('OfflineIndicator', () => {
     });
   });
 });
+
+// ============================================================================
+// Visibility over time
+// ============================================================================
+
+describe('OfflineIndicator over time', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function status(isOnline: boolean, hasRecentlyChanged: boolean): void {
+    mockUseOnlineStatus.mockReturnValue({ isOnline, hasRecentlyChanged });
+  }
+
+  it('is in place from the first frame when the page opens offline', () => {
+    status(false, false);
+
+    render(<OfflineIndicator />);
+
+    expect(screen.getByRole('status')).toHaveClass('translate-y-0', 'opacity-100');
+  });
+
+  it('is in place from the first frame while saying the connection is back', () => {
+    status(true, true);
+
+    render(<OfflineIndicator />);
+
+    expect(screen.getByRole('status')).toHaveClass('translate-y-0', 'opacity-100');
+  });
+
+  it('slides in from above when the connection drops', () => {
+    status(true, false);
+    const { rerender } = render(<OfflineIndicator className="a" />);
+
+    status(false, false);
+    rerender(<OfflineIndicator className="b" />);
+    expect(screen.getByRole('status')).toHaveClass('-translate-y-full', 'opacity-0');
+
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(screen.getByRole('status')).toHaveClass('translate-y-0', 'opacity-100');
+  });
+
+  it('goes away once the "back online" note has had its moment', () => {
+    status(true, true);
+    const { rerender } = render(<OfflineIndicator className="a" />);
+
+    status(true, false);
+    rerender(<OfflineIndicator className="b" />);
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('draws the pill and its words', () => {
+    status(false, false);
+    render(<OfflineIndicator />);
+
+    const pill = screen.getByRole('status').firstElementChild as HTMLElement;
+    expect(pill).toHaveClass(
+      'flex', 'items-center', 'gap-2', 'rounded-lg', 'px-4', 'py-2', 'text-sm', 'font-medium', 'shadow-lg',
+      'motion-safe:transition-colors', 'motion-safe:duration-300',
+    );
+    expect(pill.querySelector('svg')).toHaveClass('size-4', 'shrink-0', 'motion-safe:animate-pulse');
+    expect(screen.getByText('You are offline')).toBeInTheDocument();
+    expect(screen.getByText('Your changes are saved locally and the app works normally').parentElement).toHaveClass('flex', 'flex-col');
+    expect(translate).toHaveBeenCalledWith('pwa.offline', 'You are offline');
+    expect(translate).toHaveBeenCalledWith('pwa.offlineDescription', expect.any(String));
+  });
+
+  it('draws "back online" in the success tone', () => {
+    status(true, true);
+    render(<OfflineIndicator />);
+
+    const pill = screen.getByRole('status').firstElementChild as HTMLElement;
+    for (const cls of statusVariants({ tone: 'success' }).split(/\s+/).filter(Boolean)) {
+      expect(pill).toHaveClass(cls);
+    }
+    expect(pill.querySelector('svg')).toHaveClass('size-4', 'shrink-0');
+    expect(screen.getByText('Connection restored')).toBeInTheDocument();
+    expect(translate).toHaveBeenCalledWith('pwa.connectionRestored', 'Connection restored');
+  });
+
+  it('acts only on the latest status when it changes twice within a tick', () => {
+    status(true, true);
+    const { rerender } = render(<OfflineIndicator className="a" />);
+
+    status(true, false);
+    rerender(<OfflineIndicator className="b" />);
+    status(true, true);
+    rerender(<OfflineIndicator className="c" />);
+
+    // The superseded updates are dropped: no timer, fired one at a time, ever
+    // takes the note out of view.
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        vi.advanceTimersToNextTimer();
+      });
+      expect(screen.getByRole('status')).toHaveClass('translate-y-0', 'opacity-100');
+    }
+  });
+});
+

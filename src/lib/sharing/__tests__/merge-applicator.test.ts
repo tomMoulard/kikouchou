@@ -223,3 +223,42 @@ describe('applyMerge', () => {
     expect(result.conflictsKept).toBe(0);
   });
 });
+
+describe('applyMerge: rooms and phones', () => {
+  it('writes the rooms it applies and counts them', async () => {
+    const room = {
+      id: 'room-new' as RoomId,
+      tripId: TRIP_ID,
+      name: 'Attic',
+      capacity: 2,
+      order: 0,
+    };
+
+    const result = await applyMerge(
+      buildMergeResult({
+        autoApply: { persons: [], assignments: [], transports: [], rooms: [room] },
+      }),
+    );
+
+    expect(result.roomsUpserted).toBe(1);
+    expect(await db.rooms.get(room.id)).toEqual(room);
+  });
+
+  it('takes the phone a changeset carries over the one this device holds', async () => {
+    await db.persons.put({ ...makePerson('person-1'), phone: '+33 1 00 00 00 00' });
+
+    await applyMerge(
+      buildMergeResult({
+        autoApply: {
+          persons: [{ ...makePerson('person-1'), phone: '+33 6 12 34 56 78' }],
+          assignments: [],
+          transports: [],
+          rooms: [],
+        },
+      }),
+    );
+
+    expect((await db.persons.get('person-1'))?.phone).toBe('+33 6 12 34 56 78');
+  });
+});
+

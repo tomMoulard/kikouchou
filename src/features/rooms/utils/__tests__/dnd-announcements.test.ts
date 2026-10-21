@@ -307,3 +307,151 @@ describe('createRoomDragAnnouncements', () => {
     });
   });
 });
+
+// ============================================================================
+// Payloads it does not recognise, read through an echoing translator
+// ============================================================================
+
+describe('room drag announcements, for payloads that carry nothing it knows', () => {
+  /** Says which sentence was picked and with what, so the choice is visible. */
+  function echoContext(overrides: Partial<RoomDragAnnouncementContext> = {}) {
+    return createRoomDragAnnouncements({
+      t: (key, options) => (options ? `${key} ${JSON.stringify(options)}` : key),
+      rooms: [{ id: master.id, name: master.name, availableSpots: 2 }],
+      assignments: [bobInAttic],
+      personNameOf: (personId) => (personId === bob.id ? 'Bob' : undefined),
+      headcountOf: () => 2,
+      confirmsBeforeAssigning: false,
+      ...overrides,
+    });
+  }
+
+  const empty = (): Active =>
+    ({ id: 'x', data: { current: undefined }, rect: { current: {} } }) as unknown as Active;
+  const blankOver = (data: unknown): Over =>
+    ({ id: 'y', data: { current: data }, rect: {}, disabled: false }) as unknown as Over;
+  type Event<K extends 'onDragStart' | 'onDragOver' | 'onDragEnd'> = Parameters<
+    NonNullable<ReturnType<typeof createRoomDragAnnouncements>[K]>
+  >[0];
+
+  it('calls a drag with no payload an unknown guest', () => {
+    const announcements = echoContext();
+
+    expect(announcements.onDragStart({ active: empty() } as Event<'onDragStart'>)).toContain(
+      '"guest":"assignments.dragAnnouncements.unknownGuest"',
+    );
+  });
+
+  it('calls a pill whose guest has gone an unknown guest', () => {
+    const announcements = echoContext();
+
+    expect(
+      announcements.onDragStart({
+        active: draggedAssignment(aliceInAttic),
+      } as Event<'onDragStart'>),
+    ).toContain('"guest":"assignments.dragAnnouncements.unknownGuest"');
+  });
+
+  it('says a drag over a target with no payload is over nothing', () => {
+    const announcements = echoContext();
+
+    expect(
+      announcements.onDragOver({ active: empty(), over: blankOver(undefined) } as Event<'onDragOver'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.overNothing /);
+    expect(
+      announcements.onDragOver({ active: empty(), over: blankOver({}) } as Event<'onDragOver'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.overNothing /);
+  });
+
+  it('says a drop on a target with no payload moved nothing', () => {
+    const announcements = echoContext();
+
+    expect(
+      announcements.onDragEnd({ active: empty(), over: blankOver(undefined) } as Event<'onDragEnd'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.notMoved /);
+    expect(
+      announcements.onDragEnd({ active: draggedAssignment(), over: blankOver({}) } as Event<'onDragEnd'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.notMoved /);
+  });
+
+  it('counts one person for a drop that names nobody', () => {
+    const announcements = echoContext();
+
+    // Two spots, one person: one left. A guest of two would leave none.
+    expect(
+      announcements.onDragEnd({ active: empty(), over: overRoom(master) } as Event<'onDragEnd'>),
+    ).toContain('"spots":"assignments.dragAnnouncements.spotsLeft {\\"count\\":1}"');
+  });
+
+  it('names an unknown room for a stay in a room it was not told about', () => {
+    const announcements = echoContext();
+
+    expect(
+      announcements.onDragOver({
+        active: draggedAssignment(aliceInAttic),
+        over: overAssignment(bobInAttic),
+      } as Event<'onDragOver'>),
+    ).toContain('"room":"assignments.dragAnnouncements.unknownRoom"');
+    expect(
+      announcements.onDragEnd({
+        active: draggedAssignment(aliceInAttic),
+        over: overAssignment(bobInAttic),
+      } as Event<'onDragEnd'>),
+    ).toContain('"room":"assignments.dragAnnouncements.unknownRoom"');
+  });
+
+  it('does not call a guest bar dropped on a stay a swap', () => {
+    const announcements = echoContext();
+
+    expect(
+      announcements.onDragEnd({
+        active: draggedGuest(alice),
+        over: overAssignment(bobInAttic),
+      } as Event<'onDragEnd'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.notMoved /);
+  });
+
+  it('says a guest bar is only pending, and a pill moved, in the view that confirms first', () => {
+    const announcements = echoContext({ confirmsBeforeAssigning: true });
+
+    expect(
+      announcements.onDragEnd({ active: draggedGuest(alice), over: overRoom(master) } as Event<'onDragEnd'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.droppedPending /);
+    expect(
+      announcements.onDragEnd({
+        active: draggedAssignment(bobInAttic),
+        over: overRoom(master),
+      } as Event<'onDragEnd'>),
+    ).toMatch(/^assignments\.dragAnnouncements\.dropped /);
+  });
+});
+
+describe('room drag announcements, the fallbacks still name the guest', () => {
+  it('names the guest when it lands nowhere it knows', () => {
+    const announcements = createRoomDragAnnouncements({
+      t: (key, options) => (options ? `${key} ${JSON.stringify(options)}` : key),
+      rooms: [],
+      assignments: [],
+      personNameOf: () => undefined,
+      headcountOf: () => 1,
+      confirmsBeforeAssigning: false,
+    });
+    const target = {
+      id: 'y',
+      data: { current: {} },
+      rect: {},
+      disabled: false,
+    } as unknown as Over;
+
+    expect(
+      announcements.onDragOver?.({ active: draggedGuest(alice), over: target } as Parameters<
+        NonNullable<typeof announcements.onDragOver>
+      >[0]),
+    ).toBe('assignments.dragAnnouncements.overNothing {"guest":"Alice"}');
+    expect(
+      announcements.onDragEnd?.({ active: draggedGuest(alice), over: target } as Parameters<
+        NonNullable<typeof announcements.onDragEnd>
+      >[0]),
+    ).toBe('assignments.dragAnnouncements.notMoved {"guest":"Alice"}');
+  });
+});

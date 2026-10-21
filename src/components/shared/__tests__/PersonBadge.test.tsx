@@ -7,7 +7,7 @@
  * @module components/shared/__tests__/PersonBadge.test
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { PersonBadge } from '@/components/shared/PersonBadge';
@@ -241,6 +241,29 @@ describe('PersonBadge Interactive Behavior', () => {
     expect(badge).toHaveClass('cursor-pointer');
   });
 
+  it('differs from a plain badge by the interactive classes and nothing else', () => {
+    const { unmount } = render(<PersonBadge name="Plain" color="#000" />);
+    const plain = new Set(screen.getByText('Plain').className.split(/\s+/).filter(Boolean));
+    unmount();
+    render(<PersonBadge name="Clickable" color="#000" onClick={vi.fn()} />);
+    const clickable = new Set(screen.getByText('Clickable').className.split(/\s+/).filter(Boolean));
+
+    // The badge's own focus ring is all a plain badge has that the clickable
+    // one lacks: tailwind-merge swaps it for the interactive ring.
+    const plainOnly = [...plain].filter((name) => !clickable.has(name));
+    expect(plainOnly.filter((name) => !name.startsWith('focus-visible:'))).toEqual([]);
+    expect([...clickable].filter((name) => !plain.has(name)).sort()).toEqual(
+      [
+        'cursor-pointer',
+        'hover:opacity-80',
+        'focus:outline-none',
+        'focus-visible:ring-2',
+        'focus-visible:ring-ring',
+        'focus-visible:ring-offset-2',
+      ].sort(),
+    );
+  });
+
   it('is focusable when interactive', () => {
     const onClick = vi.fn();
 
@@ -432,5 +455,47 @@ describe('PersonBadge Prop Patterns', () => {
     const badge = screen.getByRole('status');
     expect(badge).toBeInTheDocument();
     expect(badge.textContent).toBe('');
+  });
+});
+
+describe('PersonBadge, more of it', () => {
+  it('repaints when the colour changes', () => {
+    const { rerender } = render(<PersonBadge name="Ana" color="#ffffff" />);
+    rerender(<PersonBadge name="Ana" color="#000000" />);
+
+    const badge = screen.getByRole('status');
+    expect(badge.style.backgroundColor).toBe('rgb(0, 0, 0)');
+    expect(badge.style.borderColor).toBe('transparent');
+  });
+
+  it('answers Enter and Space only, keeps them from scrolling, and reports to the newest handler', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<PersonBadge name="Ana" color="#ffffff" onClick={first} />);
+    rerender(<PersonBadge name="Ana" color="#ffffff" onClick={second} />);
+    const badge = screen.getByRole('button');
+
+    expect(fireEvent.keyDown(badge, { key: 'a' })).toBe(true);
+    expect(second).not.toHaveBeenCalled();
+    expect(fireEvent.keyDown(badge, { key: 'Enter' })).toBe(false);
+    expect(fireEvent.keyDown(badge, { key: ' ' })).toBe(false);
+    fireEvent.click(badge);
+
+    expect(second).toHaveBeenCalledTimes(3);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('keeps its click from reaching the row it sits in', () => {
+    const row = vi.fn();
+    render(
+      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- A stand-in for a clickable list row, only there to see whether the click bubbles.
+      <div onClick={row}>
+        <PersonBadge name="Ana" color="#ffffff" onClick={vi.fn()} />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(row).not.toHaveBeenCalled();
   });
 });

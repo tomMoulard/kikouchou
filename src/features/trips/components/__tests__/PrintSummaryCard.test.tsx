@@ -8,6 +8,7 @@
  * @module features/trips/components/__tests__/PrintSummaryCard.test
  */
 
+import { createContext, useContext } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { render, screen, userEvent } from '@/test/utils';
@@ -75,5 +76,39 @@ describe('PrintSummaryCard', () => {
 
     expect(screen.getByRole('button', { name: /settings.printSummary/ })).toBeDisabled();
     expect(screen.getByText('settings.printSummaryNoTrip')).toBeInTheDocument();
+  });
+
+  it('names the sheet and says what is on it', () => {
+    setTrip(mockTrip);
+    render(<PrintSummaryCard />, { withProviders: false });
+
+    expect(screen.getByText('summary.title')).toHaveClass('text-base');
+    expect(screen.getByText('summary.description')).toBeInTheDocument();
+    expect(screen.queryByText('settings.printSummaryNoTrip')).not.toBeInTheDocument();
+  });
+
+  it('opens the summary of the trip open now, not the one open first', async () => {
+    // The card is memoised and takes no props, so the trip has to reach it
+    // through a real context for a switch to re-render it.
+    const TripSwitch = createContext<Trip>(mockTrip);
+    vi.mocked(useTripContext).mockImplementation(
+      () => ({ currentTrip: useContext(TripSwitch) }) as ReturnType<typeof useTripContext>,
+    );
+    const other: Trip = { ...mockTrip, id: 'trip-2' as Trip['id'] };
+    const { rerender } = render(
+      <TripSwitch.Provider value={mockTrip}>
+        <PrintSummaryCard />
+      </TripSwitch.Provider>,
+      { withProviders: false },
+    );
+
+    rerender(
+      <TripSwitch.Provider value={other}>
+        <PrintSummaryCard />
+      </TripSwitch.Provider>,
+    );
+    await userEvent.setup().click(screen.getByRole('button', { name: /settings.printSummary/ }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-2/summary');
   });
 });

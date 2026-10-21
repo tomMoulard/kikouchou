@@ -6,7 +6,7 @@
  *
  * @module lib/db/repositories/__tests__/transport-repository.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createTransport,
@@ -1078,5 +1078,127 @@ describe('getTransportsByDriverId', () => {
 
     // Only transport from trip1 where driver1 is actually the driver
     expect(transports).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+// Rows other writers stored, and the deprecated writers
+// ============================================================================
+
+describe('transports stored by other writers', () => {
+  async function storeRaw(
+    tripId: TripId,
+    personId: PersonId,
+    id: string,
+    datetime: string,
+  ): Promise<void> {
+    await db.transports.put({
+      id: id as TransportId,
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime,
+      location: 'Station',
+      needsPickup: false,
+    });
+  }
+
+  it('orders by instant whatever the spelling, unplaceable rows last', async () => {
+    const tripId = await createTestTrip();
+    const personId = await createTestPerson(tripId);
+    // Stored order is by characters: the two unplaceable rows first, then
+    // `T10…Z`, `T11…Z`, `T12…+02:00`, `T12…+05:00`.
+    await storeRaw(tripId, personId, 'unplaceable-1', '!garbage');
+    await storeRaw(tripId, personId, 'unplaceable-2', '!nonsense');
+    await storeRaw(tripId, personId, 'tie-first', '2024-07-15T10:00:00.000Z');
+    await storeRaw(tripId, personId, 'late', '2024-07-15T11:00:00.000Z');
+    await storeRaw(tripId, personId, 'tie-second', '2024-07-15T12:00:00+02:00');
+    await storeRaw(tripId, personId, 'early', '2024-07-15T12:00:00+05:00');
+
+    expect((await getTransportsByTripId(tripId)).map((t) => t.id)).toEqual([
+      'early',
+      'tie-first',
+      'tie-second',
+      'late',
+      'unplaceable-1',
+      'unplaceable-2',
+    ]);
+  });
+
+  it('reads one leg back by id, as a UTC instant', async () => {
+    const tripId = await createTestTrip();
+    const personId = await createTestPerson(tripId);
+    await storeRaw(tripId, personId, 'leg-offset', '2024-07-15T12:00:00+02:00');
+
+    expect(await getTransportById('leg-offset' as TransportId)).toEqual({
+      id: 'leg-offset',
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: '2024-07-15T10:00:00.000Z',
+      location: 'Station',
+      needsPickup: false,
+    });
+    expect(await getTransportById('leg-missing' as TransportId)).toBeUndefined();
+  });
+
+  it('sanitises each text field updateTransport is given', async () => {
+    const tripId = await createTestTrip();
+    const personId = await createTestPerson(tripId);
+    const transport = await createTransport(tripId, createTestTransportData(personId));
+
+    await updateTransport(transport.id, {
+      location: '  Gare de Lyon  ',
+      startLocation: '  Paris  ',
+      transportNumber: '  TGV 8541  ',
+      notes: '  Platform 3  ',
+    });
+
+    expect(await db.transports.get(transport.id)).toMatchObject({
+      location: 'Gare de Lyon',
+      startLocation: 'Paris',
+      transportNumber: 'TGV 8541',
+      notes: 'Platform 3',
+    });
+  });
+
+  it('leaves the fields updateTransport is not given', async () => {
+    const tripId = await createTestTrip();
+    const personId = await createTestPerson(tripId);
+    const transport = await createTransport(
+      tripId,
+      createTestTransportData(personId, {
+        startLocation: 'Paris',
+        transportNumber: 'TGV 8541',
+        notes: 'Platform 3',
+      }),
+    );
+
+    await updateTransport(transport.id, { needsPickup: true });
+
+    expect(await db.transports.get(transport.id)).toMatchObject({
+      startLocation: 'Paris',
+      transportNumber: 'TGV 8541',
+      notes: 'Platform 3',
+      needsPickup: true,
+    });
+  });
+
+  it('names the leg it failed to create', async () => {
+    const tripId = await createTestTrip();
+    const personId = await createTestPerson(tripId);
+    vi.spyOn(db.transports, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      createTransport(tripId, createTestTransportData(personId)),
+    ).rejects.toThrow(`Failed to create arrival transport for person ${personId} at "Gare Montparnasse"`);
+  });
+
+  it('names the leg it failed to delete', async () => {
+    vi.spyOn(db.transports, 'delete').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(deleteTransport('leg-1' as TransportId)).rejects.toThrow(
+      'Failed to delete transport leg-1',
+    );
   });
 });

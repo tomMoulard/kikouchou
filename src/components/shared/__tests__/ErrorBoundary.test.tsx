@@ -302,6 +302,47 @@ describe('ErrorBoundary', () => {
     });
   });
 
+  describe('Retry on a stale chunk', () => {
+    // Re-rendering re-throws a failed dynamic import forever, so the button
+    // has to reload. `window.location` is unforgeable and cannot be spied on,
+    // and jsdom cannot navigate: it reports the attempt on its virtual console
+    // instead, which is the only trace a reload leaves under test. The handle
+    // is jsdom's own; if a jsdom upgrade renames it, this fails rather than
+    // passing blind.
+    it('reloads the tab when the reader taps retry', async () => {
+      reloadMock.mockReturnValue('cooldown');
+      const { user } = render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+      const virtualConsole = (
+        window as unknown as {
+          readonly _virtualConsole?: {
+            on(event: 'jsdomError', listener: (error: Error) => void): void;
+            off(event: 'jsdomError', listener: (error: Error) => void): void;
+          };
+        }
+      )._virtualConsole;
+      expect(virtualConsole).toBeDefined();
+      const navigations: string[] = [];
+      const listen = (error: Error): void => {
+        if (error.message.startsWith('Not implemented: navigation')) navigations.push(error.message);
+      };
+      virtualConsole?.on('jsdomError', listen);
+
+      try {
+        await user.click(screen.getByRole('button', { name: /common.retry/i }));
+      } finally {
+        virtualConsole?.off('jsdomError', listen);
+      }
+
+      expect(navigations).toHaveLength(1);
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+  });
+
   describe('Custom className', () => {
     it('applies custom className to error container', () => {
       render(
@@ -396,5 +437,313 @@ describe('ErrorBoundary reset on navigation', () => {
     expect(await screen.findByText('rooms ok')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     spy.mockRestore();
+  });
+});
+
+// ============================================================================
+// Callbacks, retry and the development details
+// ============================================================================
+
+describe('ErrorBoundary, more of it', () => {
+  let consoleError: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    reloadMock.mockClear();
+    reloadMock.mockReturnValue('reloaded');
+    reportMock.mockClear();
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  /**
+   * Throws until `heal()` is called, so a retry can succeed. React renders a
+   * throwing tree a second time on its own, so "throw once" is not enough.
+   */
+  function makeFlaky(): { Flaky: () => ReactElement; heal: () => void } {
+    let failing = true;
+    return {
+      Flaky: function Flaky(): ReactElement {
+        if (failing) {
+          throw new Error('render fails');
+        }
+        return <div>recovered</div>;
+      },
+      heal: () => {
+        failing = false;
+      },
+    };
+  }
+
+  it('logs a throwing onError and still shows the fallback', () => {
+    const callbackError = new Error('Callback error');
+    render(
+      <ErrorBoundary onError={() => { throw callbackError; }}>
+        <ThrowingComponent message="Test error" />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'ErrorBoundary: onError callback threw an error:',
+      callbackError,
+    );
+  });
+
+  it('logs the caught error and its component stack in development', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowingComponent message="Dev error" />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'ErrorBoundary caught an error:',
+      expect.objectContaining({ message: 'Dev error' }),
+    );
+    expect(consoleError).toHaveBeenCalledWith('Component stack:', expect.any(String));
+  });
+
+  it('reports the error with its component stack', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowingComponent message="Reported" />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(reportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Reported' }),
+      { source: 'ErrorBoundary', component_stack: expect.stringContaining('ThrowingComponent') },
+    );
+  });
+
+  it('renders the children again on retry', async () => {
+    const { Flaky, heal } = makeFlaky();
+    const { user } = render(
+      <ErrorBoundary>
+        <Flaky />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    heal();
+
+    await user.click(screen.getByRole('button', { name: /common.retry/i }));
+
+    expect(screen.getByText('recovered')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('logs a throwing onReset and still retries', async () => {
+    const { Flaky, heal } = makeFlaky();
+    const resetError = new Error('Reset error');
+    const { user } = render(
+      <ErrorBoundary onReset={() => { throw resetError; }}>
+        <Flaky />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+    heal();
+
+    await user.click(screen.getByRole('button', { name: /common.retry/i }));
+
+    expect(consoleError).toHaveBeenCalledWith(
+      'ErrorBoundary: onReset callback threw an error:',
+      resetError,
+    );
+    expect(screen.getByText('recovered')).toBeInTheDocument();
+  });
+
+  it('does not re-render a stale chunk on retry, because only a reload can fix it', async () => {
+    reloadMock.mockReturnValue('cooldown');
+    const { user } = render(
+      <ErrorBoundary>
+        <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: /common.retry/i }));
+
+    // Re-rendering would throw the cached rejection again and ask the guard a
+    // second time.
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('keeps the caught error when the boundary re-renders on the same route', () => {
+    const { rerender } = render(
+      <ErrorBoundary className="a">
+        <ThrowingComponent message="Sticky" />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    rerender(
+      <ErrorBoundary className="b">
+        <ThrowingComponent message="Sticky" />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByRole('alert')).toHaveClass('b');
+  });
+
+  it('lays out its fallback and names each development detail', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowingComponent message="Detailed failure" />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveClass(
+      'flex', 'flex-col', 'items-center', 'justify-center', 'px-4', 'py-12', 'text-center', 'max-w-md', 'mx-auto',
+    );
+    expect(screen.getByText('errors.dev.details')).toBeInTheDocument();
+    expect(screen.getByText('errors.dev.error')).toBeInTheDocument();
+    expect(screen.getByText('Detailed failure')).toBeInTheDocument();
+    expect(screen.getByText('errors.dev.stack')).toBeInTheDocument();
+    expect(screen.getByText('errors.dev.componentStack')).toBeInTheDocument();
+  });
+
+  it('leaves out the parts of the details an error does not have', () => {
+    function ThrowsBare(): never {
+      const error = new Error('');
+      error.stack = '';
+      throw error;
+    }
+    render(
+      <ErrorBoundary>
+        <ThrowsBare />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(screen.queryByText('errors.dev.error')).not.toBeInTheDocument();
+    expect(screen.queryByText('errors.dev.stack')).not.toBeInTheDocument();
+    expect(screen.getByText('errors.dev.componentStack')).toBeInTheDocument();
+    expect(screen.getByText('errors.dev.details')).toBeInTheDocument();
+  });
+
+  it('draws the details only once it has something to put in them', () => {
+    // React hands over the component stack in componentDidCatch, after the
+    // fallback's first paint. `onError` runs there, so it sees that paint.
+    function throwing(message: string) {
+      return function ThrowsWithoutStack(): never {
+        const error = new Error(message);
+        error.stack = '';
+        throw error;
+      };
+    }
+    const sawDetails: boolean[] = [];
+    const onError = (): void => {
+      sawDetails.push(document.querySelector('details') !== null);
+    };
+    const Bare = throwing('');
+    const WithMessage = throwing('No stack here');
+
+    const bare = render(
+      <ErrorBoundary onError={onError}>
+        <Bare />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+    bare.unmount();
+    render(
+      <ErrorBoundary onError={onError}>
+        <WithMessage />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    // Nothing to show for a bare error until the component stack arrives; a
+    // message is worth showing at once.
+    expect(sawDetails).toEqual([false, true]);
+  });
+
+  it('shows the message of an error that has no stack', () => {
+    function ThrowsNoStack(): never {
+      const error = new Error('No stack here');
+      error.stack = '';
+      throw error;
+    }
+    render(
+      <ErrorBoundary>
+        <ThrowsNoStack />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(screen.getByText('errors.dev.error')).toBeInTheDocument();
+    expect(screen.queryByText('errors.dev.stack')).not.toBeInTheDocument();
+  });
+
+  it('shows the stack of an error that has no message', () => {
+    function ThrowsNoMessage(): never {
+      throw new Error('');
+    }
+    render(
+      <ErrorBoundary>
+        <ThrowsNoMessage />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(screen.queryByText('errors.dev.error')).not.toBeInTheDocument();
+    expect(screen.getByText('errors.dev.stack')).toBeInTheDocument();
+  });
+
+  it('survives a thrown value that is not an error', () => {
+    function ThrowsNull(): never {
+      throw null;
+    }
+    render(
+      <ErrorBoundary>
+        <ThrowsNull />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('errors.dev.error')).not.toBeInTheDocument();
+    expect(screen.getByText('errors.dev.componentStack')).toBeInTheDocument();
+  });
+});
+
+describe('ErrorBoundary without callbacks', () => {
+  it('reports no failing callback when it was given none', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let failing = true;
+    function Flaky(): ReactElement {
+      if (failing) throw new Error('render fails');
+      return <div>recovered</div>;
+    }
+    const { user } = render(
+      <ErrorBoundary>
+        <Flaky />
+      </ErrorBoundary>,
+      { withProviders: false },
+    );
+    failing = false;
+
+    await user.click(screen.getByRole('button', { name: /common.retry/i }));
+
+    expect(screen.getByText('recovered')).toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalledWith(
+      'ErrorBoundary: onError callback threw an error:',
+      expect.anything(),
+    );
+    expect(consoleError).not.toHaveBeenCalledWith(
+      'ErrorBoundary: onReset callback threw an error:',
+      expect.anything(),
+    );
+    consoleError.mockRestore();
   });
 });

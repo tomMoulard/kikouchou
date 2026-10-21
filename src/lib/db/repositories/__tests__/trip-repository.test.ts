@@ -7,6 +7,8 @@
  * @module lib/db/repositories/__tests__/trip-repository.test
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import Dexie from 'dexie';
+
 import { db } from '@/lib/db/database';
 import {
   createTrip,
@@ -840,5 +842,131 @@ describe('getTripsByLocation', () => {
     const results = await getTripsByLocation('Beach House');
 
     expect(results).toHaveLength(1);
+  });
+});
+
+describe('trip-repository, in detail', () => {
+  it('keeps the last collision as the cause when every retry collides', async () => {
+    const existingTrip = await createTrip(createValidTripData({ name: 'Existing Trip' }));
+    vi.spyOn(dbUtils, 'createShareId').mockReturnValue(existingTrip.shareId);
+
+    const failure = await createTrip(createValidTripData({ name: 'Will Fail' })).catch(
+      (error: unknown) => error,
+    );
+
+    expect((failure as Error).cause).toBeInstanceOf(Dexie.ConstraintError);
+  });
+
+  it('accepts a trip that starts and ends on the same day', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-15') }),
+    );
+
+    expect(trip.endDate).toBe('2024-07-15');
+  });
+
+  it('lists trips newest first whatever their ids', async () => {
+    await db.trips.bulkPut([
+      { ...createValidTripData({ startDate: isoDate('2023-07-01') }), id: 'b-old', shareId: 's-old', createdAt: 1, updatedAt: 1 },
+      { ...createValidTripData({ startDate: isoDate('2025-07-01') }), id: 'a-new', shareId: 's-new', createdAt: 1, updatedAt: 1 },
+      { ...createValidTripData({ startDate: isoDate('2024-07-01') }), id: 'c-mid', shareId: 's-mid', createdAt: 1, updatedAt: 1 },
+    ] as never);
+
+    expect((await getAllTrips()).map((trip) => trip.id)).toEqual(['a-new', 'c-mid', 'b-old']);
+  });
+
+  it('trims a description it is given on update', async () => {
+    const trip = await createTrip(createValidTripData());
+
+    await updateTrip(trip.id, { description: '  By the sea  ' });
+
+    expect((await getTripById(trip.id))?.description).toBe('By the sea');
+  });
+
+  it('searches from two characters, whatever their case', async () => {
+    await createTrip(createValidTripData({ location: 'Lyon' }));
+
+    expect((await getTripsByLocation('LY')).map((trip) => trip.location)).toEqual(['Lyon']);
+  });
+
+  it('suggests ten places at most', async () => {
+    for (let index = 0; index < 11; index += 1) {
+      await createTrip(createValidTripData({ name: `Trip ${index}`, location: `Lyon ${index}` }));
+    }
+
+    expect(await getTripsByLocation('lyon')).toHaveLength(10);
+  });
+});
+
+describe('trip-repository, the remaining edges', () => {
+  it('does not compare a window that has no end yet', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: '' as ISODateString }),
+    );
+
+    expect(trip.endDate).toBe('');
+  });
+
+  it('carries a whole-trip booking across when only the end moves', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
+    const person = await createPerson(trip.id, { name: 'Tom', color: hexColor('#6366f1') });
+    const booking = await createAssignment(trip.id, {
+      roomId: room.id,
+      personId: person.id,
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
+    });
+
+    await updateTrip(trip.id, { endDate: isoDate('2024-07-25') });
+
+    expect((await db.roomAssignments.get(booking.id))?.endDate).toBe('2024-07-25');
+  });
+
+  it('trims the name and place it is given, and keeps the description it is not', async () => {
+    const trip = await createTrip(createValidTripData({ description: 'By the sea' }));
+
+    await updateTrip(trip.id, { name: '  Brittany  ', location: '  Vannes  ' });
+
+    expect(await getTripById(trip.id)).toMatchObject({
+      name: 'Brittany',
+      location: 'Vannes',
+      description: 'By the sea',
+    });
+  });
+
+  it('suggests the most recent trip for a place, whatever the ids', async () => {
+    const base = { shareId: '', createdAt: 1, updatedAt: 1, location: 'Lyon' };
+    await db.trips.bulkPut([
+      { ...base, id: 'a-old', shareId: 's-old', name: 'Old', startDate: '2023-07-01', endDate: '2023-07-08' },
+      { ...base, id: 'b-new', shareId: 's-new', name: 'New', startDate: '2025-07-01', endDate: '2025-07-08' },
+    ] as never);
+
+    expect((await getTripsByLocation('lyon')).map((trip) => trip.name)).toEqual(['New']);
+  });
+
+  it('reads a stored place with stray spaces as the same place', async () => {
+    const base = { createdAt: 1, updatedAt: 1, endDate: '2025-07-08' };
+    await db.trips.bulkPut([
+      { ...base, id: 'a', shareId: 's-a', name: 'First', startDate: '2025-07-01', location: '  Lyon  ' },
+      { ...base, id: 'b', shareId: 's-b', name: 'Second', startDate: '2024-07-01', location: 'lyon' },
+    ] as never);
+
+    expect((await getTripsByLocation('lyon')).map((trip) => trip.name)).toEqual(['First']);
+  });
+
+  it('takes the sync bookkeeping with the trip', async () => {
+    const trip = await createTrip(createValidTripData());
+    await db.yjsOutbox.add({ tripId: trip.id, update: new Uint8Array([1]) } as never);
+    await db.tripMembers.put({ tripId: trip.id, userId: 'user-1', role: 'owner' } as never);
+    await db.syncCursors.put({ tripId: trip.id, cursor: 3 } as never);
+
+    await deleteTrip(trip.id);
+
+    expect(await db.yjsOutbox.where('tripId').equals(trip.id).count()).toBe(0);
+    expect(await db.tripMembers.where('tripId').equals(trip.id).count()).toBe(0);
+    expect(await db.syncCursors.where('tripId').equals(trip.id).count()).toBe(0);
   });
 });

@@ -88,5 +88,24 @@ export default {
    */
   dryRunTimeoutMinutes: 20,
 
+  /**
+   * Stryker sets each mutant's limit from the covering tests' net run time
+   * (x1.5 + 5000 ms), but every mutant run also re-imports the page's module
+   * graph, which that net time leaves out. The first full run, at 7 runners on
+   * 8 cores, reported 20,394 Timeouts. A re-test of the 5 worst files at 60s
+   * and 3 runners (2026-10-16) turned 3,196 Timeouts into 1,721 Killed, 1,470
+   * Survived and 5 Timeout: a short limit hides survivors and counts them as
+   * kills. 60s costs little, because a real hang is rare.
+   */
+  timeoutMS: 60000,
+
+  /**
+   * Three runners on an 8-core machine. More made the machine overload, which
+   * produced false Timeouts and survivors whose covering tests never ran
+   * (`testsCompleted` below the `coveredBy` count). Pass `--concurrency` to
+   * change it for one run.
+   */
+  concurrency: 3,
+
   tempDirName: '.stryker-tmp',
 };

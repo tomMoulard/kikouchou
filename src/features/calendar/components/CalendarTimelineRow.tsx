@@ -39,6 +39,34 @@ const TRANSPORT_PILL_MIN_WIDTH_PX = 56;
 const TRANSPORT_PILL_WITH_RIDE_MIN_WIDTH_PX = 72;
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Drops the second of two periods at the end of a label.
+ *
+ * A French short month carries its own period ("8 janv."), so a stay range
+ * that ends on one already closes the sentence, and the aria template's own
+ * closing "." printed "8 janv.." on the pill.
+ *
+ * @param text - The label
+ * @returns The label, never ending in two periods
+ */
+function dropDoubledPeriod(text: string): string {
+  return text.endsWith('..') ? text.slice(0, -1) : text;
+}
+
+/**
+ * Ends a label as a sentence, without doubling a period it already ends in.
+ *
+ * @param text - The label, with or without a closing period
+ * @returns The label, ending in exactly one period
+ */
+function closeSentence(text: string): string {
+  return text.endsWith('.') ? text : `${text}.`;
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -231,10 +259,12 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
             : '';
       let assignmentAria =
         isAssignment && item.kind === 'assignment' && assignmentRange
-          ? t('calendar.timeline.assignmentBarAria', '{{room}}. Stay {{range}}.', {
-              room: item.label,
-              range: assignmentRange,
-            })
+          ? dropDoubledPeriod(
+              t('calendar.timeline.assignmentBarAria', '{{room}}. Stay {{range}}.', {
+                room: item.label,
+                range: assignmentRange,
+              }),
+            )
           : isAssignment
             ? item.label
             : '';
@@ -259,8 +289,12 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
             return rideLabel === undefined ? base : `${base} · ${rideLabel}`;
           })
           .join('; ');
-        assignmentTitle = assignmentTitle ? `${assignmentTitle}. ${legSummaries}` : legSummaries;
-        assignmentAria = assignmentAria ? `${assignmentAria} ${legSummaries}` : legSummaries;
+        assignmentTitle = assignmentTitle
+          ? `${closeSentence(assignmentTitle)} ${legSummaries}`
+          : legSummaries;
+        assignmentAria = assignmentAria
+          ? `${assignmentAria} ${legSummaries}`
+          : legSummaries;
       }
 
       const orphanBg =

@@ -195,4 +195,82 @@ describe('TripSetupChecklist', () => {
     await user.click(screen.getByRole('button', { name: 'New guest' }));
     expect(onAddGuests).toHaveBeenCalledTimes(1);
   });
+
+  it('fills the bar to the share of steps done', () => {
+    renderChecklist();
+
+    const fill = screen.getByRole('progressbar').firstElementChild;
+    expect(fill).toHaveStyle({ width: '25%' });
+    expect(fill).toHaveClass('h-full', 'rounded-full', 'bg-success');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemin', '0');
+  });
+
+  it('leaves the bar empty for a checklist with no steps', () => {
+    renderChecklist({ steps: [], doneCount: 0, stepCount: 0, isComplete: true });
+
+    expect(screen.getByRole('progressbar').firstElementChild).toHaveStyle({ width: '0%' });
+  });
+
+  it('greys a finished step and ticks it, and keeps an open one readable', () => {
+    renderChecklist();
+
+    const done = screen.getByText('Add guests');
+    expect(done).toHaveClass('text-sm', 'font-medium', 'text-muted-foreground');
+    const doneIcon = done.closest('li')!.firstElementChild;
+    expect(doneIcon).toHaveClass('bg-success-surface', 'text-success-on-surface', 'rounded-full');
+
+    const open = screen.getByText('Add rooms');
+    expect(open).toHaveClass('text-foreground');
+    expect(open).not.toHaveClass('text-muted-foreground');
+    expect(open.closest('li')!.firstElementChild).toHaveClass('bg-muted', 'text-muted-foreground');
+  });
+
+  it('points at the first unfinished step and keeps the others quiet', () => {
+    renderChecklist();
+
+    expect(screen.getByRole('button', { name: 'New room' })).toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'New room' })).toHaveAttribute('data-variant', 'default');
+    expect(screen.getByRole('button', { name: 'Assign rooms' })).not.toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'Assign rooms' })).toHaveAttribute(
+      'data-variant',
+      'outline',
+    );
+    expect(screen.getByRole('button', { name: 'New arrival' })).not.toHaveClass('bg-primary');
+  });
+
+  it('names the progress bar and reads a finished step as one phrase', () => {
+    renderChecklist();
+
+    expect(screen.getByRole('progressbar', { name: 'Trip setup progress' })).toBeInTheDocument();
+    expect(screen.getByText('Add guests')).toHaveTextContent(/^Add guests done$/);
+  });
+
+  it('takes the class its caller gives it', () => {
+    render(
+      <TripSetupChecklist
+        className="mt-6"
+        checklist={makeFreshChecklist()}
+        onAddGuests={vi.fn()}
+        onAddRooms={vi.fn()}
+        onAssignRooms={vi.fn()}
+        onAddArrivals={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByRole('heading', { name: 'Set this trip up' }).closest('.mt-6');
+    expect(card).toHaveClass('mx-auto', 'w-full', 'max-w-lg');
+    expect(screen.getByText('The calendar fills in as you work through these steps.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('1 of 4 done');
+  });
+
+  it('counts a step with a total of nothing as zero of zero', () => {
+    renderChecklist({
+      steps: [{ key: 'assignments', count: 1, isDone: false }],
+      doneCount: 0,
+      stepCount: 1,
+      isComplete: false,
+    });
+
+    expect(screen.getByText('1 of 0 with a room')).toBeInTheDocument();
+  });
 });

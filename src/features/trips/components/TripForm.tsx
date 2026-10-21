@@ -112,6 +112,13 @@ const DEFAULT_ROOM_CAPACITY = 1;
  */
 const MIN_ROOM_CAPACITY = 1;
 
+/**
+ * Where focus goes when the first room row is removed: there is no row above
+ * it, so the button that adds a room stands in. A symbol, so no room id can
+ * ever be mistaken for it.
+ */
+const ADD_ROOM_FOCUS = Symbol('add-room');
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -657,12 +664,18 @@ const TripForm = memo(function TripForm({
   /** Live inputs, by row id — the guest list's arrangement, one list further. */
   const roomInputsRef = useRef(new Map<string, HTMLInputElement>());
   /** The row to focus once the render that adds or removes one has committed. */
-  const pendingRoomFocusRef = useRef<string | null>(null);
+  const pendingRoomFocusRef = useRef<string | typeof ADD_ROOM_FOCUS | null>(null);
+  /** Takes focus when the first row is removed and no row is left above it. */
+  const addRoomButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const pendingId = pendingRoomFocusRef.current;
     if (pendingId === null) {return;}
     pendingRoomFocusRef.current = null;
+    if (pendingId === ADD_ROOM_FOCUS) {
+      addRoomButtonRef.current?.focus();
+      return;
+    }
     roomInputsRef.current.get(pendingId)?.focus();
   });
 
@@ -968,7 +981,7 @@ const TripForm = memo(function TripForm({
     setRooms((prev) => {
       const index = prev.findIndex((room) => room.id === id);
       if (index < 0) {return prev;}
-      pendingRoomFocusRef.current = prev[index - 1]?.id ?? null;
+      pendingRoomFocusRef.current = prev[index - 1]?.id ?? ADD_ROOM_FOCUS;
       return prev.filter((room) => room.id !== id);
     });
   }, []);
@@ -1505,7 +1518,13 @@ const TripForm = memo(function TripForm({
             })}
           </ul>
 
-          <Button type="button" variant="outline" size="sm" onClick={handleAddRoom}>
+          <Button
+            ref={addRoomButtonRef}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddRoom}
+          >
             <Plus className="size-4" aria-hidden="true" />
             {t('trips.addRoom', 'Add room')}
           </Button>

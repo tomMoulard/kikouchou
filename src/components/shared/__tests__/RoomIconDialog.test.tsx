@@ -100,3 +100,41 @@ describe('RoomIconDialog', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
+
+describe('RoomIconDialog, more of it', () => {
+  it('sizes the trigger to sit beside the name field', () => {
+    render(<RoomIconDialog onChange={vi.fn()} className="extra" />, { withProviders: false });
+
+    expect(iconButton()).toHaveClass('size-9', 'shrink-0', 'extra');
+  });
+
+  it('titles the dialog, explains it, and keeps the picker label for screen readers only', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<RoomIconDialog onChange={vi.fn()} />, { withProviders: false });
+
+    await user.click(iconButton());
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('rooms.icon', { selector: 'h2' })).toBeInTheDocument();
+    expect(within(dialog).getByText('rooms.iconHint')).toBeInTheDocument();
+    const label = dialog.querySelector('label');
+    expect(label).toHaveClass('sr-only');
+    expect(label?.parentElement?.parentElement).toHaveClass('max-h-[60vh]', 'overflow-y-auto');
+  });
+
+  it('reports the pick to the newest onChange', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<RoomIconDialog onChange={first} />, { withProviders: false });
+    rerender(<RoomIconDialog onChange={second} />);
+
+    await user.click(iconButton());
+    await user.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'rooms.icons.tent' }));
+
+    expect(second).toHaveBeenCalledWith('tent');
+    expect(first).not.toHaveBeenCalled();
+  });
+});

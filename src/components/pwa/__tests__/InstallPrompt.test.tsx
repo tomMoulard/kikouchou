@@ -401,5 +401,226 @@ describe('InstallPrompt', () => {
       await act(async () => { vi.advanceTimersByTime(5000); });
       expect(localStorage.getItem(DISMISSAL_KEY)).toBeNull();
     });
+
+    it('waits the usual delay again after hiding a visible card for the form', async () => {
+      mockCanInstall.mockReturnValue(true);
+      const { rerender } = render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(screen.getByRole('region')).toBeInTheDocument();
+
+      rerender(<InstallPrompt suppressed />);
+      rerender(<InstallPrompt />);
+
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(screen.getByRole('region')).toBeInTheDocument();
+    });
+
+    it('drops the pending show when the form opens before the delay is up', async () => {
+      mockCanInstall.mockReturnValue(true);
+      const { rerender } = render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(500); });
+
+      rerender(<InstallPrompt suppressed />);
+      await act(async () => { vi.advanceTimersByTime(600); });
+      rerender(<InstallPrompt />);
+
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+    });
+
+    it('never flashes the card on the frame the form is left', async () => {
+      mockCanInstall.mockReturnValue(true);
+      const { container, rerender } = render(<InstallPrompt suppressed />, {
+        withProviders: false,
+      });
+      await act(async () => { vi.advanceTimersByTime(5000); });
+
+      const added: Node[] = [];
+      const observer = new MutationObserver((records) => {
+        for (const record of records) added.push(...record.addedNodes);
+      });
+      observer.observe(container, { childList: true, subtree: true });
+      rerender(<InstallPrompt />);
+      await act(async () => { await Promise.resolve(); });
+      observer.disconnect();
+
+      expect(added).toHaveLength(0);
+    });
+  });
+});
+
+describe('InstallPrompt, more of it', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installMemoryStorage();
+    mockCanInstall.mockReturnValue(true);
+    mockInstall.mockResolvedValue(true);
+    mockIsInstalling.mockReturnValue(false);
+    mockIsInstalled.mockReturnValue(false);
+    mockInstallIntent.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  async function showCard(ui = <InstallPrompt />) {
+    const result = render(ui, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    return result;
+  }
+
+  it('comes back exactly seven days after a dismissal', async () => {
+    localStorage.setItem(DISMISSAL_KEY, String(Date.now() - 7 * DAY_MS));
+
+    await showCard();
+
+    expect(screen.getByRole('region')).toBeInTheDocument();
+  });
+
+  it('still offers the card when storage cannot be read', async () => {
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('private mode');
+    });
+
+    await showCard();
+
+    expect(screen.getByRole('region')).toBeInTheDocument();
+  });
+
+  it('writes when it was dismissed, and hides at once without waiting for the animation', async () => {
+    await showCard();
+
+    await act(async () => { screen.getByText('pwa.notNow').click(); });
+
+    expect(localStorage.getItem(DISMISSAL_KEY)).toBe(String(Date.now()));
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('stays dismissed through a trip form opened and closed afterwards', async () => {
+    const { rerender } = await showCard();
+    await act(async () => { screen.getByText('pwa.notNow').click(); });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    rerender(<InstallPrompt suppressed />);
+    rerender(<InstallPrompt />);
+    await act(async () => { vi.advanceTimersByTime(1100); });
+
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('drops the dismissal timer when it goes away first', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const { unmount } = await showCard();
+    await act(async () => { screen.getByText('pwa.notNow').click(); });
+    const index = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 300);
+    const timer: unknown = setTimeoutSpy.mock.results[index]?.value;
+
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timer);
+  });
+
+  it('keeps a card the visitor asked for on screen through the trip form', () => {
+    mockInstallIntent.mockReturnValue(true);
+    const { rerender } = render(<InstallPrompt />, { withProviders: false });
+    expect(screen.getByRole('region')).toBeInTheDocument();
+
+    rerender(<InstallPrompt suppressed />);
+    rerender(<InstallPrompt />);
+
+    // No delay: the request stands, so the card comes back with the page.
+    expect(screen.getByRole('region')).toBeInTheDocument();
+  });
+
+  it('forgets a request withdrawn before it was answered', async () => {
+    localStorage.setItem(DISMISSAL_KEY, String(Date.now() - 60_000));
+    const { rerender } = render(<InstallPrompt className="a" />, { withProviders: false });
+
+    mockInstallIntent.mockReturnValue(true);
+    rerender(<InstallPrompt className="b" />);
+    mockInstallIntent.mockReturnValue(false);
+    rerender(<InstallPrompt className="c" />);
+    await act(async () => { vi.advanceTimersByTime(1100); });
+
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('confirms an install that happens here, then goes away', async () => {
+    const { notify } = await import('@/lib/notifications');
+    const { rerender } = await showCard(<InstallPrompt className="a" />);
+
+    mockIsInstalled.mockReturnValue(true);
+    rerender(<InstallPrompt className="b" />);
+
+    expect(vi.mocked(notify.success)).toHaveBeenCalledWith('pwa.installSuccess');
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+
+    // Gone for good, not until the next change.
+    mockCanInstall.mockReturnValue(true);
+    rerender(<InstallPrompt className="c" suppressed />);
+    rerender(<InstallPrompt className="d" />);
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('does not confirm an install after the card was dismissed', async () => {
+    const { notify } = await import('@/lib/notifications');
+    const { rerender } = await showCard(<InstallPrompt className="a" />);
+    await act(async () => { screen.getByText('pwa.notNow').click(); });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    mockIsInstalled.mockReturnValue(true);
+    rerender(<InstallPrompt className="b" />);
+
+    expect(vi.mocked(notify.success)).not.toHaveBeenCalled();
+  });
+
+  it('says nothing when the install went through', async () => {
+    const { notify } = await import('@/lib/notifications');
+    mockInstall.mockResolvedValue(true);
+    await showCard();
+
+    await act(async () => { screen.getAllByText('pwa.install').find(el => el.closest('button'))?.click(); });
+
+    expect(vi.mocked(notify.error)).not.toHaveBeenCalled();
+  });
+
+  it('names the failure in the toast', async () => {
+    const { notify } = await import('@/lib/notifications');
+    mockInstall.mockResolvedValue(false);
+    await showCard();
+
+    await act(async () => { screen.getAllByText('pwa.install').find(el => el.closest('button'))?.click(); });
+
+    expect(vi.mocked(notify.error)).toHaveBeenCalledWith('pwa.installFailed');
+  });
+
+  it('says nothing about a refused prompt once the app is installed anyway', async () => {
+    const { notify } = await import('@/lib/notifications');
+    mockInstall.mockResolvedValue(false);
+    const { rerender } = await showCard(<InstallPrompt className="a" />);
+    mockIsInstalled.mockReturnValue(true);
+    rerender(<InstallPrompt className="b" />);
+
+    await act(async () => { screen.getAllByText('pwa.install').find(el => el.closest('button'))?.click(); });
+
+    expect(vi.mocked(notify.error)).not.toHaveBeenCalled();
+  });
+
+  it('labels its region and title, and slides in', async () => {
+    await showCard();
+
+    const region = screen.getByRole('region', { name: 'pwa.installPromptRegion' });
+    expect(region).toHaveClass('transition-transform', 'duration-300', 'ease-out', 'translate-y-0');
+    expect(region).not.toHaveClass('translate-y-full');
+    const titles = screen.getAllByText('pwa.install');
+    expect(titles.some(el => el.closest('button') === null)).toBe(true);
   });
 });

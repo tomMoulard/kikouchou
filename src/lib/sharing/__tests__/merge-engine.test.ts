@@ -807,3 +807,240 @@ describe('computeMerge', () => {
     });
   });
 });
+
+describe('computeMerge: each field on its own', () => {
+  const hostPerson = makePerson({
+    notes: 'Arrives late',
+    phone: '+33100000000',
+    headcount: 1,
+    childSeat: 'booster' as Person['childSeat'],
+  });
+
+  it.each<[string, Partial<Person>]>([
+    ['color', { color: '#00ff00' as HexColor }],
+    ['stayStartDate', { stayStartDate: '2026-07-16' as ISODateString }],
+    ['stayEndDate', { stayEndDate: '2026-07-21' as ISODateString }],
+    ['notes', { notes: 'Arrives early' }],
+    ['phone', { phone: '+33200000000' }],
+    ['headcount', { headcount: 3 }],
+    ['childSeat', { childSeat: 'rearFacing' as Person['childSeat'] }],
+  ])('applies a guest row whose only change is %s', async (_field, change) => {
+    mockHostPersons.push(hostPerson);
+    const guest = { ...hostPerson, ...change };
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: { persons: [guest], assignments: [], transports: [], rooms: [] },
+      }),
+    );
+
+    expect(result.autoApply.persons).toEqual([guest]);
+  });
+
+  const hostRoom = makeRoom({ description: 'Sea view', icon: 'bed-double' as Room['icon'] });
+
+  it.each<[string, Partial<Room>]>([
+    ['name', { name: 'Attic' }],
+    ['capacity', { capacity: 4 }],
+    ['order', { order: 3 }],
+    ['description', { description: 'Garden view' }],
+    ['icon', { icon: 'sofa' as Room['icon'] }],
+  ])('applies a room whose only change is %s', async (_field, change) => {
+    mockHostRooms.push(hostRoom);
+    const guest = { ...hostRoom, ...change };
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: { persons: [], assignments: [], transports: [], rooms: [guest] },
+      }),
+    );
+
+    expect(result.autoApply.rooms).toEqual([guest]);
+  });
+
+  it('applies nothing for an added guest row the host already holds unchanged', async () => {
+    mockHostPersons.push(hostPerson);
+
+    const result = await computeMerge(
+      makeChangeset({
+        added: { persons: [{ ...hostPerson }], assignments: [], transports: [], rooms: [] },
+      }),
+    );
+
+    expect(result.autoApply.persons).toEqual([]);
+    expect(result.summary.autoUpdates).toBe(0);
+  });
+});
+
+describe('computeMerge: conflict labels', () => {
+  it('labels an assignment conflict with the first six characters of its id', async () => {
+    mockHostPersons.push(makePerson());
+    mockHostRooms.push(makeRoom(), makeRoom({ id: 'room-2' as RoomId }));
+    mockHostAssignments.push(makeAssignment({ id: 'abcdefghij' as RoomAssignmentId }));
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: {
+          persons: [],
+          assignments: [
+            makeAssignment({ id: 'abcdefghij' as RoomAssignmentId, roomId: 'room-2' as RoomId }),
+          ],
+          transports: [],
+          rooms: [],
+        },
+      }),
+    );
+
+    expect(result.conflicts.map((conflict) => conflict.label)).toEqual([
+      'Room assignment abcdef...',
+    ]);
+  });
+
+  it('labels a transport conflict with its direction and place', async () => {
+    mockHostPersons.push(makePerson());
+    mockHostTransports.push(makeTransport());
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: {
+          persons: [],
+          assignments: [],
+          transports: [makeTransport({ location: 'Gare de Rennes' })],
+          rooms: [],
+        },
+      }),
+    );
+
+    expect(result.conflicts.map((conflict) => conflict.label)).toEqual([
+      'arrival transport at Gare de Rennes',
+    ]);
+  });
+});
+
+describe('computeMerge: warnings, in full', () => {
+  it('says nothing about a transport whose guest the host holds', async () => {
+    mockHostPersons.push(makePerson());
+
+    const result = await computeMerge(
+      makeChangeset({
+        added: { persons: [], assignments: [], transports: [makeTransport()], rooms: [] },
+      }),
+    );
+
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('describes an orphaned assignment of an added row', async () => {
+    const result = await computeMerge(
+      makeChangeset({
+        added: { persons: [], assignments: [makeAssignment()], transports: [], rooms: [] },
+      }),
+    );
+
+    expect(result.warnings).toEqual([
+      {
+        type: 'orphaned-room-ref',
+        message: 'Assignment references room "room-1" which no longer exists',
+        entityType: 'assignment',
+        entityId: 'assign-1',
+      },
+      {
+        type: 'orphaned-person-ref',
+        message: 'Assignment references person "person-1" which no longer exists',
+        entityType: 'assignment',
+        entityId: 'assign-1',
+      },
+    ]);
+  });
+
+  it('warns about a modified assignment that names a room the host does not hold', async () => {
+    mockHostPersons.push(makePerson());
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: { persons: [], assignments: [makeAssignment()], transports: [], rooms: [] },
+      }),
+    );
+
+    expect(result.warnings.map((warning) => warning.type)).toEqual(['orphaned-room-ref']);
+  });
+
+  it('does not warn about a modified assignment whose room comes back modified', async () => {
+    mockHostPersons.push(makePerson());
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: {
+          persons: [],
+          assignments: [makeAssignment()],
+          transports: [],
+          rooms: [makeRoom()],
+        },
+      }),
+    );
+
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('describes every orphaned reference of a modified transport', async () => {
+    const transport = makeTransport({
+      driverId: 'person-2' as PersonId,
+      rideId: 'ride-gone' as Transport['rideId'],
+    });
+
+    const result = await computeMerge(
+      makeChangeset({
+        modified: { persons: [], assignments: [], transports: [transport], rooms: [] },
+      }),
+    );
+
+    expect(result.warnings).toEqual([
+      {
+        type: 'orphaned-person-ref',
+        message: 'Transport references person "person-1" which no longer exists',
+        entityType: 'transport',
+        entityId: 'transport-1',
+      },
+      {
+        type: 'orphaned-person-ref',
+        message: 'Transport references driver "person-2" which no longer exists',
+        entityType: 'transport',
+        entityId: 'transport-1',
+      },
+      {
+        type: 'orphaned-ride-ref',
+        message: 'Transport references ride "ride-gone" which no longer exists',
+        entityType: 'transport',
+        entityId: 'transport-1',
+      },
+    ]);
+  });
+});
+
+describe('computeMerge: summary counts', () => {
+  it('counts every added row and every row it applies', async () => {
+    mockHostPersons.push(makePerson());
+    mockHostRooms.push(makeRoom());
+
+    const result = await computeMerge(
+      makeChangeset({
+        added: {
+          persons: [makePerson({ id: 'person-new' as PersonId, name: 'Bob' })],
+          assignments: [makeAssignment({ id: 'assign-new' as RoomAssignmentId })],
+          transports: [
+            makeTransport({ id: 'transport-a' as TransportId }),
+            makeTransport({ id: 'transport-b' as TransportId }),
+          ],
+          rooms: [makeRoom({ id: 'room-new' as RoomId }), makeRoom({ id: 'room-other' as RoomId })],
+        },
+      }),
+    );
+
+    expect(result.summary).toEqual({
+      additions: 6,
+      autoUpdates: 6,
+      conflicts: 0,
+      warnings: 0,
+    });
+  });
+});

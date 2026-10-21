@@ -6,7 +6,7 @@
  *
  * @module lib/db/repositories/__tests__/room-repository.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createRoom,
@@ -17,6 +17,9 @@ import {
   reorderRooms,
   getRoomCount,
   cloneRoomsToTrip,
+  deleteRoomWithOwnershipCheck,
+  duplicateRoomWithOwnershipCheck,
+  updateRoomWithOwnershipCheck,
 } from '@/lib/db/repositories/room-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
@@ -780,5 +783,185 @@ describe('Room Repository — Ownership Checks', () => {
 
     const updated = await getRoomById(room.id);
     expect(updated?.description).toBe('updated desc');
+  });
+});
+
+// ============================================================================
+// Write paths field by field, and the failures they name
+// ============================================================================
+
+describe('room writes, in detail', () => {
+  it('sanitises the name and description updateRoom is given', async () => {
+    const tripId = await createTestTrip();
+    const room = await createRoom(tripId, createTestRoomData());
+
+    await updateRoom(room.id, { name: '  Attic  ', description: '  Under the roof  ' });
+
+    expect(await getRoomById(room.id)).toMatchObject({
+      name: 'Attic',
+      description: 'Under the roof',
+    });
+  });
+
+  it('refuses a capacity outside the room bounds on updateRoom', async () => {
+    const tripId = await createTestTrip();
+    const room = await createRoom(tripId, createTestRoomData({ capacity: 2 }));
+
+    await expect(updateRoom(room.id, { capacity: 1e9 })).rejects.toThrow(
+      'Room capacity must be a whole number from 1 to 50',
+    );
+    expect((await getRoomById(room.id))?.capacity).toBe(2);
+  });
+
+  it('refuses a capacity outside the room bounds on the checked update', async () => {
+    const tripId = await createTestTrip();
+    const room = await createRoom(tripId, createTestRoomData({ capacity: 2 }));
+
+    await expect(updateRoomWithOwnershipCheck(room.id, tripId, { capacity: 0 })).rejects.toThrow(
+      'Room capacity must be a whole number from 1 to 50',
+    );
+    expect((await getRoomById(room.id))?.capacity).toBe(2);
+  });
+
+  it('names the rooms it failed to create', async () => {
+    const tripId = await createTestTrip();
+    vi.spyOn(db.rooms, 'bulkAdd').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(createRoom(tripId, createTestRoomData({ name: 'Attic' }))).rejects.toThrow(
+      `Failed to create 1 room(s) "Attic" for trip ${tripId}`,
+    );
+  });
+
+  it('names the room it failed to delete', async () => {
+    vi.spyOn(db, 'transaction').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(deleteRoom('room-1' as RoomId)).rejects.toThrow('Failed to delete room room-1');
+  });
+
+  it('passes a refused reorder through unwrapped', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(reorderRooms(tripId, ['room-ghost' as RoomId])).rejects.toThrow(
+      /^Room with id "room-ghost" not found or doesn't belong to trip/,
+    );
+  });
+
+  it('wraps a database failure during a reorder', async () => {
+    const tripId = await createTestTrip();
+    vi.spyOn(db, 'transaction').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(reorderRooms(tripId, [])).rejects.toThrow(
+      `Failed to reorder rooms for trip ${tripId}`,
+    );
+  });
+
+  it('appends cloned rooms after the rooms the target already has', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+    await createRoom(targetTripId, createTestRoomData({ name: 'First' }));
+    await createRoom(targetTripId, createTestRoomData({ name: 'Second' }));
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Imported' }));
+
+    const [cloned] = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned?.order).toBe(2);
+  });
+
+  it('names the clone it failed to write', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+    await createRoom(sourceTripId, createTestRoomData());
+    vi.spyOn(db.rooms, 'bulkAdd').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(cloneRoomsToTrip(sourceTripId, targetTripId)).rejects.toThrow(
+      `Failed to clone rooms from trip ${sourceTripId} to trip ${targetTripId}`,
+    );
+  });
+
+  it('numbers a copy past the names its siblings already use', async () => {
+    const tripId = await createTestTrip();
+    const room = await createRoom(tripId, createTestRoomData({ name: 'Double' }));
+    await createRoom(tripId, createTestRoomData({ name: 'Double 2' }));
+
+    const copy = await duplicateRoomWithOwnershipCheck(room.id, tripId);
+
+    expect(copy.name).toBe('Double 3');
+  });
+
+  it('takes the room\'s assignments with it on the checked delete', async () => {
+    const tripId = await createTestTrip();
+    const room = await createRoom(tripId, createTestRoomData());
+    const person = await createPerson(tripId, { name: 'Alice', color: hexColor('#ef4444') });
+    await createAssignment(tripId, {
+      roomId: room.id,
+      personId: person.id,
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-17'),
+    });
+
+    await deleteRoomWithOwnershipCheck(room.id, tripId);
+
+    expect(await db.roomAssignments.where('roomId').equals(room.id).count()).toBe(0);
+  });
+});
+
+describe('room creation, the edges', () => {
+  it('accepts a room of exactly the largest capacity', async () => {
+    const tripId = await createTestTrip();
+
+    const room = await createRoom(tripId, createTestRoomData({ capacity: 50 }));
+
+    expect(room.capacity).toBe(50);
+  });
+
+  it('refuses one bed more, saying which bounds apply', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(createRoom(tripId, createTestRoomData({ capacity: 51 }))).rejects.toThrow(
+      'Room capacity must be a whole number from 1 to 50',
+    );
+  });
+
+  it('numbers and orders a new room against its own trip only', async () => {
+    await db.rooms.put({
+      id: 'other-room' as RoomId,
+      tripId: '!other-trip' as TripId,
+      name: 'Attic',
+      capacity: 1,
+      order: 7,
+    });
+    const tripId = await createTestTrip();
+
+    const room = await createRoom(tripId, createTestRoomData({ name: 'Attic' }));
+
+    expect(room).toMatchObject({ name: 'Attic', order: 0 });
+  });
+});
+
+describe('cloning into an empty trip', () => {
+  it('numbers the clones from zero whatever other trips hold', async () => {
+    await db.rooms.put({
+      id: 'other-room' as RoomId,
+      tripId: '!other-trip' as TripId,
+      name: 'Theirs',
+      capacity: 1,
+      order: 7,
+    });
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Imported' }));
+
+    const [cloned] = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned?.order).toBe(0);
+  });
+});
+
+describe('a room missing its order', () => {
+  it('is still found by its trip, and goes with it', async () => {
+    const tripId = await createTestTrip();
+    await db.rooms.put({ id: 'no-order' as RoomId, tripId, name: 'Loft', capacity: 1 } as never);
+
+    expect(await getRoomCount(tripId)).toBe(1);
   });
 });

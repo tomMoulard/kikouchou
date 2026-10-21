@@ -343,3 +343,84 @@ describe('Changeset mappers', () => {
     expect(result.tripSnapshot).toBeUndefined();
   });
 });
+
+describe('mappers: optional fields stay absent', () => {
+  it('brings a bare guest back with no key it did not carry', () => {
+    expect(protoToPerson(personToProto(testPerson))).toStrictEqual(testPerson);
+  });
+
+  it('drops empty notes rather than storing a blank', () => {
+    expect(protoToPerson(personToProto({ ...testPerson, notes: '' })).notes).toBeUndefined();
+  });
+
+  it.each(['rearFacing', 'forwardFacing', 'booster'] as const)(
+    'keeps a %s child seat through proto and back',
+    (childSeat) => {
+      expect(protoToPerson(personToProto({ ...testPerson, childSeat })).childSeat).toBe(
+        childSeat,
+      );
+    },
+  );
+
+  it('sends no child seat for a guest without one', () => {
+    expect(personToProto(testPerson).childSeat).toBeUndefined();
+  });
+
+  it('reads an unspecified child seat as no child seat', () => {
+    const proto = { ...personToProto(testPerson), childSeat: 0 };
+
+    expect(protoToPerson(proto)).toStrictEqual(testPerson);
+  });
+
+  it('sends no travel mode for a leg without one', () => {
+    expect(transportToProto({ ...testTransport, transportMode: undefined }).transportMode).toBe(
+      undefined,
+    );
+  });
+
+  it('round-trips the car a leg rides in and where it starts from', () => {
+    const transport: Transport = {
+      ...testTransport,
+      rideId: 'ride-1' as Transport['rideId'],
+      startLocation: 'Lyon Part-Dieu',
+      startCoordinates: { lat: 45.76, lon: 4.86 },
+    };
+
+    const proto = transportToProto(transport);
+
+    expect(proto.rideId).toBe('ride-1');
+    expect(proto.startLocation).toBe('Lyon Part-Dieu');
+    expect(proto.startCoordinates).toMatchObject({ lat: 45.76, lon: 4.86 });
+    expect(protoToTransport(proto)).toEqual(transport);
+  });
+
+  it('reads an assignment field by field', () => {
+    expect(protoToAssignment(assignmentToProto(testAssignment))).toStrictEqual(testAssignment);
+  });
+
+  it('keeps no coordinates for a snapshot that carries only a latitude', () => {
+    const proto = {
+      ...tripSnapshotToProto({
+        name: 'Trip',
+        startDate: '2026-07-15' as ISODateString,
+        endDate: '2026-07-20' as ISODateString,
+      }),
+      coordLat: 43.7,
+    };
+
+    expect(protoToTripSnapshot(proto).coordinates).toBeUndefined();
+  });
+
+  it('keeps no coordinates for a snapshot that carries only a longitude', () => {
+    const proto = {
+      ...tripSnapshotToProto({
+        name: 'Trip',
+        startDate: '2026-07-15' as ISODateString,
+        endDate: '2026-07-20' as ISODateString,
+      }),
+      coordLon: 7.26,
+    };
+
+    expect(protoToTripSnapshot(proto).coordinates).toBeUndefined();
+  });
+});

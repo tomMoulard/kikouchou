@@ -1002,4 +1002,254 @@ describe('TripCard archiving', () => {
     expect(onArchiveToggle).toHaveBeenCalledTimes(1);
     expect(onArchiveToggle).toHaveBeenCalledWith(trip);
   });
+
+  it('marks the menu item with the icon of what it does', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} onArchiveToggle={vi.fn()} />,
+    );
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+    const archive = await screen.findByRole('menuitem', { name: /trips\.archive/i });
+    expect(archive.querySelector('svg.lucide-archive')).not.toBeNull();
+    expect(archive.querySelector('svg.lucide-archive-restore')).toBeNull();
+    unmount();
+
+    render(
+      <TripCard
+        trip={createTestTrip({ archived: true })}
+        persons={[]}
+        onClick={vi.fn()}
+        onArchiveToggle={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+    const restore = await screen.findByRole('menuitem', { name: /trips\.unarchive/i });
+    expect(restore.querySelector('svg.lucide-archive-restore')).not.toBeNull();
+  });
+});
+
+// ============================================================================
+// What the card is named, how it looks, and what it follows
+// ============================================================================
+
+function person(index: number) {
+  return {
+    id: `p${index}`,
+    tripId: 'trip-1',
+    name: `Person ${index}`,
+    color: '#ef4444',
+  } as never;
+}
+
+describe('TripCard accessible name', () => {
+  const name = () => screen.getByRole('button', { name: /Beach Vacation/ }).getAttribute('aria-label');
+  const dates = () => screen.getByText(/15.*-.*22/).textContent ?? '';
+
+  it('reads name, place, dates and guests, comma-separated', () => {
+    render(<TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} />);
+
+    expect(name()).toBe(`Beach Vacation, Brittany, France, ${dates()}, trips.noGuests`);
+  });
+
+  it('leaves out a place the trip does not have', () => {
+    render(
+      <TripCard trip={createTestTrip({ location: undefined })} persons={[person(1)]} onClick={vi.fn()} />,
+    );
+
+    expect(name()).toBe(`Beach Vacation, ${dates()}, trips.guestCount`);
+  });
+
+  it('clips a long description to a breath', () => {
+    const description = 'word '.repeat(60).trim();
+    render(<TripCard trip={createTestTrip({ description })} persons={[]} onClick={vi.fn()} />);
+
+    expect(name()).toBe(
+      `Beach Vacation, Brittany, France, ${dates()}, trips.noGuests, ${description.slice(0, 120)}`,
+    );
+  });
+
+  it('follows the trip and the guests it is handed next', () => {
+    const { rerender } = render(<TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} />);
+
+    rerender(
+      <TripCard
+        trip={createTestTrip({
+          name: 'Ski Week',
+          startDate: isoDate('2024-02-03'),
+          endDate: isoDate('2024-02-09'),
+          description: 'Bring boots',
+        })}
+        persons={[person(1), person(2), person(3), person(4), person(5)]}
+        onClick={vi.fn()}
+      />,
+    );
+
+    const label = screen.getByRole('button', { name: /Ski Week/ }).getAttribute('aria-label');
+    expect(label).toContain('trips.guestCount');
+    expect(label).toContain('Bring boots');
+    expect(screen.getByText(/3.*-.*9/)).toBeInTheDocument();
+    expect(screen.getByText('Bring boots')).toBeInTheDocument();
+    expect(screen.getByText('Person 4')).toBeInTheDocument();
+    expect(screen.getByText('+1')).toBeInTheDocument();
+  });
+});
+
+describe('TripCard guests', () => {
+  it('shows the first four guests by name and counts the rest', () => {
+    render(
+      <TripCard
+        trip={createTestTrip()}
+        persons={[person(1), person(2), person(3), person(4), person(5), person(6)]}
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Person 1')).toBeInTheDocument();
+    expect(screen.getByText('Person 4')).toBeInTheDocument();
+    expect(screen.queryByText('Person 5')).not.toBeInTheDocument();
+    expect(screen.getByText('+2')).toBeInTheDocument();
+  });
+
+  it('adds no overflow badge for exactly four guests', () => {
+    render(
+      <TripCard
+        trip={createTestTrip()}
+        persons={[person(1), person(2), person(3), person(4)]}
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('+0')).not.toBeInTheDocument();
+    expect(screen.queryByText('trips.moreGuests')).not.toBeInTheDocument();
+  });
+});
+
+describe('TripCard layout', () => {
+  it('styles the card, and the overlay that makes it one button', () => {
+    const { container } = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} />,
+    );
+
+    expect(container.firstElementChild).toHaveClass('relative', 'cursor-pointer', 'hover:shadow-md');
+    const overlay = screen.getByRole('button', { name: /Beach Vacation/ });
+    expect(overlay).toHaveClass('absolute', 'inset-0', 'focus-visible:ring-2');
+    expect(overlay).not.toHaveClass('cursor-not-allowed');
+    // No action at all: no corner, and no room kept for one.
+    expect(container.querySelector('.top-2.right-2')).toBeNull();
+    expect(container.querySelector('.pr-14, .pr-28')).toBeNull();
+  });
+
+  it('shows the not-allowed cursor on a disabled card', () => {
+    render(<TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} isDisabled />);
+
+    expect(screen.getByRole('button', { name: /Beach Vacation/ })).toHaveClass('cursor-not-allowed');
+  });
+
+  it('keeps room in the header for the corner it carries', () => {
+    const header = (container: HTMLElement) =>
+      container.querySelector('[data-slot="card-header"]') ?? container.querySelector('.pr-14, .pr-28');
+    const both = render(
+      <TripCard
+        trip={createTestTrip()}
+        persons={[]}
+        onClick={vi.fn()}
+        onShare={vi.fn()}
+        onArchiveToggle={vi.fn()}
+      />,
+    );
+    expect(header(both.container)).toHaveClass('pr-28');
+    both.unmount();
+
+    const shareOnly = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} onShare={vi.fn()} />,
+    );
+    expect(header(shareOnly.container)).toHaveClass('pr-14');
+    shareOnly.unmount();
+
+    const menuOnly = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} onArchiveToggle={vi.fn()} />,
+    );
+    expect(header(menuOnly.container)).toHaveClass('pr-14');
+  });
+
+  it('needs both edit and delete before it offers that menu', () => {
+    render(<TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} onEdit={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /common\.openMenu/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the place on its own truncated line', () => {
+    render(<TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} />);
+
+    expect(screen.getByText('Brittany, France')).toHaveAttribute('title', 'Brittany, France');
+  });
+});
+
+describe('TripCard handlers', () => {
+  it('calls the handlers it was given last', async () => {
+    const user = userEvent.setup();
+    const first = { onClick: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onShare: vi.fn() };
+    const last = { onClick: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onShare: vi.fn() };
+    const trip = createTestTrip();
+    const { rerender } = render(<TripCard trip={trip} persons={[]} {...first} />);
+    rerender(<TripCard trip={trip} persons={[]} {...last} />);
+
+    await user.click(screen.getByRole('button', { name: /Beach Vacation/ }));
+    await user.click(screen.getByRole('button', { name: 'trips.shareTripAria' }));
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+    await user.click(await screen.findByRole('menuitem', { name: /common\.edit/i }));
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+    await user.click(await screen.findByRole('menuitem', { name: /common\.delete/i }));
+
+    expect(last.onClick).toHaveBeenCalledWith(trip);
+    expect(last.onShare).toHaveBeenCalledWith(trip);
+    expect(last.onEdit).toHaveBeenCalledTimes(1);
+    expect(last.onDelete).toHaveBeenCalledTimes(1);
+    expect(Object.values(first).every((handler) => handler.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('archives the trip it shows now', async () => {
+    const user = userEvent.setup();
+    const onArchiveToggle = vi.fn();
+    const later = createTestTrip({ id: 'trip-2' as TripId, name: 'Later' });
+    const { rerender } = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} onArchiveToggle={vi.fn()} />,
+    );
+    rerender(
+      <TripCard trip={later} persons={[]} onClick={vi.fn()} onArchiveToggle={onArchiveToggle} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+    await user.click(await screen.findByRole('menuitem', { name: /trips\.archive/i }));
+
+    expect(onArchiveToggle).toHaveBeenCalledWith(later);
+  });
+
+  it('opens the trip it shows now, also once it was enabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const later = createTestTrip({ id: 'trip-2' as TripId, name: 'Later' });
+    const { rerender } = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={onClick} isDisabled />,
+    );
+    rerender(<TripCard trip={later} persons={[]} onClick={onClick} />);
+
+    await user.click(screen.getByRole('button', { name: /Later/ }));
+
+    expect(onClick).toHaveBeenCalledWith(later);
+  });
+
+  it('shares the trip it shows now, also once it was enabled', async () => {
+    const user = userEvent.setup();
+    const onShare = vi.fn();
+    const later = createTestTrip({ id: 'trip-2' as TripId, name: 'Later' });
+    const { rerender } = render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={vi.fn()} onShare={onShare} isDisabled />,
+    );
+    rerender(<TripCard trip={later} persons={[]} onClick={vi.fn()} onShare={onShare} />);
+
+    await user.click(screen.getByRole('button', { name: 'trips.shareTripAria' }));
+
+    expect(onShare).toHaveBeenCalledWith(later);
+  });
 });

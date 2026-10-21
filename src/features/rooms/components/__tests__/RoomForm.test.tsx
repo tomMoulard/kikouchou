@@ -1,12 +1,18 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@/test/utils';
+import { fireEvent, render, screen, waitFor, within } from '@/test/utils';
 import { MAX_ROOM_CAPACITY } from '@/types';
 import type { Room } from '@/types';
 
+/** What the submission hook reports; a test may set it before rendering. */
+let submission: { isSubmitting: boolean; submitError: string | null } = {
+  isSubmitting: false,
+  submitError: null,
+};
+
 vi.mock('@/hooks', () => ({
   useFormSubmission: <T,>(onSubmit: (data: T) => Promise<void>) => ({
-    isSubmitting: false,
-    submitError: null,
+    isSubmitting: submission.isSubmitting,
+    submitError: submission.submitError,
     handleSubmit: onSubmit,
   }),
 }));
@@ -41,6 +47,7 @@ function glyphOf(element: HTMLElement): string | undefined {
 describe('RoomForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    submission = { isSubmitting: false, submitError: null };
   });
 
   it('renders create mode with default values', () => {
@@ -83,6 +90,9 @@ describe('RoomForm', () => {
     await user.click(nameInput);
     await user.tab();
     expect(screen.getByText('common.required')).toBeInTheDocument();
+    // The error is tied to the field it is about, for a screen reader.
+    expect(nameInput).toHaveAttribute('aria-describedby', 'room-name-error');
+    expect(screen.getByText('common.required')).toHaveAttribute('id', 'room-name-error');
   });
 
   it('calls onCancel when cancel button is clicked', async () => {
@@ -571,5 +581,298 @@ describe('RoomForm', () => {
     await user.clear(capacityInput);
     await user.type(capacityInput, '10');
     expect(onDirtyChange).toHaveBeenCalledWith(true);
+  });
+
+  // ==========================================================================
+  // Switching rooms, the dirty flag and the edges of validation
+  // ==========================================================================
+
+  describe('switching between rooms', () => {
+    const tent: Room = {
+      id: 'r1' as Room['id'],
+      tripId: 't1' as Room['tripId'],
+      name: 'Tent',
+      capacity: 4,
+      description: 'By the lake',
+      icon: 'tent',
+      order: 0,
+    };
+
+    it('empties the form when the room goes away', () => {
+      const { rerender } = render(
+        <RoomForm room={tent} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+
+      rerender(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+      expect(screen.getByLabelText(/rooms.name/)).toHaveValue('');
+      expect(screen.getByLabelText(/rooms.capacity/)).toHaveValue(1);
+      expect(screen.getByLabelText(/rooms.description/)).toHaveValue('');
+      expect(glyphOf(iconButton())).toBe('bed-double');
+    });
+
+    it('drops the errors of the room it left', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <RoomForm room={tent} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+      await user.clear(screen.getByLabelText(/rooms.name/));
+      await user.click(screen.getByText('common.save'));
+      expect(screen.getByRole('alert')).toHaveTextContent('common.required');
+
+      rerender(
+        <RoomForm room={{ ...tent, id: 'r2' as Room['id'] }} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      );
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('the dirty flag', () => {
+    it.each([
+      ['a new room', undefined],
+      [
+        'a stored room',
+        {
+          id: 'r1' as Room['id'],
+          tripId: 't1' as Room['tripId'],
+          name: 'Tent',
+          capacity: 4,
+          description: 'By the lake',
+          icon: 'tent',
+          order: 0,
+        } as Room,
+      ],
+    ])('starts clean on %s', (_name, room) => {
+      const onDirtyChange = vi.fn();
+      render(
+        <RoomForm room={room} onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
+        { withProviders: false },
+      );
+
+      expect(onDirtyChange).toHaveBeenCalledWith(false);
+      expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+    });
+
+    it('turns dirty on a description alone', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      render(
+        <RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
+        { withProviders: false },
+      );
+
+      await user.type(screen.getByLabelText(/rooms.description/), 'x');
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('turns dirty on an icon alone', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onDirtyChange = vi.fn();
+      render(
+        <RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
+        { withProviders: false },
+      );
+
+      await user.click(iconButton());
+      await user.click(screen.getByRole('radio', { name: 'rooms.icons.tent' }));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+  });
+
+  describe('validation', () => {
+    function stored(capacity: number): Room {
+      return {
+        id: 'r1' as Room['id'],
+        tripId: 't1' as Room['tripId'],
+        name: 'Room',
+        capacity,
+        order: 0,
+      };
+    }
+
+    it('treats a name of spaces as no name', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(<RoomForm onSubmit={onSubmit} onCancel={vi.fn()} />, { withProviders: false });
+
+      await user.type(screen.getByLabelText(/rooms.name/), '   ');
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByText('common.required')).toBeInTheDocument();
+    });
+
+    it('does not complain on leaving a name that was typed', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+      await user.type(screen.getByLabelText(/rooms.name/), 'Attic');
+      await user.tab();
+
+      expect(screen.queryByText('common.required')).not.toBeInTheDocument();
+    });
+
+    it.each([0, 1.5])('refuses a stored bed count of %s', async (capacity) => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(<RoomForm room={stored(capacity)} onSubmit={onSubmit} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent('validation.capacityMin');
+      expect(alert).toHaveAttribute('id', 'room-capacity-error');
+      const input = screen.getByLabelText(/rooms.capacity/);
+      expect(input).toHaveAttribute('aria-describedby', 'room-capacity-error');
+      expect(input).toHaveClass('border-destructive');
+    });
+
+    it('accepts exactly the largest bed count', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <RoomForm room={stored(MAX_ROOM_CAPACITY)} onSubmit={onSubmit} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ capacity: MAX_ROOM_CAPACITY }),
+      );
+      expect(screen.getByLabelText(/rooms.capacity/)).not.toHaveClass('border-destructive');
+    });
+
+    it('flags a bad stored bed count as soon as the field is left', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<RoomForm room={stored(0)} onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.click(screen.getByLabelText(/rooms.capacity/));
+      await user.tab();
+
+      expect(screen.getByRole('alert')).toHaveTextContent('validation.capacityMin');
+    });
+
+    it('judges the bed count of now when the field is left', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<RoomForm room={stored(0)} onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.click(screen.getByRole('button', { name: 'rooms.bedsIncrease' }));
+      fireEvent.blur(screen.getByLabelText(/rooms.capacity/));
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('clears only the error of the field being fixed', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<RoomForm room={stored(0)} onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+      await user.clear(screen.getByLabelText(/rooms.name/));
+      await user.click(screen.getByText('common.save'));
+      expect(screen.getAllByRole('alert')).toHaveLength(2);
+
+      await user.type(screen.getByLabelText(/rooms.name/), 'A');
+      expect(screen.getByRole('alert')).toHaveTextContent('validation.capacityMin');
+
+      await user.clear(screen.getByLabelText(/rooms.name/));
+      await user.click(screen.getByText('common.save'));
+      await user.click(screen.getByRole('button', { name: 'rooms.bedsIncrease' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('common.required');
+    });
+  });
+
+  describe('submitting', () => {
+    it('keeps the browser from submitting the form itself', () => {
+      const { container } = render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      expect(fireEvent.submit(container.querySelector('form')!)).toBe(false);
+    });
+
+    it('trims the name and the description', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(<RoomForm onSubmit={onSubmit} onCancel={vi.fn()} />, { withProviders: false });
+
+      await user.type(screen.getByLabelText(/rooms.name/), '  Suite  ');
+      await user.type(screen.getByLabelText(/rooms.description/), '  Sea view  ');
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Suite', description: 'Sea view' }),
+      );
+    });
+
+    it('stores no description for one made of spaces', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(<RoomForm onSubmit={onSubmit} onCancel={vi.fn()} />, { withProviders: false });
+
+      await user.type(screen.getByLabelText(/rooms.name/), 'Suite');
+      await user.type(screen.getByLabelText(/rooms.description/), '   ');
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ description: undefined }));
+    });
+
+    it('shows no error box while nothing failed', () => {
+      render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('shows why a save failed', () => {
+      submission = { isSubmitting: false, submitError: 'errors.saveFailed: offline' };
+      render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('errors.saveFailed: offline');
+    });
+
+    it('says it is saving, and locks the form, while it saves', () => {
+      submission = { isSubmitting: true, submitError: null };
+      render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+      const save = screen.getByRole('button', { name: 'common.loading' });
+      expect(save).toBeDisabled();
+      expect(save).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('button', { name: 'common.cancel' })).toBeDisabled();
+      expect(screen.getByLabelText(/rooms.name/)).toBeDisabled();
+    });
+  });
+
+  it('labels its fields and lets the name take the free width', () => {
+    render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+    expect(screen.getByLabelText(/rooms.name/)).toHaveClass('min-w-0', 'flex-1');
+    expect(screen.getByLabelText(/rooms.description/)).toHaveAttribute(
+      'placeholder',
+      'rooms.descriptionPlaceholder',
+    );
   });
 });

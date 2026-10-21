@@ -6,11 +6,43 @@
  *
  * @module components/shared/__tests__/ColorPicker.test
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@/test/utils';
 import userEvent from '@testing-library/user-event';
 
-import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
+/**
+ * Loaded inside the first test rather than at the top of the file: the colour
+ * names are a load-time table, and Stryker can only test a mutant in load-time
+ * code against the test that was running when the module loaded.
+ */
+let ColorPicker: typeof import('@/components/shared/ColorPicker').ColorPicker;
+let DEFAULT_COLORS: typeof import('@/components/shared/ColorPicker').DEFAULT_COLORS;
+
+beforeEach(async () => {
+  ({ ColorPicker, DEFAULT_COLORS } = await import('@/components/shared/ColorPicker'));
+});
+
+describe('ColorPicker colour names', () => {
+  it('names every swatch of the default palette after its colour, whatever the case of the value', () => {
+    render(<ColorPicker value="#3B82F6" onChange={vi.fn()} />, { withProviders: false });
+
+    expect(screen.getAllByRole('radio').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'colors.orange',
+      'colors.amber',
+      'colors.yellow',
+      'colors.lime',
+      'colors.green',
+      'colors.teal',
+      'colors.cyan',
+      'colors.blue',
+      'colors.indigo',
+      'colors.violet',
+      'colors.purple',
+      'colors.pink',
+    ]);
+    expect(screen.getByRole('radio', { checked: true })).toHaveAttribute('aria-label', 'colors.blue');
+  });
+});
 
 // ============================================================================
 // Basic Rendering Tests
@@ -556,5 +588,111 @@ describe('ColorPicker Visual', () => {
       expect(button).toBeDisabled();
       expect(button).toHaveClass('disabled:hover:scale-100');
     }
+  });
+});
+
+// ============================================================================
+// Keys, focus and the handlers' freshness
+// ============================================================================
+
+describe('ColorPicker keyboard contract', () => {
+  it('keeps the keys it handles from scrolling the page', () => {
+    render(<ColorPicker value="#f97316" onChange={vi.fn()} />, { withProviders: false });
+    const group = screen.getByRole('radiogroup');
+
+    for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Enter', ' ']) {
+      expect(fireEvent.keyDown(group, { key })).toBe(false);
+    }
+    expect(fireEvent.keyDown(group, { key: 'a' })).toBe(true);
+  });
+
+  it('moves the focus with the selection', () => {
+    render(<ColorPicker value="#f97316" onChange={vi.fn()} />, { withProviders: false });
+    const radios = screen.getAllByRole('radio');
+
+    fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowRight' });
+
+    expect(document.activeElement).toBe(radios[1]);
+  });
+
+  it('ignores every key while disabled', () => {
+    const onChange = vi.fn();
+    render(<ColorPicker value="#f97316" onChange={onChange} disabled />, { withProviders: false });
+
+    expect(fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowRight' })).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('reports to the newest onChange, and honours a newly disabled picker', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<ColorPicker onChange={first} />, { withProviders: false });
+
+    rerender(<ColorPicker onChange={second} />);
+    fireEvent.click(screen.getAllByRole('radio')[1] as HTMLElement);
+    expect(second).toHaveBeenCalledWith(DEFAULT_COLORS[1]);
+    expect(first).not.toHaveBeenCalled();
+
+    rerender(<ColorPicker onChange={second} disabled />);
+    second.mockClear();
+    fireEvent.click(screen.getAllByRole('radio')[2] as HTMLElement);
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it('draws the selected swatch with a ring in its own colour and a tick', () => {
+    render(<ColorPicker value="#22c55e" onChange={vi.fn()} />, { withProviders: false });
+    const selected = screen.getByRole('radio', { checked: true });
+
+    expect(selected).toHaveClass('border-foreground', 'ring-2', 'ring-offset-2');
+    expect(selected).not.toHaveClass('border-transparent');
+    expect(selected.style.getPropertyValue('--tw-ring-color')).toBe('#22c55e');
+    // eslint-disable-next-line kikouchou/no-raw-palette-class -- The component draws a literal white tick on a user-chosen swatch, and this asserts exactly that.
+    expect(selected.querySelector('svg')).toHaveClass('size-5', 'mx-auto', 'text-white');
+
+    const other = screen.getAllByRole('radio', { checked: false })[0] as HTMLElement;
+    expect(other).toHaveClass('border-transparent');
+    expect(other.style.getPropertyValue('--tw-ring-color')).toBe('');
+    expect(other.querySelector('svg')).toBeNull();
+  });
+});
+
+describe('ColorPicker, more of it', () => {
+  it('draws nothing but its own box for an empty palette', () => {
+    const { container } = render(<ColorPicker colors={[]} onChange={vi.fn()} className="box" />, {
+      withProviders: false,
+    });
+
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('box');
+    expect(container.firstElementChild).toBeEmptyDOMElement();
+  });
+
+  it('keeps only the first swatch in the tab order when nothing is chosen', () => {
+    render(<ColorPicker onChange={vi.fn()} />, { withProviders: false });
+    const radios = screen.getAllByRole('radio');
+
+    expect(radios[0]).toHaveAttribute('tabindex', '0');
+    expect(radios[1]).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('draws each swatch as a round, focusable, large tap target', () => {
+    render(<ColorPicker onChange={vi.fn()} />, { withProviders: false });
+
+    expect(screen.getAllByRole('radio')[0]).toHaveClass(
+      'size-11', 'md:size-10', 'rounded-full', 'border-2', 'transition-all', 'duration-150',
+      'focus:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-ring', 'focus-visible:ring-offset-2',
+    );
+  });
+
+  it('steps from the colour it holds now', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<ColorPicker value={DEFAULT_COLORS[0]} onChange={onChange} />, {
+      withProviders: false,
+    });
+    rerender(<ColorPicker value={DEFAULT_COLORS[5]} onChange={onChange} />);
+
+    fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'ArrowRight' });
+
+    expect(onChange).toHaveBeenCalledWith(DEFAULT_COLORS[6]);
   });
 });

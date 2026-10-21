@@ -20,12 +20,20 @@ import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { syncAccountTrips } from '@/lib/sync/account-sync';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { isoDate } from '@/test/utils';
+import type { ShareId, Trip, TripId, UnixTimestamp } from '@/types';
 import { AccountTripSync } from '../AccountTripSync';
 
 // ============================================================================
 // Test doubles
 // ============================================================================
 
+const mockedCapture = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/posthog', () => ({
+  captureEvent: (...args: unknown[]) => mockedCapture(...args),
+  reportError: vi.fn(),
+  default: undefined,
+}));
 vi.mock('@/features/auth/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: vi.fn() }));
 vi.mock('@/lib/supabase/client', () => ({ getSupabaseClient: vi.fn() }));
@@ -290,6 +298,217 @@ describe('AccountTripSync', () => {
 
     await waitFor(() => {
       expect(mockedSweep).toHaveBeenCalledWith(CLIENT, 'user-1');
+    });
+  });
+});
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+/** A local trip under an id the test chooses, so the pending key is known. */
+async function addTrip(id: string, fields: Partial<Trip> = {}): Promise<void> {
+  const now = Date.now() as UnixTimestamp;
+  await db.trips.add({
+    id: id as TripId,
+    name: id,
+    startDate: isoDate('2026-07-15'),
+    endDate: isoDate('2026-07-22'),
+    shareId: `share-${id}` as ShareId,
+    createdAt: now,
+    updatedAt: now,
+    ...fields,
+  });
+}
+
+describe('AccountTripSync, edges', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedOnlineStatus.mockReturnValue({ isOnline: true, hasRecentlyChanged: false });
+    mockedGetClient.mockResolvedValue(CLIENT);
+    mockedSweep.mockResolvedValue({ uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 });
+  });
+
+  it('does not sweep while signed out, even with trips waiting', async () => {
+    await addTrip('local-1');
+    signedOut();
+    render(<AccountTripSync />);
+
+    await settle();
+    expect(mockedGetClient).not.toHaveBeenCalled();
+    expect(mockedSweep).not.toHaveBeenCalled();
+  });
+
+  it('does not sweep again when one queued trip lands and another is still waiting', async () => {
+    await addTrip('trip-x');
+    await addTrip('trip-y');
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await db.trips.update('trip-x', { remoteTripId: 'remote-x' });
+    });
+
+    await settle();
+    expect(mockedSweep).toHaveBeenCalledTimes(1);
+  });
+
+  it('sweeps for a trip whose id is new, whatever characters it shares with the others', async () => {
+    await addTrip('ab');
+    await addTrip('ba');
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await addTrip('aab');
+    });
+
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('does not sweep again for a member trip that arrives already on the server', async () => {
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+
+    // What the pull half writes: a trip with a server row and nothing to do.
+    await act(async () => {
+      await addTrip('joined-1', { remoteTripId: 'remote-j' });
+    });
+
+    await settle();
+    expect(mockedSweep).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts a viewer trip as waiting, so a new one pulls the sweep back', async () => {
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await addTrip('viewer-1', { remoteTripId: 'remote-v', viewerToken: 'tok1234567890abc' });
+    });
+
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('forgets what the last account queued once another account is swept', async () => {
+    await addTrip('trip-x');
+    signedInAs('user-1');
+    const { rerender } = render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      await db.trips.update('trip-x', { remoteTripId: 'remote-x' });
+    });
+
+    signedInAs('user-2');
+    rerender(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(2);
+    });
+
+    // The trip comes back as waiting. Queued under the other account, it was
+    // never part of this account's sweep.
+    await act(async () => {
+      await db.trips.update('trip-x', { remoteTripId: undefined });
+    });
+
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it('keeps what this account queued when a new trip pulls the sweep back', async () => {
+    await addTrip('trip-x');
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      await db.trips.update('trip-x', { remoteTripId: 'remote-x' });
+    });
+    await act(async () => {
+      await addTrip('trip-y');
+    });
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(2);
+    });
+
+    // Already handed to a sweep for this account: waiting again is not new work.
+    await act(async () => {
+      await db.trips.update('trip-x', { remoteTripId: undefined });
+    });
+
+    await settle();
+    expect(mockedSweep).toHaveBeenCalledTimes(2);
+  });
+
+  it('sweeps nothing with no backend', async () => {
+    mockedGetClient.mockResolvedValue(null as never);
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+
+    await waitFor(() => {
+      expect(mockedGetClient).toHaveBeenCalled();
+    });
+    await settle();
+    expect(mockedSweep).not.toHaveBeenCalled();
+  });
+
+  it('reports nothing for a sweep that moved nothing', async () => {
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+    await settle();
+    expect(mockedCapture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['uploaded', { uploaded: 2, downloaded: 0, upgraded: 0, failed: 0 }],
+    ['downloaded', { uploaded: 0, downloaded: 3, upgraded: 0, failed: 0 }],
+    ['upgraded', { uploaded: 0, downloaded: 0, upgraded: 1, failed: 0 }],
+    ['failed', { uploaded: 0, downloaded: 0, upgraded: 0, failed: 4 }],
+  ])('reports a sweep that %s something, with every count', async (_label, result) => {
+    mockedSweep.mockResolvedValue(result);
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+
+    await waitFor(() => {
+      expect(mockedCapture).toHaveBeenCalledWith('account_trip_sync', result);
+    });
+  });
+
+  it.each([
+    ['an Error', new Error('chunk load failed'), 'chunk load failed'],
+    ['a plain value', 'offline', 'offline'],
+  ])('warns with the reason when loading the client throws %s', async (_label, thrown, text) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockedGetClient.mockRejectedValueOnce(thrown);
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+
+    await waitFor(() => {
+      expect(warn).toHaveBeenCalledWith('[sync] could not run the account sweep:', text);
     });
   });
 });
