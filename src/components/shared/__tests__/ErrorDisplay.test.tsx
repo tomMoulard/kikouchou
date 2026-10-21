@@ -181,3 +181,57 @@ describe('ErrorDisplay', () => {
     });
   });
 });
+
+describe('ErrorDisplay drawing', () => {
+  it('draws the full-size error large and roomy', () => {
+    render(
+      <ErrorDisplay error={new Error('Disk full')} onRetry={vi.fn()} onBack={vi.fn()} />,
+      { withProviders: false },
+    );
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveClass('flex', 'flex-col', 'items-center', 'justify-center', 'gap-4', 'px-4', 'min-h-[400px]');
+    expect(alert).not.toHaveClass('py-4');
+    const badge = alert.firstElementChild as HTMLElement;
+    expect(badge).toHaveClass('rounded-full', 'bg-destructive/10', 'p-3');
+    expect(badge).not.toHaveClass('p-2');
+    expect(badge.querySelector('svg')).toHaveClass('text-destructive', 'h-6', 'w-6');
+    expect(screen.getByText('errors.loadingFailed')).toHaveClass('font-semibold', 'text-destructive', 'text-lg');
+    expect(screen.getByText('errors.loadingFailed').parentElement).toHaveClass('text-center');
+    expect(screen.getByText('Disk full')).toHaveClass('mt-1', 'text-muted-foreground', 'text-sm');
+    const retry = screen.getByRole('button', { name: /common.retry/ });
+    expect(retry.parentElement).toHaveClass('flex', 'gap-2');
+    expect(retry.querySelector('svg')).toHaveClass('mr-2', 'h-4', 'w-4');
+    expect(screen.getByRole('button', { name: 'common.back' })).toBeInTheDocument();
+  });
+
+  it('draws the compact error small and tight', () => {
+    render(<ErrorDisplay error={new Error('Disk full')} size="compact" />, { withProviders: false });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveClass('py-4');
+    expect(alert).not.toHaveClass('min-h-[400px]');
+    const badge = alert.firstElementChild as HTMLElement;
+    expect(badge).toHaveClass('p-2');
+    expect(badge.querySelector('svg')).toHaveClass('h-5', 'w-5');
+    expect(screen.getByText('errors.loadingFailed')).toHaveClass('text-base');
+    expect(screen.getByText('Disk full')).toHaveClass('text-xs');
+  });
+
+  it('sizes its buttons to match the error', () => {
+    const { unmount } = render(<ErrorDisplay error={null} onRetry={vi.fn()} onBack={vi.fn()} />, {
+      withProviders: false,
+    });
+    expect(screen.getByRole('button', { name: /common.retry/ })).toHaveAttribute('data-size', 'default');
+    expect(screen.getByRole('button', { name: 'common.back' })).toHaveAttribute('data-size', 'default');
+    unmount();
+
+    render(<ErrorDisplay error={null} onRetry={vi.fn()} onBack={vi.fn()} size="compact" />, {
+      withProviders: false,
+    });
+    expect(screen.getByRole('button', { name: /common.retry/ })).toHaveAttribute('data-size', 'sm');
+    expect(screen.getByRole('button', { name: 'common.back' })).toHaveAttribute('data-size', 'sm');
+  });
+});
+

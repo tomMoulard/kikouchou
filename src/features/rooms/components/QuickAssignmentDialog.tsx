@@ -278,6 +278,9 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   if (!hasValidConflictInputs && prevHadValidInputs) {
     setPrevHadValidInputs(false);
     setConflictError(undefined);
+    // A check still out is cancelled by the effect's cleanup, and a cancelled
+    // check never clears this flag itself.
+    setIsCheckingConflict(false);
   }
   if (hasValidConflictInputs && !prevHadValidInputs) {
     setPrevHadValidInputs(true);
@@ -402,8 +405,8 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           className="sm:max-w-[425px]"
-          onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
-          onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
+          onPointerDownOutside={(e) => isSubmitting && !isSubmitStalled && e.preventDefault()}
+          onEscapeKeyDown={(e) => isSubmitting && !isSubmitStalled && e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>

@@ -18,6 +18,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { downloadTripDocument } from '@/lib/sync/download-document';
 import { materialiseJoinedTrip } from '@/lib/sync/join-trip';
 import { listRemoteTripsMissingLocally } from '@/lib/sync/remote-trip';
 import type { TripId } from '@/types';
@@ -29,12 +30,14 @@ vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: vi.fn() }));
 vi.mock('@/lib/supabase/client', () => ({ getSupabaseClient: vi.fn() }));
 vi.mock('@/lib/sync/join-trip', () => ({ materialiseJoinedTrip: vi.fn() }));
 vi.mock('@/lib/sync/remote-trip', () => ({ listRemoteTripsMissingLocally: vi.fn() }));
+vi.mock('@/lib/sync/download-document', () => ({ downloadTripDocument: vi.fn() }));
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseOnlineStatus = vi.mocked(useOnlineStatus);
 const mockedGetClient = vi.mocked(getSupabaseClient);
 const mockedMaterialise = vi.mocked(materialiseJoinedTrip);
 const mockedListMissing = vi.mocked(listRemoteTripsMissingLocally);
+const mockedDownloadDocument = vi.mocked(downloadTripDocument);
 
 /** A stand-in for the Supabase client; nothing here calls through it. */
 const client = { from: vi.fn() } as never;
@@ -55,6 +58,7 @@ describe('useRemoteTrips', () => {
     mockedUseOnlineStatus.mockReturnValue({ isOnline: true, hasRecentlyChanged: false });
     mockedGetClient.mockResolvedValue(client);
     mockedListMissing.mockResolvedValue(elsewhere);
+    mockedDownloadDocument.mockResolvedValue({ status: 'hydrated' });
   });
 
   afterEach(() => {
@@ -153,7 +157,10 @@ describe('useRemoteTrips', () => {
       expect(result.current.isChecking).toBe(false);
     });
     expect(result.current.remoteOnly).toEqual([]);
-    expect(consoleError).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[trips] failed to list the trips this account has elsewhere:',
+      expect.any(Error),
+    );
   });
 
   it('asks again when the local trip list changes', async () => {
@@ -256,7 +263,10 @@ describe('useRemoteTrips', () => {
 
     expect(downloaded).toBeNull();
     expect(result.current.remoteOnly).toHaveLength(2);
-    expect(consoleError).toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[trips] failed to download a joined trip:',
+      'network down',
+    );
     expect(result.current.isDownloading).toBeNull();
   });
 
@@ -278,5 +288,85 @@ describe('useRemoteTrips', () => {
 
     expect(downloaded).toBe('local-9');
     expect(result.current.remoteOnly.map((trip) => trip.id)).toEqual(['remote-1']);
+  });
+
+  it('says it is checking from the very first render', () => {
+    const seen: boolean[] = [];
+    renderHook(() => {
+      const value = useRemoteTrips(0);
+      seen.push(value.isChecking);
+      return value;
+    });
+
+    expect(seen[0]).toBe(true);
+  });
+
+  it('keeps the answer of the newest lookup when an older one lands late', async () => {
+    let releaseFirst: (value: typeof elsewhere) => void = () => {};
+    let releaseSecond: (value: typeof elsewhere) => void = () => {};
+    mockedListMissing
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseFirst = resolve;
+        }) as never,
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseSecond = resolve;
+        }) as never,
+      );
+    const { result, rerender } = renderHook(({ count }) => useRemoteTrips(count), {
+      initialProps: { count: 0 },
+    });
+    await waitFor(() => {
+      expect(mockedListMissing).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ count: 1 });
+    await waitFor(() => {
+      expect(mockedListMissing).toHaveBeenCalledTimes(2);
+    });
+
+    // The overtaken lookup ends first: it must neither fill the list nor
+    // end the wait for the newer one.
+    await act(async () => {
+      releaseFirst(elsewhere);
+    });
+    expect(result.current.remoteOnly).toEqual([]);
+    expect(result.current.isChecking).toBe(true);
+
+    await act(async () => {
+      releaseSecond([{ id: 'remote-3', name: 'Lake' }]);
+    });
+    expect(result.current.remoteOnly).toEqual([{ id: 'remote-3', name: 'Lake' }]);
+    expect(result.current.isChecking).toBe(false);
+  });
+
+  it('says when a downloaded trip came without its document, and only then', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockedMaterialise.mockResolvedValue({ status: 'joined', tripId: 'local-1' as TripId });
+    const { result } = renderHook(() => useRemoteTrips(0));
+    await waitFor(() => {
+      expect(result.current.remoteOnly).toHaveLength(2);
+    });
+
+    await act(async () => {
+      await result.current.download('remote-1');
+    });
+    expect(mockedDownloadDocument).toHaveBeenCalledWith(client, 'local-1', 'remote-1');
+    expect(consoleWarn).not.toHaveBeenCalled();
+
+    mockedDownloadDocument.mockResolvedValue({ status: 'error', message: 'no document' });
+    let downloaded: TripId | null = null;
+    await act(async () => {
+      downloaded = await result.current.download('remote-2');
+    });
+
+    // Still a download: the trip is on the device.
+    expect(downloaded).toBe('local-1');
+    expect(consoleWarn).toHaveBeenCalledWith(
+      '[trips] downloaded a trip without its document:',
+      'no document',
+    );
   });
 });

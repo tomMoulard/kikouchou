@@ -17,6 +17,7 @@ import {
   deletePerson,
   getPersonCount,
   searchPersonsByName,
+  updatePersonWithOwnershipCheck,
 } from '@/lib/db/repositories/person-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
@@ -861,5 +862,90 @@ describe('Person Repository — Error Paths', () => {
     ).rejects.toThrow('Failed to create person "Carol" with auto color');
 
     vi.restoreAllMocks();
+  });
+});
+
+// ============================================================================
+// Partial updates: sanitise what the patch names, keep what it does not
+// ============================================================================
+
+describe.each([
+  ['updatePerson', (id: PersonId, _tripId: TripId, data: Partial<PersonFormData>) => updatePerson(id, data)],
+  ['updatePersonWithOwnershipCheck', updatePersonWithOwnershipCheck],
+] as const)('%s, field by field', (_name, update) => {
+  it('sanitises each field the patch names', async () => {
+    const tripId = await createTestTrip();
+    const person = await createPerson(tripId, createTestPersonData({ name: 'Alice' }));
+
+    await update(person.id, tripId, {
+      name: '  Alice B  ',
+      notes: '  peanuts  ',
+      phone: '  +33 6 12 34 56 78  ',
+      headcount: 0,
+    });
+
+    expect(await getPersonById(person.id)).toMatchObject({
+      name: 'Alice B',
+      notes: 'peanuts',
+      phone: '+33 6 12 34 56 78',
+      headcount: 1,
+    });
+  });
+
+  it('keeps every field the patch does not name', async () => {
+    const tripId = await createTestTrip();
+    const person = await createPerson(
+      tripId,
+      createTestPersonData({
+        name: 'Alice',
+        notes: 'peanuts',
+        phone: '+33 6 12 34 56 78',
+        headcount: 3,
+        childSeat: 'booster',
+      }),
+    );
+
+    await update(person.id, tripId, { color: hexColor('#3b82f6') });
+
+    expect(await getPersonById(person.id)).toMatchObject({
+      name: 'Alice',
+      notes: 'peanuts',
+      phone: '+33 6 12 34 56 78',
+      headcount: 3,
+      childSeat: 'booster',
+      color: '#3b82f6',
+    });
+  });
+});
+
+describe('deleting a guest', () => {
+  it('names the guest it failed to delete', async () => {
+    vi.spyOn(db, 'transaction').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(deletePerson('person-1' as PersonId)).rejects.toThrow(
+      'Failed to delete person person-1',
+    );
+  });
+
+  it('empties a line whose only share was the departing guest', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createPerson(tripId, createTestPersonData({ name: 'Marie' }));
+    const paul = await createPerson(tripId, createTestPersonData({ name: 'Paul' }));
+    await db.expenses.put({
+      id: 'expense-for-marie',
+      tripId,
+      kind: 'expense',
+      category: 'meal',
+      title: 'Her lunch',
+      date: isoDate('2024-07-16'),
+      amount: 12,
+      payerId: paul.id,
+      splitMode: 'equal',
+      splits: [{ personId: marie.id, value: 1 }],
+    } as never);
+
+    await deletePerson(marie.id);
+
+    expect((await db.expenses.get('expense-for-marie'))?.splits).toEqual([]);
   });
 });

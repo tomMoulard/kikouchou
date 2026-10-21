@@ -17,7 +17,8 @@ import { db } from '@/lib/db/database';
 import { encodeUpdate } from '@/lib/sync/codec';
 import { readCursor } from '@/lib/sync/cursors';
 import { redeemInvite } from '@/lib/sync/invites';
-import { claimParticipant } from '@/lib/sync/join-trip';
+import { claimParticipant, sanitisePreview } from '@/lib/sync/join-trip';
+import { toLocalISODateString } from '@/lib/db/utils';
 import {
   materialiseViewerTrip,
   readSharedTrip,
@@ -624,5 +625,333 @@ describe('readSharedTrip — answers it refuses to act on', () => {
     const result = await readSharedTrip(client, TOKEN, 0);
 
     expect(result).toMatchObject({ status: 'error', message: 'the network went away' });
+  });
+});
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+const UNREADABLE = 'the server answered with something unreadable';
+
+/** A wire trip, with fields to override. */
+function wireTrip(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: REMOTE_TRIP_ID,
+    name: 'Brittany',
+    start_date: '2026-07-15',
+    end_date: '2026-07-22',
+    ...overrides,
+  };
+}
+
+async function readPayload(data: unknown) {
+  const { client } = clientAnswering({ data });
+  return readSharedTrip(client, TOKEN, 0);
+}
+
+describe('readSharedTrip, more answers', () => {
+  it('treats a session error as an unexpected answer, by its message', async () => {
+    const { client } = clientAnswering({ error: { message: 'auth required', code: '28000' } });
+
+    expect(await readSharedTrip(client, TOKEN)).toEqual({
+      status: 'error',
+      message: 'auth required',
+    });
+  });
+
+  it('falls back to a fixed message for a session error with none', async () => {
+    const { client } = clientAnswering({ error: { code: '28000' } });
+
+    expect(await readSharedTrip(client, TOKEN)).toEqual({
+      status: 'error',
+      message: 'unexpected answer',
+    });
+  });
+
+  it.each([
+    ['null', null],
+    ['a null trip', { trip: null, snapshot: null, updates: [] }],
+  ])('calls %s unreadable', async (_label, data) => {
+    expect(await readPayload(data)).toEqual({ status: 'error', message: UNREADABLE });
+  });
+
+  it('accepts a trip id of exactly 64 characters', async () => {
+    const result = await readPayload({ trip: wireTrip({ id: 'i'.repeat(64) }), updates: [] });
+
+    expect(result).toMatchObject({ status: 'ok', payload: { trip: { id: 'i'.repeat(64) } } });
+  });
+
+  it('reads a name that is not text as no name', async () => {
+    const result = await readPayload({ trip: wireTrip({ name: 5 }), updates: [] });
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      payload: { trip: { name: sanitisePreview({ name: '', startDate: '', endDate: '' }).name } },
+    });
+  });
+
+  it('reads dates that are not text as today, even when they stringify to a date', async () => {
+    const today = toLocalISODateString(new Date());
+
+    const result = await readPayload({
+      trip: wireTrip({ start_date: ['2026-07-15'], end_date: ['2026-07-22'] }),
+      updates: [],
+    });
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      payload: { trip: { startDate: today, endDate: today } },
+    });
+  });
+
+  it('keeps text dates as they are', async () => {
+    const result = await readPayload({ trip: wireTrip(), updates: [] });
+
+    expect(result).toMatchObject({
+      payload: { trip: { startDate: '2026-07-15', endDate: '2026-07-22' } },
+    });
+  });
+
+  it.each([
+    ['an empty state', { state: '', through_id: 3 }],
+    ['a state that is not text', { state: ['AAAA'], through_id: 3 }],
+    ['a marker that is not a number', { state: 'AAAA', through_id: '3' }],
+    ['an infinite marker', { state: 'AAAA', through_id: Infinity }],
+  ])('drops a snapshot with %s', async (_label, snapshot) => {
+    const result = await readPayload({ trip: wireTrip(), snapshot, updates: [] });
+
+    expect(result).toMatchObject({ status: 'ok', payload: { snapshot: null } });
+  });
+
+  it('keeps a usable snapshot', async () => {
+    const result = await readPayload({
+      trip: wireTrip(),
+      snapshot: { state: 'AAAA', through_id: 3 },
+      updates: [],
+    });
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      payload: { snapshot: { state: 'AAAA', throughId: 3 } },
+    });
+  });
+
+  it('reads a log that is not a list as an empty one', async () => {
+    const result = await readPayload({ trip: wireTrip(), updates: { 0: { id: 1 } } });
+
+    expect(result).toMatchObject({ status: 'ok', payload: { updates: [] } });
+  });
+
+  it('drops a row with an infinite id', async () => {
+    const result = await readPayload({
+      trip: wireTrip(),
+      updates: [{ id: Infinity, update: 'AAAA' }],
+    });
+
+    expect(result).toMatchObject({ status: 'ok', payload: { updates: [] } });
+  });
+});
+
+describe('applying a page, when parts of it are broken', () => {
+  const BROKEN = encodeUpdate(new Uint8Array([255, 255, 255, 255]));
+
+  it('refuses a snapshot that does not decode, and creates no document', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client } = clientAnswering({
+      data: { trip: wireTrip(), snapshot: { state: 'not base64!!', through_id: 5 }, updates: [] },
+    });
+
+    expect(await materialiseViewerTrip(client, TOKEN)).toEqual({
+      status: 'error',
+      message: 'the trip could not be read: its compacted document did not decode',
+    });
+    // Not decoding is not the same failure as not applying.
+    expect(warn).not.toHaveBeenCalledWith('[viewer] the snapshot did not apply:', expect.anything());
+  });
+
+  it('refuses a snapshot that decodes but does not apply, and says so', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client } = clientAnswering({
+      data: { trip: wireTrip(), snapshot: { state: BROKEN, through_id: 5 }, updates: [] },
+    });
+
+    expect(await materialiseViewerTrip(client, TOKEN)).toMatchObject({ status: 'error' });
+    expect(warn).toHaveBeenCalledWith('[viewer] the snapshot did not apply:', expect.anything());
+  });
+
+  it('drops a row that does not decode or does not apply, and keeps the rest', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const whole = encodeUpdate(Y.encodeStateAsUpdate(ownerDocument()));
+    const { client } = clientAnswering({
+      data: {
+        trip: wireTrip(),
+        snapshot: null,
+        updates: [
+          { id: 1, update: 'not base64!!' },
+          { id: 2, update: BROKEN },
+          { id: 3, update: whole },
+        ],
+        has_more: false,
+      },
+    });
+
+    const result = await materialiseViewerTrip(client, TOKEN);
+
+    expect(result.status).toBe('viewing');
+    const tripId = (result as { tripId: TripId }).tripId;
+    expect(await db.persons.where('tripId').equals(tripId).count()).toBe(2);
+    expect((await readCursor(tripId)).lastSeenUpdateId).toBe(3);
+    expect(warn).toHaveBeenCalledWith('[viewer] skipping undecodable log row %d', 1);
+    expect(warn).toHaveBeenCalledWith('[viewer] log row %d did not apply:', 2, expect.anything());
+  });
+
+  it('gives up after fifty pages of a server that always says there is more', async () => {
+    const whole = encodeUpdate(Y.encodeStateAsUpdate(ownerDocument()));
+    let id = 0;
+    const rpc = vi.fn(async () => {
+      id += 1;
+      return {
+        data: { trip: wireTrip(), snapshot: null, updates: [{ id, update: whole }], has_more: true },
+        error: null,
+      };
+    });
+
+    const result = await materialiseViewerTrip({ rpc } as never, TOKEN);
+
+    expect(result.status).toBe('viewing');
+    expect(rpc).toHaveBeenCalledTimes(50);
+  });
+
+  it('reports a later page that is refused, without a half-read trip', async () => {
+    const { client } = clientAnswering(
+      { data: payloadFor({ hasMore: true }) },
+      { error: { message: 'no', hint: 'invite_revoked' } },
+    );
+
+    expect(await materialiseViewerTrip(client, TOKEN)).toEqual({ status: 'revoked' });
+  });
+});
+
+describe('materialiseViewerTrip, more', () => {
+  it('reads through a newer link for a trip it already holds', async () => {
+    const { client } = clientAnswering({ data: payloadFor() });
+    const first = await materialiseViewerTrip(client, TOKEN);
+
+    const second = await materialiseViewerTrip(client, 'newertokentoken2');
+
+    expect(second).toEqual(first);
+    const tripId = (first as { tripId: TripId }).tripId;
+    expect((await db.trips.get(tripId))?.viewerToken).toBe('newertokentoken2');
+  });
+
+  it('creates one trip when the same link is opened twice at once', async () => {
+    const { client } = clientAnswering({ data: payloadFor() });
+
+    const [first, second] = await Promise.all([
+      materialiseViewerTrip(client, TOKEN),
+      materialiseViewerTrip(client, TOKEN),
+    ]);
+
+    expect(await db.trips.where('remoteTripId').equals(REMOTE_TRIP_ID).count()).toBe(1);
+    expect((first as { tripId: TripId }).tripId).toBe((second as { tripId: TripId }).tripId);
+  });
+
+  it('destroys the document it built', async () => {
+    const destroy = vi.spyOn(Y.Doc.prototype, 'destroy');
+    const { client } = clientAnswering({ data: payloadFor() });
+
+    await materialiseViewerTrip(client, TOKEN);
+
+    // The fixture's own documents are never destroyed, so this one is the module's.
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a database failure by its message', async () => {
+    vi.spyOn(db.trips, 'where').mockImplementation(() => {
+      throw new Error('database closed');
+    });
+    const { client } = clientAnswering({ data: payloadFor() });
+
+    expect(await materialiseViewerTrip(client, TOKEN)).toEqual({
+      status: 'error',
+      message: 'database closed',
+    });
+  });
+});
+
+describe('refreshViewerTrip, more', () => {
+  it('calls a snapshot that ends exactly at the cursor nothing new', async () => {
+    const serverDoc = ownerDocument();
+    const { client } = clientAnswering({
+      data: payloadFor({ doc: serverDoc, updates: [{ id: 10, update: encodeUpdate(Y.encodeStateAsUpdate(serverDoc)) }] }),
+    });
+    const opened = await materialiseViewerTrip(client, TOKEN);
+    const tripId = (opened as { tripId: TripId }).tripId;
+    const live = new Y.Doc();
+    Y.applyUpdate(live, Y.encodeStateAsUpdate(serverDoc));
+
+    const { client: same } = clientAnswering({
+      data: payloadFor({ doc: serverDoc, snapshotThroughId: 10, updates: [] }),
+    });
+
+    expect(await refreshViewerTrip(same, live, tripId, TOKEN)).toEqual({ status: 'current' });
+  });
+
+  it('reports a database failure by its message', async () => {
+    vi.spyOn(db.syncCursors, 'get').mockRejectedValue(new Error('database closed'));
+    const { client } = clientAnswering({ data: payloadFor() });
+
+    expect(await refreshViewerTrip(client, new Y.Doc(), 'trip-x' as TripId, TOKEN)).toEqual({
+      status: 'error',
+      message: 'database closed',
+    });
+  });
+});
+
+describe('upgradeViewerTrip, more', () => {
+  async function viewerRow(fields: Partial<Trip> = {}): Promise<Trip> {
+    const now = Date.now() as UnixTimestamp;
+    const trip: Trip = {
+      id: 'viewer-trip' as TripId,
+      name: 'Read only',
+      startDate: '2026-07-15' as Trip['startDate'],
+      endDate: '2026-07-22' as Trip['endDate'],
+      shareId: 'viewer1234' as ShareId,
+      createdAt: now,
+      updatedAt: now,
+      viewerToken: TOKEN,
+      ...fields,
+    };
+    await db.trips.add(trip);
+    return trip;
+  }
+
+  it('links a viewer row that never knew its server id to the one redeemed', async () => {
+    const trip = await viewerRow();
+    mockedRedeem.mockResolvedValue({ status: 'joined', remoteTripId: REMOTE_TRIP_ID });
+
+    expect(await upgradeViewerTrip({} as never, 'user-1', trip)).toEqual({ status: 'upgraded' });
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBe(REMOTE_TRIP_ID);
+  });
+
+  it('says why it refuses a token that opens another trip', async () => {
+    const trip = await viewerRow({ remoteTripId: REMOTE_TRIP_ID });
+    mockedRedeem.mockResolvedValue({ status: 'joined', remoteTripId: 'another-trip' });
+
+    expect(await upgradeViewerTrip({} as never, 'user-1', trip)).toEqual({
+      status: 'error',
+      message: 'the invite belongs to another trip',
+    });
+  });
+
+  it('reports a redeem that throws by its message', async () => {
+    const trip = await viewerRow({ remoteTripId: REMOTE_TRIP_ID });
+    mockedRedeem.mockRejectedValue('offline');
+
+    expect(await upgradeViewerTrip({} as never, 'user-1', trip)).toEqual({
+      status: 'error',
+      message: 'offline',
+    });
   });
 });

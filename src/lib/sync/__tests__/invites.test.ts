@@ -23,6 +23,7 @@ import {
   inviteOutlastsTrip,
   isInviteUsable,
   listInvites,
+  mapInviteError,
   redeemInvite,
   revokeInvite,
   type TripInvite,
@@ -514,5 +515,279 @@ describe('inviteOutlastsTrip', () => {
     expect(
       inviteOutlastsTrip({ ...live, expiresAt: '2026-10-07T10:00:00.000Z' }, '2026-12-20'),
     ).toBe(false);
+  });
+});
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+describe('inviteExpiryForTrip, at the boundary', () => {
+  it('falls back to one month when the grace period ends exactly now', () => {
+    // A link that would expire the moment it is minted is no link at all.
+    const now = new Date('2026-12-27T23:59:59.999Z');
+
+    expect(inviteExpiryForTrip('2026-12-20', now).toISOString()).toBe(
+      '2027-01-27T23:59:59.999Z',
+    );
+  });
+});
+
+describe('inviteOutlastsTrip, at the edges', () => {
+  it('keeps handing out a link when the end date cannot be read', () => {
+    expect(
+      inviteOutlastsTrip(invite({ expiresAt: '2026-10-07T10:00:00.000Z' }), 'not-a-date'),
+    ).toBe(true);
+  });
+
+  it('rejects a link that dies at the very last moment of the trip', () => {
+    expect(
+      inviteOutlastsTrip(invite({ expiresAt: '2026-12-20T23:59:59.999Z' }), '2026-12-20'),
+    ).toBe(false);
+  });
+});
+
+describe('buildInviteUrl, share origin', () => {
+  it('strips every trailing slash of the share origin', () => {
+    expect(
+      buildInviteUrl('https://app.kikouchou.app', '/', 'OMIMwxRIi6TF_KP6', {
+        origin: 'https://share.kikouchou.app//',
+        language: 'fr',
+      }),
+    ).toBe('https://share.kikouchou.app/fr/OMIMwxRIi6TF_KP6');
+  });
+});
+
+describe('extractInviteToken, schemes', () => {
+  it('reads a preview link over plain http', () => {
+    expect(extractInviteToken('http://share.kikouchou.app/fr/aBcDeFgHiJkL3456')).toBe(
+      'aBcDeFgHiJkL3456',
+    );
+  });
+
+  it('does not read a URL whose scheme only ends in https', () => {
+    // Parsed as a URL its path would look like a preview link; it is not one.
+    expect(
+      extractInviteToken('web+https://share.kikouchou.app/fr/aBcDeFgHiJkL3456'),
+    ).toBeNull();
+  });
+
+  it('rejects a URL that does not parse', () => {
+    expect(extractInviteToken('https://[broken/join/aBcDeFgHiJkL3456')).toBeNull();
+  });
+});
+
+describe('isInviteUsable, at the expiry instant', () => {
+  it('rejects an invite at the exact moment it expires', () => {
+    const now = new Date('2026-08-31T12:00:00.000Z');
+
+    expect(isInviteUsable(invite({ expiresAt: now.toISOString() }), now)).toBe(false);
+  });
+});
+
+describe('server calls, what they send and read back', () => {
+  function insertClient(single: () => Promise<unknown>) {
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    const from = vi.fn(() => ({ insert }));
+    return { client: { from } as never, from, select };
+  }
+
+  function listClient(result: unknown) {
+    const order = vi.fn(async () => result);
+    const eq = vi.fn(() => ({ order }));
+    const select = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ select }));
+    return { client: { from } as never, from, select, eq, order };
+  }
+
+  function rpcOf(client: unknown): ReturnType<typeof vi.fn> {
+    return (client as { rpc: ReturnType<typeof vi.fn> }).rpc;
+  }
+
+  it('creates the invite in trip_invites and reads back every column', async () => {
+    const { client, from, select } = insertClient(async () => ({ data: {}, error: null }));
+
+    await createInvite(client, 'trip-uuid', 'user-uuid');
+
+    expect(from).toHaveBeenCalledWith('trip_invites');
+    expect(select).toHaveBeenCalledWith(
+      'token, created_at, expires_at, max_uses, uses, revoked_at',
+    );
+  });
+
+  it('reads a row with missing fields as blanks and defaults', async () => {
+    const { client } = insertClient(async () => ({ data: null, error: null }));
+
+    await expect(createInvite(client, 'trip-uuid', 'user-uuid')).resolves.toEqual({
+      status: 'created',
+      invite: {
+        token: '',
+        createdAt: '',
+        expiresAt: null,
+        maxUses: null,
+        uses: 0,
+        revokedAt: null,
+      },
+    });
+  });
+
+  it('drops fields of the wrong type rather than passing them on', async () => {
+    const { client } = insertClient(async () => ({
+      data: {
+        token: 'tok1234567890abc',
+        created_at: '2026-08-31T12:00:00.000Z',
+        expires_at: 1234,
+        max_uses: '3',
+        uses: '2',
+        revoked_at: false,
+      },
+      error: null,
+    }));
+
+    await expect(createInvite(client, 'trip-uuid', 'user-uuid')).resolves.toEqual({
+      status: 'created',
+      invite: {
+        token: 'tok1234567890abc',
+        createdAt: '2026-08-31T12:00:00.000Z',
+        expiresAt: null,
+        maxUses: null,
+        uses: 0,
+        revokedAt: null,
+      },
+    });
+  });
+
+  it('keeps string expiry and revocation times', async () => {
+    const { client } = insertClient(async () => ({
+      data: {
+        token: 'tok1234567890abc',
+        created_at: '2026-08-31T12:00:00.000Z',
+        expires_at: '2026-09-30T00:00:00.000Z',
+        max_uses: 4,
+        uses: 1,
+        revoked_at: '2026-09-01T00:00:00.000Z',
+      },
+      error: null,
+    }));
+
+    await expect(createInvite(client, 'trip-uuid', 'user-uuid')).resolves.toMatchObject({
+      invite: {
+        expiresAt: '2026-09-30T00:00:00.000Z',
+        maxUses: 4,
+        uses: 1,
+        revokedAt: '2026-09-01T00:00:00.000Z',
+      },
+    });
+  });
+
+  it('reports a thrown create by its message', async () => {
+    const client = {
+      from: () => {
+        throw new Error('Failed to fetch');
+      },
+    } as never;
+
+    await expect(createInvite(client, 'trip-uuid', 'user-uuid')).resolves.toEqual({
+      status: 'error',
+      message: 'Failed to fetch',
+    });
+  });
+
+  it('lists the trip invites newest first', async () => {
+    const { client, from, select, eq, order } = listClient({ data: [], error: null });
+
+    await listInvites(client, 'trip-uuid');
+
+    expect(from).toHaveBeenCalledWith('trip_invites');
+    expect(select).toHaveBeenCalledWith(
+      'token, created_at, expires_at, max_uses, uses, revoked_at',
+    );
+    expect(eq).toHaveBeenCalledWith('trip_id', 'trip-uuid');
+    expect(order).toHaveBeenCalledWith('created_at', { ascending: false });
+  });
+
+  it('lists nothing when the server reports an error, even with rows', async () => {
+    const { client } = listClient({
+      data: [{ token: 'tok1234567890abc' }],
+      error: { message: 'denied' },
+    });
+
+    await expect(listInvites(client, 'trip-uuid')).resolves.toEqual([]);
+  });
+
+  it('lists nothing when the server returns no data and no error', async () => {
+    const { client } = listClient({ data: null, error: null });
+
+    await expect(listInvites(client, 'trip-uuid')).resolves.toEqual([]);
+  });
+
+  it('redeems through the redeem_invite RPC with the token', async () => {
+    const client = clientWithRpc({ data: 'remote-trip', error: null });
+
+    await redeemInvite(client, 'tok1234567890abc');
+
+    expect(rpcOf(client)).toHaveBeenCalledWith('redeem_invite', {
+      invite_token: 'tok1234567890abc',
+    });
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['a number', 42],
+  ])('refuses %s as the joined trip id', async (_label, data) => {
+    const client = clientWithRpc({ data, error: null });
+
+    await expect(redeemInvite(client, 'tok1234567890abc')).resolves.toEqual({
+      status: 'error',
+      message: 'server did not return a trip id',
+    });
+  });
+
+  it('falls back to a generic message for an error with none', async () => {
+    const client = clientWithRpc({ data: null, error: {} });
+
+    await expect(redeemInvite(client, 'tok1234567890abc')).resolves.toEqual({
+      status: 'error',
+      message: 'unknown error',
+    });
+  });
+
+  it('revokes through the revoke_invite RPC with the token', async () => {
+    const client = clientWithRpc({ error: null });
+
+    await revokeInvite(client, 'tok1234567890abc');
+
+    expect(rpcOf(client)).toHaveBeenCalledWith('revoke_invite', {
+      invite_token: 'tok1234567890abc',
+    });
+  });
+
+  it('reports a thrown revoke by its message', async () => {
+    const client = {
+      rpc: vi.fn(async () => {
+        throw 'offline';
+      }),
+    } as never;
+
+    await expect(revokeInvite(client, 'tok1234567890abc')).resolves.toEqual({
+      ok: false,
+      message: 'offline',
+    });
+  });
+});
+
+describe('mapInviteError', () => {
+  it.each([
+    ['invite_not_found', 'not-found'],
+    ['invite_revoked', 'revoked'],
+    ['invite_expired', 'expired'],
+    ['invite_exhausted', 'exhausted'],
+  ])('reads the hint %s as %s, whatever the message says', (hint, status) => {
+    expect(mapInviteError({ hint, message: 'invite not found', code: '28000' })).toEqual({ status });
+  });
+
+  it('reads a missing session only when no hint says otherwise', () => {
+    expect(mapInviteError({ hint: null, code: '28000' })).toEqual({ status: 'unauthenticated' });
   });
 });

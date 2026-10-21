@@ -17,9 +17,11 @@ import {
   getCurrentTripId,
   getLanguage,
   resetSettings,
+  setMyPersonId,
+  getMyPersonId,
 } from '@/lib/db/repositories/settings-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
-import type { TripId } from '@/types';
+import type { PersonId, TripId } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { isoDate } from '@/test/utils';
 
@@ -481,5 +483,45 @@ describe('Settings Integration', () => {
     const settings = await getSettings();
     expect(settings.language).toBe('en');
     expect(settings.currentTripId).toBe(tripId);
+  });
+});
+
+describe('device facts that outlive a reset', () => {
+  it('keeps the sample trip fields through a reset', async () => {
+    await db.settings.put({
+      ...DEFAULT_SETTINGS,
+      language: 'en',
+      sampleTripSeeded: true,
+      sampleTripId: 'sample-trip' as TripId,
+    });
+
+    await resetSettings();
+
+    expect(await db.settings.get('settings')).toStrictEqual({
+      ...DEFAULT_SETTINGS,
+      sampleTripSeeded: true,
+      sampleTripId: 'sample-trip',
+    });
+  });
+
+  it('adds no sample trip field a device never had', async () => {
+    await db.settings.put({ ...DEFAULT_SETTINGS, language: 'en' });
+
+    await resetSettings();
+
+    expect(await db.settings.get('settings')).toStrictEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('which guest this device is', () => {
+  it('remembers one trip\'s answer and forgets it on request', async () => {
+    const tripId = await createTestTrip();
+
+    await setMyPersonId(tripId, 'person-1' as PersonId);
+    expect(await getMyPersonId(tripId)).toBe('person-1');
+
+    await setMyPersonId(tripId, undefined);
+    expect(await getMyPersonId(tripId)).toBeUndefined();
+    expect(Object.keys((await getSettings()).myPersonIdByTripId ?? {})).toEqual([]);
   });
 });

@@ -15,7 +15,8 @@
  *
  * 2. **A deletion is only inferred from a row this device uploaded.** A pull
  *    drops a local group when it carries a `remoteGroupId` the server no longer
- *    lists, and never otherwise. A group created offline and not yet pushed is
+ *    lists, under that id or under the group's own local id, and never
+ *    otherwise. A group created offline and not yet pushed is
  *    not evidence that anything was deleted — pruning on its absence is how the
  *    mirror-completeness rule in AGENTS.md gets violated, one table at a time.
  *
@@ -249,7 +250,10 @@ async function pullGuestGroups(
     remote = rows
       .map(toGuestGroup)
       .filter((group): group is GuestGroup => group !== undefined),
-    remoteIds = new Set(rows.map((row) => row.id));
+    remoteIds = new Set(rows.map((row) => row.id)),
+    // Every row, usable or not: a row the pull drops as input is still the
+    // account saying it has that group.
+    remoteLocalIds = new Set(rows.map((row) => row.local_id));
 
   let pulled = 0,
     pruned = 0;
@@ -298,11 +302,17 @@ async function pullGuestGroups(
     // browser used to delete the first person's groups off the device. A group
     // with no recorded owner predates this field, and is left alone rather than
     // guessed about.
+    //
+    // Listed means listed under either id. The account's unique key is
+    // `(owner_id, local_id)`, so a group whose row was recreated under a new
+    // server id is listed by its local id, not gone. Judged by the server id
+    // alone, it was deleted along with the copy the loop had just written.
     const vanished = local.filter(
       (group) =>
         group.remoteGroupId !== undefined &&
         group.remoteOwnerId === userId &&
-        !remoteIds.has(group.remoteGroupId),
+        !remoteIds.has(group.remoteGroupId) &&
+        !remoteLocalIds.has(group.id),
     );
 
     if (vanished.length > 0) {

@@ -14,12 +14,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 
-import {
-  MapView,
-  type MapViewRef,
-  type MapMarkerData,
-  type MapPolylineData,
-} from '@/components/shared/MapView';
+import type { MapViewRef, MapMarkerData, MapPolylineData } from '@/components/shared/MapView';
+
+/**
+ * Loaded inside the first test rather than at the top of the file: the tile
+ * URLs and credits are load-time tables, and Stryker can only test a mutant in
+ * load-time code against the test that was running when the module loaded.
+ */
+let MapView: typeof import('@/components/shared/MapView').MapView;
+
+beforeEach(async () => {
+  ({ MapView } = await import('@/components/shared/MapView'));
+});
 import enTranslations from '@/locales/en/translation.json';
 import frTranslations from '@/locales/fr/translation.json';
 
@@ -71,6 +77,7 @@ vi.mock('react-leaflet', () => ({
     zoomControl,
     minZoom,
     maxZoom,
+    attributionControl,
   }: {
     children: React.ReactNode;
     center: [number, number];
@@ -82,6 +89,7 @@ vi.mock('react-leaflet', () => ({
     zoomControl?: boolean;
     minZoom?: number;
     maxZoom?: number;
+    attributionControl?: boolean;
   }) => (
     <div
       data-testid="mock-map-container"
@@ -93,6 +101,7 @@ vi.mock('react-leaflet', () => ({
       data-zoom-control={String(zoomControl)}
       data-min-zoom={minZoom}
       data-max-zoom={maxZoom}
+      data-attribution-control={String(attributionControl)}
       className={className}
     >
       {children}
@@ -119,6 +128,8 @@ vi.mock('react-leaflet', () => ({
       data-testid="mock-polyline"
       data-positions={JSON.stringify(positions)}
       data-color={pathOptions?.color}
+      data-weight={pathOptions?.weight}
+      data-opacity={pathOptions?.opacity}
     />
   ),
   useMap: () => mockMapInstance,
@@ -188,6 +199,32 @@ afterEach(() => {
 // ============================================================================
 // Basic Rendering Tests
 // ============================================================================
+
+describe('MapView load-time tables', () => {
+  it('asks for OSM tiles with their credit on a light page, and CARTO dark tiles with both credits on a dark one', () => {
+    const { unmount } = render(<MapView center={[0, 0]} />);
+    const light = screen.getByTestId('mock-tile-layer');
+    expect(light).toHaveAttribute('data-url', 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    expect(light).toHaveAttribute(
+      'data-attribution',
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    );
+    unmount();
+
+    document.documentElement.classList.add('dark');
+    try {
+      render(<MapView center={[0, 0]} />);
+      const dark = screen.getByTestId('mock-tile-layer');
+      expect(dark).toHaveAttribute('data-url', 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
+      expect(dark).toHaveAttribute(
+        'data-attribution',
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      );
+    } finally {
+      document.documentElement.classList.remove('dark');
+    }
+  });
+});
 
 describe('MapView Basic Rendering', () => {
   it('renders map container', () => {
@@ -784,5 +821,196 @@ describe('MapView Height', () => {
 
     const wrapper = screen.getByRole('application');
     expect(wrapper).toHaveStyle({ height: '50vh' });
+  });
+});
+
+// ============================================================================
+// Keys, freshness and a map that is gone
+// ============================================================================
+
+describe('MapView, more of it', () => {
+  const markers = [
+    createTestMarker({ id: 'a', label: 'Paris', position: [48.8566, 2.3522] }),
+    createTestMarker({ id: 'b', label: 'London', position: [51.5074, -0.1278] }),
+    createTestMarker({ id: 'c', label: 'Berlin', position: [52.52, 13.405] }),
+  ];
+
+  /** Sends a key to the map and says whether the page's default was stopped. */
+  function keyOnMap(key: string): boolean {
+    return !fireEvent.keyDown(mapContainer, { key });
+  }
+
+  beforeEach(() => {
+    mockMapInstance.panTo.mockClear();
+    mockMapInstance.setZoom.mockClear();
+    mockMapInstance.fitBounds.mockClear();
+  });
+
+  it('walks the markers with the right and left arrows too, wrapping at both ends', () => {
+    const onMarkerClick = vi.fn();
+    render(<MapView center={[0, 0]} markers={markers} onMarkerClick={onMarkerClick} />);
+
+    for (let i = 0; i < 4; i += 1) keyOnMap('ArrowRight');
+    keyOnMap('Enter');
+    // Three steps reach the last marker; the fourth wraps to the first.
+    expect(onMarkerClick).toHaveBeenLastCalledWith(markers[0]);
+
+    keyOnMap('ArrowRight');
+    keyOnMap('ArrowLeft');
+    keyOnMap(' ');
+    expect(onMarkerClick).toHaveBeenLastCalledWith(markers[0]);
+
+    keyOnMap('ArrowRight');
+    keyOnMap('ArrowUp');
+    keyOnMap('Enter');
+    expect(onMarkerClick).toHaveBeenLastCalledWith(markers[0]);
+  });
+
+  it('keeps the arrows, Enter and Space from scrolling the page', () => {
+    render(<MapView center={[0, 0]} markers={markers} onMarkerClick={vi.fn()} />);
+
+    for (const key of ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Enter', ' ']) {
+      expect(keyOnMap(key), key).toBe(true);
+    }
+    expect(keyOnMap('Escape')).toBe(false);
+  });
+
+  it('takes Enter on a marker with no click handler without failing', () => {
+    render(<MapView center={[0, 0]} markers={markers} />);
+
+    keyOnMap('ArrowDown');
+
+    expect(() => keyOnMap('Enter')).not.toThrow();
+  });
+
+  it('reports a marker click to the newest handler, and a click with none at all', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<MapView center={[0, 0]} markers={markers} onMarkerClick={first} />);
+    rerender(<MapView center={[0, 0]} markers={markers} onMarkerClick={second} />);
+
+    fireEvent.click(screen.getByTestId('mock-marker-b'));
+    expect(second).toHaveBeenCalledWith(markers[1]);
+    expect(first).not.toHaveBeenCalled();
+
+    rerender(<MapView center={[0, 0]} markers={markers} />);
+    expect(() => fireEvent.click(screen.getByTestId('mock-marker-b'))).not.toThrow();
+  });
+
+  it('takes a map click with no handler without failing', () => {
+    render(<MapView center={[0, 0]} />);
+    const handler = (window as unknown as Record<string, unknown>).__testMapClickHandler as (e: {
+      latlng: { lat: number; lng: number };
+    }) => void;
+
+    expect(() => handler({ latlng: { lat: 1, lng: 2 } })).not.toThrow();
+  });
+
+  it('tells the newest onMapReady about the map', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<MapView center={[0, 0]} onMapReady={first} />);
+    rerender(<MapView center={[0, 0]} onMapReady={second} />);
+
+    expect(second).toHaveBeenCalledWith(mockMapInstance);
+  });
+
+  it('lets go of the map once unmounted, and every handle method survives that', () => {
+    const ref = createRef<MapViewRef>();
+    const { unmount } = render(<MapView ref={ref} center={[0, 0]} markers={markers} />);
+    const handle = ref.current as MapViewRef;
+
+    unmount();
+
+    expect(handle.getMap()).toBeNull();
+    expect(() => handle.panTo([1, 2])).not.toThrow();
+    expect(() => handle.setZoom(4)).not.toThrow();
+    expect(() => handle.fitBounds()).not.toThrow();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setZoom).not.toHaveBeenCalled();
+    expect(mockMapInstance.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('accepts the poles and the antimeridian as a centre', () => {
+    for (const center of [
+      [-90, -180],
+      [90, 180],
+    ] as const) {
+      const { unmount } = render(<MapView center={center} />);
+      expect(screen.getByTestId('mock-map-container')).toHaveAttribute('data-center', JSON.stringify(center));
+      unmount();
+    }
+  });
+
+  it('falls back to the origin for a centre that is off the globe or not a number', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const center of [
+      [91, 0],
+      [-91, 0],
+      [0, 181],
+      [0, -181],
+      ['48' as unknown as number, 2],
+      [48, '2' as unknown as number],
+    ] as const) {
+      const { unmount } = render(<MapView center={center as unknown as [number, number]} />);
+      expect(screen.getByTestId('mock-map-container'), JSON.stringify(center)).toHaveAttribute(
+        'data-center',
+        '[0,0]',
+      );
+      unmount();
+    }
+    warn.mockRestore();
+  });
+
+  it('falls back without a word in a production build', () => {
+    // The warning is for whoever passed the centre in, not for a visitor.
+    vi.stubEnv('DEV', false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<MapView center={[91, 0]} />);
+
+      expect(screen.getByTestId('mock-map-container')).toHaveAttribute('data-center', '[0,0]');
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('follows a new centre and a new height', () => {
+    const { rerender } = render(<MapView center={[1, 2]} height={200} />);
+    rerender(<MapView center={[3, 4]} height={320} />);
+
+    expect(screen.getByTestId('mock-map-container')).toHaveAttribute('data-center', '[3,4]');
+    expect(screen.getByRole('application').style.height).toBe('320px');
+  });
+
+  it('wraps upwards from the first marker to the last', () => {
+    const onMarkerClick = vi.fn();
+    render(<MapView center={[0, 0]} markers={markers} onMarkerClick={onMarkerClick} />);
+
+    keyOnMap('ArrowDown');
+    keyOnMap('ArrowUp');
+    keyOnMap('Enter');
+
+    expect(onMarkerClick).toHaveBeenLastCalledWith(markers[2]);
+  });
+
+  it('is interactive, rounded and clipped by default, with its zoom buttons', () => {
+    render(<MapView center={[0, 0]} className="extra" />);
+
+    expect(screen.getByTestId('mock-map-container')).toHaveAttribute('data-zoom-control', 'true');
+    expect(screen.getByTestId('mock-map-container')).toHaveAttribute('data-dragging', 'true');
+    expect(screen.getByTestId('mock-map-container')).toHaveAttribute('data-attribution-control', 'false');
+    expect(screen.getByRole('application')).toHaveClass('relative', 'overflow-hidden', 'rounded-md', 'extra');
+  });
+
+  it('draws a route in the brand blue, thick and slightly see-through', () => {
+    render(<MapView center={[0, 0]} polylines={[{ id: 'leg', positions: [[1, 2], [3, 4]] }]} />);
+
+    const line = screen.getByTestId('mock-polyline');
+    expect(line).toHaveAttribute('data-color', '#2563eb');
+    expect(line).toHaveAttribute('data-weight', '4');
+    expect(line).toHaveAttribute('data-opacity', '0.75');
   });
 });

@@ -43,6 +43,17 @@ describe('CalendarDayHeader', () => {
     expect(screen.getByLabelText('lundi')).toBeInTheDocument();
     expect(screen.getByLabelText('mardi')).toBeInTheDocument();
     expect(screen.getByLabelText('dimanche')).toBeInTheDocument();
+    expect(screen.getByText('lun.')).toBeInTheDocument();
+    expect(screen.getByLabelText('lundi')).toHaveTextContent('lun.l');
+  });
+
+  it('renames the days when the language changes', () => {
+    const { rerender } = render(<CalendarDayHeader dateLocale={enUS} />);
+
+    rerender(<CalendarDayHeader dateLocale={fr} />);
+
+    expect(screen.getByLabelText('lundi')).toBeInTheDocument();
+    expect(screen.getByText('lun.')).toBeInTheDocument();
   });
 
   it('provides full day name as aria-label', () => {

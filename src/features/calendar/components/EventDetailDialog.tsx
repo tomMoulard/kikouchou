@@ -692,7 +692,6 @@ const EventDetailDialog = memo(function EventDetailDialog({
 }: EventDetailDialogProps) {
   const { t, i18n } = useTranslation();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Get date locale for formatting
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -724,7 +723,6 @@ const EventDetailDialog = memo(function EventDetailDialog({
 
   // Handle confirmed delete
   const handleConfirmDelete = useCallback(async () => {
-    setIsDeleting(true);
     try {
       await onDelete();
       setIsDeleteDialogOpen(false);
@@ -737,17 +735,8 @@ const EventDetailDialog = memo(function EventDetailDialog({
         error,
         t('errors.deleteFailed', 'Failed to delete'),
       );
-    } finally {
-      setIsDeleting(false);
     }
   }, [onDelete, onOpenChange, t]);
-
-  // Handle delete dialog close
-  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
-    if (!isDeleting) {
-      setIsDeleteDialogOpen(open);
-    }
-  }, [isDeleting]);
 
   // Early return if no event
   if (!event) {
@@ -829,7 +818,10 @@ const EventDetailDialog = memo(function EventDetailDialog({
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={isDeleteDialogOpen}
-        onOpenChange={handleDeleteDialogOpenChange}
+        // No guard of its own while the delete runs: ConfirmDialog already
+        // holds the prompt until the delete settles, and lets it go once the
+        // delete has stalled. A second lock here took that way out back.
+        onOpenChange={setIsDeleteDialogOpen}
         title={
           isAssignmentEvent(event)
             ? t('confirm.removeAssignment')

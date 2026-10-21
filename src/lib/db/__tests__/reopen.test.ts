@@ -97,3 +97,44 @@ describe('isTransientIndexedDbError', () => {
     expect(isTransientIndexedDbError(null)).toBe(false);
   });
 });
+
+describe('isTransientIndexedDbError: what counts as wrapped', () => {
+  it('does not read a function named UnknownError as the wrapped error', () => {
+    function UnknownError(): void {}
+
+    expect(isTransientIndexedDbError({ name: 'AbortError', inner: UnknownError })).toBe(false);
+  });
+
+  it('reads an empty wrapper as not transient', () => {
+    expect(isTransientIndexedDbError({ name: 'AbortError', inner: null })).toBe(false);
+  });
+
+  it('reads a wrapped error of another kind as not transient', () => {
+    expect(
+      isTransientIndexedDbError({ name: 'AbortError', inner: { name: 'QuotaExceededError' } }),
+    ).toBe(false);
+  });
+
+  it('does not take a function for an error, whatever it is called', () => {
+    function UnknownError(): void {}
+
+    expect(isTransientIndexedDbError(UnknownError)).toBe(false);
+  });
+
+  it('says why it reopens', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const database = { close: vi.fn(), open: vi.fn(async () => undefined) };
+    const failure = Object.assign(new Error('internal'), { name: 'UnknownError' });
+    const operation = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce('ok');
+
+    await expect(retryAfterReopen(operation, database as never)).resolves.toBe('ok');
+
+    expect(warn).toHaveBeenCalledWith(
+      '[db] IndexedDB failed internally, reopening once:',
+      failure,
+    );
+  });
+});

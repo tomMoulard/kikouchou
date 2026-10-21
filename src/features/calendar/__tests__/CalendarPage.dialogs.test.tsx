@@ -156,14 +156,19 @@ vi.mock('@/features/transports', () => ({
     open: boolean;
     transportId?: string;
     onOpenChange: (open: boolean) => void;
-  }) =>
-    open ? (
-      <div data-testid="transport-dialog" data-transport-id={transportId ?? ''}>
-        <button data-testid="close-transport" onClick={() => onOpenChange(false)}>
-          close
-        </button>
-      </div>
-    ) : null,
+  }) => (
+    <>
+      {/* Always drawn: what the page still hands the dialog once it is shut. */}
+      <span data-testid="transport-dialog-target" data-transport-id={transportId ?? ''} />
+      {open ? (
+        <div data-testid="transport-dialog" data-transport-id={transportId ?? ''}>
+          <button data-testid="close-transport" onClick={() => onOpenChange(false)}>
+            close
+          </button>
+        </div>
+      ) : null}
+    </>
+  ),
 }));
 
 vi.mock('@/features/activities/components/ActivityDialog', () => ({
@@ -175,14 +180,19 @@ vi.mock('@/features/activities/components/ActivityDialog', () => ({
     open: boolean;
     activityId?: string;
     onOpenChange: (open: boolean) => void;
-  }) =>
-    open ? (
-      <div data-testid="activity-dialog" data-activity-id={activityId ?? ''}>
-        <button data-testid="close-activity" onClick={() => onOpenChange(false)}>
-          close
-        </button>
-      </div>
-    ) : null,
+  }) => (
+    <>
+      {/* Always drawn: what the page still hands the dialog once it is shut. */}
+      <span data-testid="activity-dialog-target" data-activity-id={activityId ?? ''} />
+      {open ? (
+        <div data-testid="activity-dialog" data-activity-id={activityId ?? ''}>
+          <button data-testid="close-activity" onClick={() => onOpenChange(false)}>
+            close
+          </button>
+        </div>
+      ) : null}
+    </>
+  ),
 }));
 
 // The real form has a person select and two date pickers, none of which is
@@ -204,30 +214,35 @@ vi.mock('@/features/rooms/components/RoomAssignmentSection', () => ({
       startDate: string;
       endDate: string;
     }) => Promise<void>;
-  }) =>
-    open ? (
-      <div data-testid="assignment-dialog" data-assignment-id={existingAssignment?.id ?? ''}>
-        <button
-          data-testid="submit-assignment"
-          onClick={() => {
-            void onSubmit({
-              roomId: 'room-1',
-              personId: 'person-1',
-              startDate: '2026-04-03',
-              endDate: '2026-04-06',
-            }).catch(() => {
-              // The page re-throws so the real dialog can stay open; the stub
-              // has nothing to keep open, so the rejection stops here.
-            });
-          }}
-        >
-          submit
-        </button>
-        <button data-testid="close-assignment" onClick={() => onOpenChange(false)}>
-          close
-        </button>
-      </div>
-    ) : null,
+  }) => (
+    <>
+      {/* Drawn whenever the page mounts the dialog, open or shut. */}
+      <span data-testid="assignment-dialog-mounted" data-open={String(open)} />
+      {open ? (
+        <div data-testid="assignment-dialog" data-assignment-id={existingAssignment?.id ?? ''}>
+          <button
+            data-testid="submit-assignment"
+            onClick={() => {
+              void onSubmit({
+                roomId: 'room-1',
+                personId: 'person-1',
+                startDate: '2026-04-03',
+                endDate: '2026-04-06',
+              }).catch(() => {
+                // The page re-throws so the real dialog can stay open; the stub
+                // has nothing to keep open, so the rejection stops here.
+              });
+            }}
+          >
+            submit
+          </button>
+          <button data-testid="close-assignment" onClick={() => onOpenChange(false)}>
+            close
+          </button>
+        </div>
+        ) : null}
+    </>
+  ),
   RoomAssignmentSection: () => null,
 }));
 
@@ -316,6 +331,7 @@ describe('CalendarPage — closing a dialog', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('transport-dialog')).not.toBeInTheDocument();
     });
+    expect(screen.getByTestId('transport-dialog-target')).toHaveAttribute('data-transport-id', '');
   });
 
   it('forgets the activity it was editing', async () => {
@@ -330,6 +346,7 @@ describe('CalendarPage — closing a dialog', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('activity-dialog')).not.toBeInTheDocument();
     });
+    expect(screen.getByTestId('activity-dialog-target')).toHaveAttribute('data-activity-id', '');
   });
 
   it('forgets the stay it was editing', async () => {
@@ -347,6 +364,39 @@ describe('CalendarPage — closing a dialog', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('assignment-dialog')).not.toBeInTheDocument();
     });
+    expect(screen.queryByTestId('assignment-dialog-mounted')).not.toBeInTheDocument();
+  });
+
+  it('closes the stay details when the stay editor opens', async () => {
+    const { user } = renderCalendarPage();
+    await showMonth(user);
+
+    await editTheStay(user);
+
+    expect(await screen.findByTestId('assignment-dialog')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('edits a stay whose room is no longer on the trip', async () => {
+    mockUseAssignmentContext.mockReturnValue({
+      assignments: [{ ...mockAssignment, roomId: 'room-gone' as RoomAssignment['roomId'] }],
+      isLoading: false,
+      error: null,
+      deleteAssignment: vi.fn().mockResolvedValue(undefined),
+      updateAssignment: mockUpdateAssignment,
+      getAssignmentsByRoom: vi.fn(() => []),
+      checkConflict: vi.fn(() => null),
+    });
+    const { user } = renderCalendarPage();
+    await showMonth(user);
+
+    await user.click(screen.getAllByLabelText('Alice - common.unknown')[0]!);
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'common.edit' }));
+
+    expect(await screen.findByTestId('assignment-dialog')).toBeInTheDocument();
   });
 });
 
@@ -372,15 +422,17 @@ describe('CalendarPage — saving a stay', () => {
         endDate: '2026-04-06',
       });
     });
-    expect(mockNotifySuccess).toHaveBeenCalled();
+    expect(mockNotifySuccess).toHaveBeenCalledWith('assignments.updateSuccess');
     await waitFor(() => {
       expect(screen.queryByTestId('assignment-dialog')).not.toBeInTheDocument();
     });
+    expect(screen.queryByTestId('assignment-dialog-mounted')).not.toBeInTheDocument();
   });
 
   it('keeps the dialog open when the write failed', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    mockUpdateAssignment.mockRejectedValue(new Error('offline'));
+    const failure = new Error('offline');
+    mockUpdateAssignment.mockRejectedValue(failure);
     const { user } = renderCalendarPage();
     await showMonth(user);
 
@@ -392,6 +444,7 @@ describe('CalendarPage — saving a stay', () => {
     });
     expect(mockNotifySuccess).not.toHaveBeenCalled();
     expect(screen.getByTestId('assignment-dialog')).toBeInTheDocument();
+    expect(consoleError).toHaveBeenCalledWith('Failed to update assignment from calendar:', failure);
     consoleError.mockRestore();
   });
 });

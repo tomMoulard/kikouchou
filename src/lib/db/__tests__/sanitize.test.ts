@@ -13,7 +13,25 @@ import {
   sanitizeText,
   sanitizeTransportData,
   sanitizeTripData,
+  sanitizeVehicleData,
+  sanitizeRideData,
+  sanitizeExpenseData,
+  normalizeLeadTimeMinutes,
+  normalizeExpenseAmount,
+  normalizeExpenseSplitValue,
+  normalizeSeatCount,
+  normalizeRoomCapacity,
+  isCalendarDayString,
+  isInstantString,
+  sanitizeGuestGroupData,
+  normalizeMaxParticipants,
 } from '../sanitize';
+import {
+  MAX_ACTIVITY_PARTICIPANTS,
+  MAX_EXPENSE_AMOUNT,
+  MAX_EXPENSE_SPLITS,
+  MAX_EXPENSE_SPLIT_VALUE,
+} from '@/types';
 
 // ============================================================================
 // MAX_LENGTHS Constants Tests
@@ -689,5 +707,228 @@ describe('sanitization integration', () => {
     expect(result).not.toBe(input);
     expect(input.name).toBe('  Test  ');
     expect(result.name).toBe('Test');
+  });
+});
+
+// ============================================================================
+// Car, ride and money sanitisers at their edges
+// ============================================================================
+
+describe('sanitizers given a record with its text missing', () => {
+  it('reads a missing car name as empty', () => {
+    expect(sanitizeVehicleData({ name: undefined as never }).name).toBe('');
+  });
+
+  it('reads a missing meeting point as empty', () => {
+    expect(sanitizeRideData({ location: undefined as never }).location).toBe('');
+  });
+});
+
+describe('normalizeLeadTimeMinutes', () => {
+  it('clamps a negative lead time to leaving now', () => {
+    expect(normalizeLeadTimeMinutes(-5)).toBe(0);
+  });
+});
+
+describe('sanitizeExpenseData shares', () => {
+  it('drops a share with no guest and reads a negative share as nothing', () => {
+    const { splits } = sanitizeExpenseData({
+      title: 'Lunch',
+      amount: 12,
+      splits: [
+        { personId: '', value: 1 },
+        { personId: 'p1', value: -3 },
+      ],
+    });
+
+    expect(splits).toEqual([{ personId: 'p1', value: 0 }]);
+  });
+});
+
+// ============================================================================
+// Normalisers at every edge
+// ============================================================================
+
+describe('sanitizePersonData headcount', () => {
+  it('leaves a headcount the guest never gave absent', () => {
+    expect(sanitizePersonData<{ name: string; headcount?: number }>({ name: 'Alice' }).headcount).toBeUndefined();
+  });
+});
+
+describe('sanitizeGuestGroupData', () => {
+  it('trims the group name and each member', () => {
+    expect(
+      sanitizeGuestGroupData({ name: '  Family  ', members: [{ name: '  Alice  ' }] }),
+    ).toEqual({ name: 'Family', members: [expect.objectContaining({ name: 'Alice' })] });
+  });
+});
+
+describe('normalizeExpenseAmount', () => {
+  it.each([
+    ['missing', undefined],
+    ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['negative', -5],
+  ])('reads a %s amount as zero', (_label, value) => {
+    expect(normalizeExpenseAmount(value)).toBe(0);
+  });
+
+  it('keeps an amount inside the bounds and clamps one past them', () => {
+    expect(normalizeExpenseAmount(12.5)).toBe(12.5);
+    expect(normalizeExpenseAmount(MAX_EXPENSE_AMOUNT * 2)).toBe(MAX_EXPENSE_AMOUNT);
+  });
+});
+
+describe('normalizeExpenseSplitValue', () => {
+  it.each([
+    ['missing', undefined],
+    ['not a number', Number.NaN],
+    ['negative', -1],
+  ])('reads a %s share as zero', (_label, value) => {
+    expect(normalizeExpenseSplitValue(value)).toBe(0);
+  });
+
+  it('keeps a share inside the bounds and clamps one past them', () => {
+    expect(normalizeExpenseSplitValue(3)).toBe(3);
+    expect(normalizeExpenseSplitValue(MAX_EXPENSE_SPLIT_VALUE * 2)).toBe(MAX_EXPENSE_SPLIT_VALUE);
+  });
+});
+
+describe('sanitizeExpenseData splits, entry by entry', () => {
+  it('drops an empty slot, a blank guest and a guest id that is not a string', () => {
+    const { splits } = sanitizeExpenseData({
+      title: 'Lunch',
+      amount: 12,
+      splits: [
+        null as never,
+        { personId: '', value: 1 },
+        { personId: 7 as never, value: 1 },
+        { personId: 'p1', value: 2 },
+      ],
+    });
+
+    expect(splits).toEqual([{ personId: 'p1', value: 2 }]);
+  });
+
+  it('keeps one share per guest, the last one written', () => {
+    const { splits } = sanitizeExpenseData({
+      title: 'Lunch',
+      amount: 12,
+      splits: [
+        { personId: 'p1', value: 1 },
+        { personId: 'p1', value: 4 },
+      ],
+    });
+
+    expect(splits).toEqual([{ personId: 'p1', value: 4 }]);
+  });
+
+  it('keeps at most the share limit', () => {
+    const { splits } = sanitizeExpenseData({
+      title: 'Lunch',
+      amount: 12,
+      splits: Array.from({ length: MAX_EXPENSE_SPLITS + 1 }, (_, index) => ({
+        personId: `p${index}`,
+        value: 1,
+      })),
+    });
+
+    expect(splits).toHaveLength(MAX_EXPENSE_SPLITS);
+  });
+});
+
+describe('normalizeSeatCount', () => {
+  it.each([
+    ['missing', undefined],
+    ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['zero', 0],
+  ])('reads a %s seat count as not measured', (_label, value) => {
+    expect(normalizeSeatCount(value)).toBeUndefined();
+  });
+
+  it('keeps one seat, rounds, and clamps past the largest car', () => {
+    expect(normalizeSeatCount(1)).toBe(1);
+    expect(normalizeSeatCount(4.6)).toBe(5);
+    expect(normalizeSeatCount(1_000)).toBe(99);
+  });
+});
+
+describe('normalizeRoomCapacity', () => {
+  it.each([
+    ['a string', '3'],
+    ['not a number', Number.NaN],
+    ['zero', 0],
+  ])('reads a capacity that is %s as one bed', (_label, value) => {
+    expect(normalizeRoomCapacity(value)).toBe(1);
+  });
+
+  it('rounds and clamps a number of beds', () => {
+    expect(normalizeRoomCapacity(2.4)).toBe(2);
+    expect(normalizeRoomCapacity(1e9)).toBe(50);
+  });
+});
+
+describe('isCalendarDayString', () => {
+  it.each(['2026-01-01', '2026-12-31', '2026-01-31'])('accepts %s', (value) => {
+    expect(isCalendarDayString(value)).toBe(true);
+  });
+
+  it.each([
+    ['a number', 20_260_801],
+    ['a month past December', '2026-13-01'],
+    ['month zero', '2026-00-10'],
+    ['day zero', '2026-01-00'],
+    ['a day past 31', '2026-01-32'],
+    ['text before the day', 'aaaa-01-01 2026-08-01'],
+    ['a time after the day', '2026-08-01T10:00'],
+  ])('refuses %s', (_label, value) => {
+    expect(isCalendarDayString(value)).toBe(false);
+  });
+});
+
+describe('isInstantString', () => {
+  it('accepts an instant with an offset', () => {
+    expect(isInstantString('2026-08-02T09:00:00+02:00')).toBe(true);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['text', 'tomorrow'],
+    ['a list holding an instant', ['2026-08-02T09:00:00.000Z']],
+    ['a number', 1_754_000_000_000],
+  ])('refuses %s', (_label, value) => {
+    expect(isInstantString(value)).toBe(false);
+  });
+});
+
+describe('normalizeLeadTimeMinutes, the rest of it', () => {
+  it.each([
+    ['missing', undefined],
+    ['not a number', Number.NaN],
+  ])('leaves a %s lead time unset', (_label, value) => {
+    expect(normalizeLeadTimeMinutes(value)).toBeUndefined();
+  });
+
+  it('keeps zero, rounds, and clamps a day-long wait', () => {
+    expect(normalizeLeadTimeMinutes(0)).toBe(0);
+    expect(normalizeLeadTimeMinutes(29.6)).toBe(30);
+    expect(normalizeLeadTimeMinutes(10_000)).toBe(24 * 60);
+  });
+});
+
+describe('normalizeMaxParticipants', () => {
+  it.each([
+    ['missing', undefined],
+    ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['below one', 0.4],
+  ])('reads a %s cap as unlimited', (_label, value) => {
+    expect(normalizeMaxParticipants(value)).toBeUndefined();
+  });
+
+  it('rounds a cap and clamps one past the largest group', () => {
+    expect(normalizeMaxParticipants(3.6)).toBe(4);
+    expect(normalizeMaxParticipants(1e9)).toBe(MAX_ACTIVITY_PARTICIPANTS);
   });
 });

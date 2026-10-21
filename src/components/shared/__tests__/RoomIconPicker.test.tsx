@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@/test/utils';
+import { fireEvent, render, screen, within } from '@/test/utils';
 import {
   Armchair,
   Baby,
@@ -395,5 +395,106 @@ describe('RoomIconPicker', () => {
     bedDouble.focus();
     await user.keyboard('{ArrowRight}');
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('RoomIconPicker keys', () => {
+  it('keeps the keys it handles from scrolling the page, and leaves the others alone', () => {
+    render(<RoomIconPicker value="bed-double" onChange={vi.fn()} />, { withProviders: false });
+    const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
+
+    for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End']) {
+      expect(fireEvent.keyDown(bedDouble, { key })).toBe(false);
+    }
+    expect(fireEvent.keyDown(bedDouble, { key: 'a' })).toBe(true);
+  });
+});
+
+describe('RoomIconPicker drawing and freshness', () => {
+  it('shows its label by default, ties it to the group, and hides it on request', () => {
+    const { unmount } = render(<RoomIconPicker onChange={vi.fn()} id="pick" className="extra" />, {
+      withProviders: false,
+    });
+    const label = screen.getByText('rooms.icon');
+    expect(label).toHaveAttribute('id', 'pick-label');
+    expect(label).not.toHaveClass('sr-only');
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('aria-labelledby', 'pick-label');
+    expect(screen.getByRole('radiogroup')).toHaveClass('grid', 'grid-cols-3', 'gap-2', 'sm:grid-cols-6');
+    expect(label.parentElement).toHaveClass('space-y-2', 'extra');
+    unmount();
+
+    render(<RoomIconPicker onChange={vi.fn()} showLabel={false} />, { withProviders: false });
+    const hidden = screen.getByText('rooms.icon');
+    expect(hidden).toHaveClass('sr-only');
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('aria-labelledby', hidden.id);
+  });
+
+  it('draws the chosen tile in the primary colour, the others muted, and only the chosen one tabbable', () => {
+    render(<RoomIconPicker value="tent" onChange={vi.fn()} />, { withProviders: false });
+
+    const tent = screen.getByRole('radio', { name: 'rooms.icons.tent' });
+    expect(tent).toHaveAttribute('tabindex', '0');
+    expect(tent).toHaveClass(
+      'flex', 'min-h-20', 'flex-col', 'items-center', 'justify-center', 'gap-1', 'p-2', 'rounded-lg', 'border-2',
+      'hover:bg-accent', 'focus-visible:ring-2', 'border-primary', 'bg-primary/10', 'text-primary',
+    );
+    expect(tent).not.toHaveClass('opacity-50');
+    expect(tent.querySelector('svg')).toHaveClass('size-6', 'text-primary');
+    expect(within(tent).getByText('rooms.icons.tent')).toHaveClass('text-xs', 'text-center', 'leading-tight');
+
+    const bath = screen.getByRole('radio', { name: 'rooms.icons.bath' });
+    expect(bath).toHaveAttribute('tabindex', '-1');
+    expect(bath).toHaveClass('border-border', 'bg-background', 'text-muted-foreground');
+    expect(bath.querySelector('svg')).toHaveClass('text-muted-foreground');
+  });
+
+  it('dims every tile while disabled, and ignores keys on them', () => {
+    const onChange = vi.fn();
+    render(<RoomIconPicker value="tent" onChange={onChange} disabled />, { withProviders: false });
+
+    const tent = screen.getByRole('radio', { name: 'rooms.icons.tent' });
+    expect(tent).toHaveClass('opacity-50', 'cursor-not-allowed');
+    fireEvent.keyDown(tent, { key: 'ArrowRight' });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('moves the choice and the focus with the keys, wrapping at both ends, for the newest onChange', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<RoomIconPicker value={ICON_ORDER[0]} onChange={first} />, {
+      withProviders: false,
+    });
+    rerender(<RoomIconPicker value={ICON_ORDER[0]} onChange={second} />);
+    const radios = screen.getAllByRole('radio');
+    const firstTile = radios[0] as HTMLElement;
+    const last = ICON_ORDER.length - 1;
+
+    fireEvent.keyDown(firstTile, { key: 'ArrowRight' });
+    expect(second).toHaveBeenLastCalledWith(ICON_ORDER[1]);
+    expect(document.activeElement).toBe(radios[1]);
+
+    fireEvent.keyDown(firstTile, { key: 'ArrowLeft' });
+    expect(second).toHaveBeenLastCalledWith(ICON_ORDER[last]);
+
+    fireEvent.keyDown(radios[last] as HTMLElement, { key: 'ArrowRight' });
+    expect(second).toHaveBeenLastCalledWith(ICON_ORDER[0]);
+
+    fireEvent.keyDown(firstTile, { key: 'End' });
+    expect(second).toHaveBeenLastCalledWith(ICON_ORDER[last]);
+
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('reports a click to the newest onChange', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<RoomIconPicker onChange={first} />, { withProviders: false });
+    rerender(<RoomIconPicker onChange={second} />);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'rooms.icons.tent' }));
+
+    expect(second).toHaveBeenCalledWith('tent');
+    expect(first).not.toHaveBeenCalled();
   });
 });

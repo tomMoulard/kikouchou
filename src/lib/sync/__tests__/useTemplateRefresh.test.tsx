@@ -158,3 +158,225 @@ describe('useTemplateRefresh', () => {
     expect(updates).toHaveLength(0);
   });
 });
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+/** Lets the live query, the debounce and the write all run. */
+async function settle(ms = 60): Promise<void> {
+  await waitForDb();
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function mountWith(initial: { tripId: TripId; online: boolean }, debounceMs = 0) {
+  return renderHook(
+    (props: { tripId: TripId; online: boolean }) =>
+      useTemplateRefresh({
+        tripId: props.tripId,
+        remoteTripId: 'remote-1',
+        userId: 'user-1',
+        online: props.online,
+        debounceMs,
+      }),
+    { initialProps: initial },
+  );
+}
+
+describe('useTemplateRefresh, edges', () => {
+  it('stays quiet for a trip that is not on this device', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { result } = mountWith({ tripId: 'no-such-trip' as TripId, online: true });
+    await settle();
+
+    expect(result.current).toBeUndefined();
+    expect(updates).toHaveLength(0);
+  });
+
+  it('sends nothing when switching to another trip, which is a mount and not an edit', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+    const other = await createTestTrip({ name: 'Cabane', startDate: '2026-08-01' });
+
+    const { rerender } = mountWith({ tripId, online: true });
+    await settle();
+    rerender({ tripId: other, online: true });
+    await settle();
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it('sends nothing on a reconnect when nothing changed', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = mountWith({ tripId, online: true });
+    await settle();
+    rerender({ tripId, online: false });
+    rerender({ tripId, online: true });
+    await settle();
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it('holds an edit made offline until the connection is back', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = mountWith({ tripId, online: true });
+    await settle();
+    rerender({ tripId, online: false });
+    await updateTrip(tripId, { description: 'Bring slippers.' });
+    await settle();
+    expect(updates).toHaveLength(0);
+
+    rerender({ tripId, online: true });
+
+    await waitFor(() => expect(updates).toHaveLength(1));
+  });
+
+  it('settles after a refresh, so a reconnect does not send it again', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'Bring slippers.' });
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await settle();
+
+    rerender({ tripId, online: false });
+    rerender({ tripId, online: true });
+    await settle();
+
+    expect(updates).toHaveLength(1);
+    expect(error).not.toHaveBeenCalledWith('Failed to refresh the trip template:', expect.anything());
+  });
+
+  it('sends each of two edits in a row', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'First.' });
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await settle();
+    await updateTrip(tripId, { description: 'Second.' });
+
+    await waitFor(() => expect(updates).toHaveLength(2));
+    expect(updates[1]?.row).toMatchObject({ description: 'Second.' });
+  });
+
+  it('logs a failed refresh with its reason', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { client } = stubClient(() => ({ data: null, error: { message: 'Failed to fetch' } }));
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'Bring slippers.' });
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Failed to refresh the trip template:', 'Failed to fetch'),
+    );
+  });
+
+  it('does nothing, and logs nothing, with no backend', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(getSupabaseClient).mockResolvedValue(null);
+
+    mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'Bring slippers.' });
+    await settle();
+
+    expect(error).not.toHaveBeenCalledWith('Failed to refresh the trip template:', expect.anything());
+  });
+
+  it('sends one write for a burst of edits', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    mountWith({ tripId, online: true }, 80);
+    await settle();
+    await updateTrip(tripId, { description: 'One.' });
+    await waitForDb();
+    await updateTrip(tripId, { description: 'Two.' });
+    await settle(200);
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.row).toMatchObject({ description: 'Two.' });
+  });
+
+  it('drops a write whose client arrives after the hook is gone', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    let release: (value: TypedSupabaseClient) => void = () => {};
+    vi.mocked(getSupabaseClient).mockReturnValue(
+      new Promise<TypedSupabaseClient>((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+
+    const { unmount } = mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'Bring slippers.' });
+    await settle();
+    unmount();
+    release(client);
+    await settle();
+
+    expect(updates).toHaveLength(0);
+  });
+
+  it('keeps the next trip’s baseline when the previous trip’s write lands late', async () => {
+    let releaseFirst: () => void = () => {};
+    let calls = 0;
+    const updates: Update[] = [];
+    const client = {
+      from(table: string) {
+        return {
+          update(row: Record<string, unknown>) {
+            return {
+              eq(_column: string, remote: unknown) {
+                updates.push({ table, row, tripId: remote });
+                calls += 1;
+                return {
+                  select: async () => {
+                    if (calls === 1) {
+                      await new Promise<void>((resolve) => {
+                        releaseFirst = resolve;
+                      });
+                    }
+                    return PUBLISHED();
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as TypedSupabaseClient;
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+    const other = await createTestTrip({ name: 'Cabane', startDate: '2026-08-01' });
+
+    const { rerender } = mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'For the first trip.' });
+    await waitFor(() => expect(updates).toHaveLength(1));
+
+    // Switch while the first trip's write is still in flight, then let it land.
+    rerender({ tripId: other, online: true });
+    await settle();
+    releaseFirst();
+    await settle();
+
+    await updateTrip(other, { description: 'For the second trip.' });
+
+    await waitFor(() => expect(updates).toHaveLength(2));
+    expect(updates[1]?.row).toMatchObject({ description: 'For the second trip.' });
+  });
+});

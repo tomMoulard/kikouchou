@@ -6,8 +6,9 @@
  *
  * @module features/trips/components/__tests__/TripsLocationMap.test
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import type { Ref } from 'react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import { TripsLocationMap } from '@/features/trips/components/TripsLocationMap';
@@ -18,20 +19,41 @@ import type { ISODateString, ShareId, Trip, TripId } from '@/types';
 // Mocks
 // ============================================================================
 
-vi.mock('@/components/shared/MapView', () => ({
+const mockFitBounds = vi.fn();
+
+vi.mock('@/components/shared/MapView', async () => {
+  const { useImperativeHandle } = await import('react');
+  return {
   MapView: ({
+    ref,
     markers = [],
     center,
     zoom,
+    interactive,
+    showZoomControl,
+    showAttribution,
+    'aria-label': ariaLabel,
   }: {
+    ref?: Ref<{ fitBounds: () => void }>;
     markers?: readonly MapMarkerData[];
     center: readonly [number, number];
     zoom?: number;
-  }) => (
+    interactive?: boolean;
+    showZoomControl?: boolean;
+    showAttribution?: boolean;
+    'aria-label'?: string;
+  }) => {
+    // The component frames its markers through this handle.
+    useImperativeHandle(ref, () => ({ fitBounds: mockFitBounds }), []);
+    return (
     <div
       data-testid="mock-map-view"
       data-center={JSON.stringify(center)}
       data-zoom={zoom}
+      data-interactive={String(interactive)}
+      data-zoom-control={String(showZoomControl)}
+      data-attribution={String(showAttribution)}
+      aria-label={ariaLabel}
     >
       {markers.map((marker) => (
         <div
@@ -47,8 +69,10 @@ vi.mock('@/components/shared/MapView', () => ({
         </div>
       ))}
     </div>
-  ),
-}));
+    );
+  },
+  };
+});
 
 // ============================================================================
 // Test Data
@@ -260,5 +284,136 @@ describe('TripsLocationMap', () => {
     const map = screen.getByTestId('mock-map-view');
     expect(map).toHaveAttribute('data-center', JSON.stringify([20, 30]));
     expect(map).toHaveAttribute('data-zoom', '4');
+  });
+
+  it('shows the map interactive, with zoom buttons and credits, named for readers', () => {
+    renderMap([createTrip()]);
+
+    const map = screen.getByTestId('mock-map-view');
+    expect(map).toHaveAttribute('data-interactive', 'true');
+    expect(map).toHaveAttribute('data-zoom-control', 'true');
+    expect(map).toHaveAttribute('data-attribution', 'true');
+    expect(map).toHaveAttribute('aria-label', 'analytics.tripsMapAriaLabel');
+  });
+
+  it('separates the count from the unpinned note', () => {
+    renderMap([createTrip(), createTrip({ id: 'trip-2' as TripId, coordinates: undefined })]);
+
+    expect(screen.getByText(/analytics\.tripsMapSummary/)).toHaveTextContent(
+      'analytics.tripsMapSummary · analytics.tripsMapUnpinned',
+    );
+  });
+
+  it('keeps the location of a trip in its own truncated line', () => {
+    renderMap([createTrip()]);
+
+    expect(
+      screen.getByTestId('mock-tooltip-trip-1').querySelector('div.truncate'),
+    ).toHaveTextContent('Brest, Bretagne');
+    const popupPlace = screen.getByTestId('mock-popup-trip-1').querySelector('p.flex');
+    expect(popupPlace).toHaveTextContent('Brest, Bretagne');
+  });
+
+  it('gives a trip with no place text no place line in the popup', () => {
+    renderMap([createTrip({ location: undefined })]);
+
+    expect(screen.getByTestId('mock-popup-trip-1').querySelector('p.flex')).toBeNull();
+    expect(screen.getByTestId('mock-tooltip-trip-1').querySelector('div.truncate')).toBeNull();
+  });
+
+  it('follows a trip list that changes under it', () => {
+    const { rerender } = renderMap([createTrip()]);
+
+    rerender(
+      <MemoryRouter>
+        <TripsLocationMap
+          trips={[
+            createTrip({ id: 'trip-2' as TripId, name: 'Winter', coordinates: { lat: 10, lon: 20 } }),
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId('mock-marker-trip-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-marker-trip-2')).toHaveAttribute('data-label', 'Winter');
+    expect(screen.getByTestId('mock-map-view')).toHaveAttribute(
+      'data-center',
+      JSON.stringify([10, 20]),
+    );
+  });
+
+  describe('framing the markers', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const two = () => [
+      createTrip(),
+      createTrip({ id: 'trip-2' as TripId, coordinates: { lat: 45.9, lon: 6.8 } }),
+    ];
+
+    it('frames two markers once the map has had a moment', () => {
+      vi.useFakeTimers();
+      renderMap(two());
+
+      expect(mockFitBounds).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(mockFitBounds).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a single marker at its own zoom', () => {
+      vi.useFakeTimers();
+      renderMap([createTrip()]);
+
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(mockFitBounds).not.toHaveBeenCalled();
+    });
+
+    it('frames again when a second trip is pinned', () => {
+      vi.useFakeTimers();
+      const { rerender } = renderMap([createTrip()]);
+
+      rerender(
+        <MemoryRouter>
+          <TripsLocationMap trips={two()} />
+        </MemoryRouter>,
+      );
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(mockFitBounds).toHaveBeenCalledTimes(1);
+    });
+
+    it('frames once when the count changes before the first framing', () => {
+      vi.useFakeTimers();
+      const { rerender } = renderMap(two());
+
+      rerender(
+        <MemoryRouter>
+          <TripsLocationMap
+            trips={[...two(), createTrip({ id: 'trip-3' as TripId, coordinates: { lat: 1, lon: 1 } })]}
+          />
+        </MemoryRouter>,
+      );
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(mockFitBounds).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not frame a map that is already gone', () => {
+      vi.useFakeTimers();
+      const { unmount } = renderMap(two());
+
+      unmount();
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(mockFitBounds).not.toHaveBeenCalled();
+    });
   });
 });

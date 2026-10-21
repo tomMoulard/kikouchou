@@ -27,6 +27,7 @@ import {
   type TripTemplatePayload,
 } from '../templates';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
+import { fakeSupabase, hasCall } from './support/fake-supabase';
 
 // ============================================================================
 // Test doubles
@@ -569,6 +570,242 @@ describe('refreshTemplatePayload', () => {
     await expect(refreshTemplatePayload(offline.client, 'remote-1', PAYLOAD)).resolves.toEqual({
       status: 'error',
       message: 'Failed to fetch',
+    });
+  });
+});
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+describe('buildTemplateEmbedSnippets, alt text', () => {
+  it('trims the name and folds its inner whitespace', () => {
+    const { markdown } = buildTemplateEmbedSnippets('L', 'C', '  Chalet \n  Marmotte  ');
+
+    expect(markdown).toBe('[![Chalet Marmotte](C)](L)');
+  });
+});
+
+describe('the published row is bounded to what the server accepts', () => {
+  const LONG: TripTemplatePayload = {
+    name: 'n'.repeat(250),
+    description: 'd'.repeat(2_500),
+    location: 'l'.repeat(250),
+    coordinates: null,
+    currency: null,
+    rooms: Array.from({ length: 60 }, (_, index) => ({
+      name: `${index}`.padEnd(150, 'r'),
+      capacity: 2,
+      icon: 'bed-double' as const,
+    })),
+  };
+
+  it('clips every field and the room list', async () => {
+    const { client, calls } = stubClient({ updateRows: { data: [{ trip_id: 'remote-1' }] } });
+
+    await refreshTemplatePayload(client, 'remote-1', LONG);
+
+    const row = (calls.updates[0] as { row: Record<string, unknown> }).row;
+    expect(row.name).toBe('n'.repeat(200));
+    expect(row.description).toBe('d'.repeat(2_000));
+    expect(row.location).toBe('l'.repeat(200));
+    expect(row.latitude).toBeNull();
+    expect(row.longitude).toBeNull();
+    expect(row.currency).toBeNull();
+    const rooms = row.rooms as { name: string }[];
+    expect(rooms).toHaveLength(50);
+    expect(rooms[0]?.name).toBe('0'.padEnd(100, 'r'));
+  });
+
+  it('keeps a short location as it is, and an absent description as null', async () => {
+    const { client, calls } = stubClient({ updateRows: { data: [{ trip_id: 'remote-1' }] } });
+
+    await refreshTemplatePayload(client, 'remote-1', { ...PAYLOAD, description: null });
+
+    const row = (calls.updates[0] as { row: Record<string, unknown> }).row;
+    expect(row.location).toBe('Chamonix');
+    expect(row.description).toBeNull();
+  });
+
+  it('writes an absent location as null', async () => {
+    const { client, calls } = stubClient({ updateRows: { data: [{ trip_id: 'remote-1' }] } });
+
+    await refreshTemplatePayload(client, 'remote-1', { ...PAYLOAD, location: null });
+
+    expect((calls.updates[0] as { row: Record<string, unknown> }).row.location).toBeNull();
+  });
+});
+
+describe('readTripTemplate, more bounds', () => {
+  async function read(data: unknown) {
+    const { client } = stubClient({ rpc: { data } });
+    return readTripTemplate(client, 'tokentokentoken1');
+  }
+
+  it('drops a room that is not an object, without failing the template', async () => {
+    const result = await read({
+      name: 'T',
+      rooms: [null, 7, { name: 'Cabin', capacity: 3 }],
+    });
+
+    expect(result).toMatchObject({ status: 'ok', template: { rooms: [{ name: 'Cabin' }] } });
+  });
+
+  it.each([
+    ['a capacity written as text', '4'],
+    ['an infinite capacity', Infinity],
+  ])('drops a room with %s', async (_label, capacity) => {
+    const result = await read({
+      name: 'T',
+      rooms: [{ name: 'Attic', capacity }, { name: 'Cabin', capacity: 3 }],
+    });
+
+    expect(result).toMatchObject({ template: { rooms: [{ name: 'Cabin' }] } });
+  });
+
+  it('calls a null answer unreadable', async () => {
+    await expect(read(null)).resolves.toEqual({
+      status: 'error',
+      message: 'the server answered with something unreadable',
+    });
+  });
+
+  it('reads null coordinates as no pin', async () => {
+    await expect(read({ name: 'T', coordinates: null })).resolves.toMatchObject({
+      status: 'ok',
+      template: { coordinates: null },
+    });
+  });
+
+  it.each([
+    ['the south pole', { lat: -90, lon: 0 }],
+    ['the north pole', { lat: 90, lon: 0 }],
+    ['the far west', { lat: 0, lon: -180 }],
+    ['the far east', { lat: 0, lon: 180 }],
+  ])('keeps a pin at %s', async (_label, coordinates) => {
+    await expect(read({ name: 'T', coordinates })).resolves.toMatchObject({
+      template: { coordinates },
+    });
+  });
+
+  it.each([
+    ['a latitude past the south pole', { lat: -91, lon: 0 }],
+    ['a latitude past the north pole', { lat: 91, lon: 0 }],
+    ['a longitude past the far west', { lat: 0, lon: -181 }],
+    ['a longitude past the far east', { lat: 0, lon: 181 }],
+    ['a latitude written as text', { lat: '45', lon: 6 }],
+    ['a longitude written as text', { lat: 45, lon: '6' }],
+    ['an infinite latitude', { lat: Infinity, lon: 6 }],
+    ['an infinite longitude', { lat: 45, lon: Infinity }],
+    ['a latitude that is not a number', { lat: Number.NaN, lon: 6 }],
+    ['a longitude that is not a number', { lat: 45, lon: Number.NaN }],
+  ])('drops a pin with %s', async (_label, coordinates) => {
+    await expect(read({ name: 'T', coordinates })).resolves.toMatchObject({
+      template: { coordinates: null },
+    });
+  });
+});
+
+describe('template queries', () => {
+  it('reads the flag, token and owner of one trip', async () => {
+    const { client, described } = fakeSupabase(() => ({ data: null, error: null }));
+
+    await readTemplateState(client, 'remote-1');
+
+    expect(described()).toEqual([
+      'trips.select(is_template, template_token, owner_id).eq(id, remote-1).maybeSingle()',
+    ]);
+  });
+
+  it('reads fields of the wrong type as unpublished and unknown', async () => {
+    const { client } = fakeSupabase(() => ({
+      data: { is_template: 'true', template_token: 42, owner_id: 7 },
+      error: null,
+    }));
+
+    await expect(readTemplateState(client, 'remote-1')).resolves.toEqual({
+      status: 'ok',
+      state: { isTemplate: false, token: null, ownerId: null },
+    });
+  });
+
+  it('upserts the payload on the trip, then flags the trip and reads the token back', async () => {
+    const { client, described } = fakeSupabase((query) =>
+      hasCall(query, 'update')
+        ? { data: [{ template_token: 'mintedtoken00001' }], error: null }
+        : { error: null },
+    );
+
+    await publishTemplate(client, 'remote-1', PAYLOAD);
+
+    const [upsert, update] = described();
+    expect(upsert).toMatch(/^trip_templates\.upsert\(/);
+    expect(upsert).toMatch(/, \{"onConflict":"trip_id"\}\)$/);
+    expect(update).toBe(
+      'trips.update({"is_template":true,"template_token":"mintedtoken00001"})' +
+        '.eq(id, remote-1).select(template_token)',
+    );
+  });
+
+  it.each([
+    ['no rows', []],
+    ['no data', null],
+  ])('says the trip could not be published when the flag update returns %s', async (_label, data) => {
+    const { client } = fakeSupabase((query) =>
+      hasCall(query, 'update') ? { data, error: null } : { error: null },
+    );
+
+    await expect(publishTemplate(client, 'remote-1', PAYLOAD)).resolves.toEqual({
+      status: 'error',
+      message: 'the trip could not be published',
+    });
+  });
+
+  it('refreshes the payload row of one trip and asks for it back', async () => {
+    const { client, described } = fakeSupabase(() => ({ data: [{ trip_id: 'remote-1' }], error: null }));
+
+    await refreshTemplatePayload(client, 'remote-1', PAYLOAD);
+
+    expect(described()[0]).toMatch(/^trip_templates\.update\(/);
+    expect(described()[0]).toMatch(/\.eq\(trip_id, remote-1\)\.select\(trip_id\)$/);
+  });
+
+  it('reads a refresh with no data back as not published', async () => {
+    const { client } = fakeSupabase(() => ({ data: null, error: null }));
+
+    await expect(refreshTemplatePayload(client, 'remote-1', PAYLOAD)).resolves.toEqual({
+      status: 'not-published',
+    });
+  });
+
+  it('takes the template down on the trip row and asks for it back', async () => {
+    const { client, described } = fakeSupabase(() => ({ data: [{ id: 'remote-1' }], error: null }));
+
+    await unpublishTemplate(client, 'remote-1');
+
+    expect(described()).toEqual(['trips.update({"is_template":false}).eq(id, remote-1).select(id)']);
+  });
+
+  it.each([
+    ['no rows', []],
+    ['no data', null],
+  ])('says the template could not be taken down when the update returns %s', async (_label, data) => {
+    const { client } = fakeSupabase(() => ({ data, error: null }));
+
+    await expect(unpublishTemplate(client, 'remote-1')).resolves.toEqual({
+      status: 'error',
+      message: 'the template could not be taken down',
+    });
+  });
+
+  it('reports a thrown non-Error by its text', async () => {
+    const { client } = fakeSupabase(() => {
+      throw 'offline';
+    });
+
+    await expect(unpublishTemplate(client, 'remote-1')).resolves.toEqual({
+      status: 'error',
+      message: 'offline',
     });
   });
 });

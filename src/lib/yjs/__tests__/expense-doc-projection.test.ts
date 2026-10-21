@@ -236,3 +236,52 @@ describe('expenses crossing the trust boundary', () => {
     expect(await db.expenses.where('tripId').equals(theirs).count()).toBe(0);
   });
 });
+
+describe('a split rule this build knows', () => {
+  it('keeps the rule the document holds', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, { ...VALID, splitMode: 'shares' });
+
+    expect((await db.expenses.get('e1'))?.splitMode).toBe('shares');
+  });
+});
+
+describe('expenses: the rest of the boundary', () => {
+  it.each([
+    ['an empty day', { date: '' }],
+    ['a payer that is not a string', { payerId: 5 }],
+  ])('drops a line with %s', async (_label, patch) => {
+    const tripId = await makeTrip();
+    await project(tripId, { ...VALID, ...patch });
+
+    expect(await db.expenses.get('e1')).toBeUndefined();
+  });
+
+  it('keeps a kind and a category this build knows', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, { ...VALID, kind: 'income', category: 'meal' });
+
+    expect(await db.expenses.get('e1')).toMatchObject({ kind: 'income', category: 'meal' });
+  });
+
+  it('drops an empty share slot and a share with a blank guest', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, {
+      ...VALID,
+      splits: [null, { personId: '', value: 1 }, { personId: 'p1', value: 2 }],
+    });
+
+    expect((await db.expenses.get('e1'))?.splits).toEqual([{ personId: 'p1', value: 2 }]);
+  });
+
+  it('keeps the readable lines beside an unreadable one', async () => {
+    const tripId = await makeTrip();
+    const doc = makeDoc();
+    upsertDocEntity(doc, 'expenses', { id: 'e1', ...VALID });
+    upsertDocEntity(doc, 'expenses', { id: 'e2', ...VALID, date: 7 });
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.expenses.where('tripId').equals(tripId).toArray()).map((e) => e.id)).toEqual(['e1']);
+  });
+});

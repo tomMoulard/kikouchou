@@ -12,6 +12,12 @@ import { getBaselineStorageKey } from '../types';
 import type { ImportBaseline } from '../types';
 import type { PersonId, TripId, ISODateString, HexColor, RoomId, RoomAssignmentId, TransportId } from '@/types';
 
+const { mockReportError } = vi.hoisted(() => ({ mockReportError: vi.fn() }));
+vi.mock('@/lib/posthog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/posthog')>()),
+  reportError: (...args: unknown[]) => mockReportError(...args),
+}));
+
 // ============================================================================
 // localStorage mock (happy-dom may not provide a full implementation)
 // ============================================================================
@@ -242,5 +248,107 @@ describe('createBaselineForGuest', () => {
 
     expect(baseline.snapshot.assignmentIds).toEqual([]);
     expect(baseline.snapshot.transportIds).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Reporting and classification, in full
+// ============================================================================
+
+describe('baseline failures are reported', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('reports a baseline it could not save, naming where', () => {
+    const failure = new Error('QuotaExceeded');
+    const originalSetItem = localStorage.setItem;
+    localStorage.setItem = () => {
+      throw failure;
+    };
+
+    try {
+      saveBaseline({
+        tripId: TRIP_ID,
+        shareId: SHARE_ID,
+        personId: PERSON_ID,
+        importedAt: 0,
+        snapshot: { personIds: [], assignmentIds: [], transportIds: [] },
+      });
+    } finally {
+      localStorage.setItem = originalSetItem;
+    }
+
+    expect(mockReportError).toHaveBeenCalledWith(failure, {
+      source: 'export-service.saveBaseline',
+    });
+  });
+
+  it('logs a baseline it could not read', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem(getBaselineStorageKey(SHARE_ID), '{corrupt');
+
+    loadBaseline(SHARE_ID);
+
+    expect(spy).toHaveBeenCalledWith('Failed to load import baseline:', expect.any(Error));
+  });
+});
+
+describe('buildChangeset: each row lands in exactly one half', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('splits rows the baseline knew from rows it did not', async () => {
+    await seedPerson();
+    await seedAssignment('known-a1');
+    await seedAssignment('new-a1');
+    await seedTransport('known-t1');
+    await seedTransport('new-t1');
+    saveBaseline({
+      tripId: TRIP_ID,
+      shareId: SHARE_ID,
+      personId: PERSON_ID,
+      importedAt: 1,
+      snapshot: {
+        personIds: [PERSON_ID],
+        assignmentIds: ['known-a1'],
+        transportIds: ['known-t1'],
+      },
+    });
+
+    const changeset = await buildChangeset(TRIP_ID, SHARE_ID, PERSON_ID);
+
+    expect(changeset?.added.persons).toEqual([]);
+    expect(changeset?.added.assignments.map((a) => a.id)).toEqual(['new-a1']);
+    expect(changeset?.added.transports.map((t) => t.id)).toEqual(['new-t1']);
+    expect(changeset?.added.rooms).toEqual([]);
+    expect(changeset?.modified.persons.map((p) => p.id)).toEqual([PERSON_ID]);
+    expect(changeset?.modified.assignments.map((a) => a.id)).toEqual(['known-a1']);
+    expect(changeset?.modified.transports.map((t) => t.id)).toEqual(['known-t1']);
+    expect(changeset?.modified.rooms).toEqual([]);
+  });
+
+  it('leaves out the guest assignments of another trip', async () => {
+    await seedPerson();
+    await seedAssignment('here-a1');
+    await db.roomAssignments.put({
+      id: 'elsewhere-a1' as RoomAssignmentId,
+      tripId: 'trip-other' as TripId,
+      roomId: 'room-1' as RoomId,
+      personId: PERSON_ID,
+      startDate: '2024-07-15' as ISODateString,
+      endDate: '2024-07-20' as ISODateString,
+    });
+
+    const baseline = await createBaselineForGuest(TRIP_ID, SHARE_ID, PERSON_ID);
+
+    expect(baseline.snapshot.assignmentIds).toEqual(['here-a1']);
+  });
+});
+
+describe('getBaselineStorageKey', () => {
+  it('files a baseline under the import prefix and its share id', () => {
+    expect(getBaselineStorageKey('share-1')).toBe('kikouchou_import_baseline_share-1');
   });
 });

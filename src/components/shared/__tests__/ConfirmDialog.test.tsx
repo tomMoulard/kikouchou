@@ -6,9 +6,9 @@
  *
  * @module components/shared/__tests__/ConfirmDialog.test
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -777,5 +777,120 @@ describe('ConfirmDialog Sync vs Async', () => {
 
     // onOpenChange should not be called with false during loading
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+});
+
+describe('ConfirmDialog with work that never finishes', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function renderStuck(onOpenChange: Mock) {
+    render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Test"
+        onConfirm={() => new Promise<void>(() => {})}
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  }
+
+  it('holds Escape while the work is running', () => {
+    vi.useFakeTimers();
+    const onOpenChange = vi.fn();
+    renderStuck(onOpenChange);
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('lets Escape close the dialog once the work has stalled', () => {
+    vi.useFakeTimers();
+    const onOpenChange = vi.fn();
+    renderStuck(onOpenChange);
+
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('ConfirmDialog, more of it', () => {
+  it('opens ready, in the default style, at its usual width', () => {
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Test"
+        description="Test"
+        onConfirm={vi.fn()}
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        className="extra"
+      />,
+    );
+
+    const confirm = screen.getByRole('button', { name: 'Confirm' });
+    expect(confirm).toBeEnabled();
+    expect(confirm).toHaveAttribute('data-variant', 'default');
+    expect(confirm).toHaveClass('h-11', 'md:h-9');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('h-11', 'md:h-9');
+    expect(screen.getByRole('alertdialog')).toHaveClass('sm:max-w-[425px]', 'extra');
+  });
+
+  it('is ready again when reopened after closing mid-confirm', async () => {
+    const props = {
+      onOpenChange: vi.fn(),
+      title: 'Test',
+      description: 'Test',
+      onConfirm: () => new Promise<void>(() => {}),
+      confirmLabel: 'Confirm',
+      cancelLabel: 'Cancel',
+    };
+    const { rerender } = render(<ConfirmDialog open {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+    });
+
+    rerender(<ConfirmDialog open={false} {...props} />);
+    rerender(<ConfirmDialog open {...props} />);
+
+    expect(await screen.findByRole('button', { name: 'Confirm' })).toBeEnabled();
+  });
+
+  it('does not close a dialog that is already gone when the work finishes', async () => {
+    let finish: () => void = () => undefined;
+    const onOpenChange = vi.fn();
+    const { unmount } = render(
+      <ConfirmDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Test"
+        onConfirm={() => new Promise<void>((resolve) => {
+          finish = resolve;
+        })}
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    unmount();
+    await act(async () => {
+      finish();
+    });
+
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

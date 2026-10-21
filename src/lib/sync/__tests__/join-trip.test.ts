@@ -23,6 +23,7 @@ import type { ShareId, TripId, UnixTimestamp } from '@/types';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { isoDate } from '@/test/utils';
 import frTranslations from '@/locales/fr/translation.json';
+import { fakeSupabase } from './support/fake-supabase';
 
 /**
  * Resolve translations against the real French bundle, not the global mock.
@@ -459,5 +460,169 @@ describe('fetchClaimedParticipants', () => {
     await expect(
       fetchClaimedParticipants(client, REMOTE_TRIP_ID, 'user-1'),
     ).resolves.toEqual(new Set());
+  });
+});
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+describe('materialiseJoinedTrip, recorded', () => {
+  it('reads the preview columns of this trip only', async () => {
+    const { client, described } = fakeSupabase(() => ({
+      data: { name: 'Brittany', start_date: '2026-07-15', end_date: '2026-07-22' },
+      error: null,
+    }));
+
+    await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+
+    expect(described()).toEqual([
+      `trips.select(name, start_date, end_date).eq(id, ${REMOTE_TRIP_ID}).maybeSingle()`,
+    ]);
+  });
+
+  it('asks the server nothing for a trip already on the device', async () => {
+    const { client, queries } = fakeSupabase(() => ({ data: null, error: null }));
+    const first = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+    const asked = queries.length;
+
+    const second = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+
+    expect(second).toEqual({ status: 'already-local', tripId: (first as { tripId: TripId }).tripId });
+    expect(queries).toHaveLength(asked);
+  });
+
+  it('tells the loser of a race that the trip is already local', async () => {
+    const client = clientWithTrip({
+      name: 'Brittany',
+      start_date: '2026-07-15',
+      end_date: '2026-07-22',
+    });
+
+    const results = await Promise.all([
+      materialiseJoinedTrip(client, REMOTE_TRIP_ID),
+      materialiseJoinedTrip(client, REMOTE_TRIP_ID),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual(['already-local', 'joined']);
+  });
+
+  it('falls back to today for a date with anything before it', async () => {
+    const today = toLocalISODateString(new Date());
+    const client = clientWithTrip({
+      name: 'Brittany',
+      start_date: 'x2026-07-15',
+      end_date: '2026-07-22',
+    });
+
+    const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+    const trip = await db.trips.get((result as { tripId: TripId }).tripId);
+
+    expect(trip?.startDate).toBe(today);
+    expect(trip?.endDate).toBe('2026-07-22');
+  });
+
+  it.each([
+    ['a one-digit month', '2026-7-15'],
+    ['letters for a month', '2026-ab-15'],
+  ])('falls back to today for a date with %s', async (_label, startDate) => {
+    const client = clientWithTrip({
+      name: 'Brittany',
+      start_date: startDate,
+      end_date: '2026-07-22',
+    });
+
+    const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+    const trip = await db.trips.get((result as { tripId: TripId }).tripId);
+
+    expect(trip?.startDate).toBe(toLocalISODateString(new Date()));
+  });
+
+  it('falls back to today for dates that are not text', async () => {
+    const today = toLocalISODateString(new Date());
+    const client = clientWithTrip({
+      name: 'Brittany',
+      // Arrays stringify to a valid date, so only the type check stops them.
+      start_date: ['2026-07-15'],
+      end_date: ['2026-07-22'],
+    });
+
+    const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+    const trip = await db.trips.get((result as { tripId: TripId }).tripId);
+
+    expect(trip?.startDate).toBe(today);
+    expect(trip?.endDate).toBe(today);
+  });
+
+  it.each([
+    ['an Error', new Error('Failed to fetch'), 'Failed to fetch'],
+    ['a plain value', 'offline', 'offline'],
+  ])('reports a read that throws %s', async (_label, thrown, message) => {
+    const { client } = fakeSupabase(() => {
+      throw thrown;
+    });
+
+    await expect(materialiseJoinedTrip(client, REMOTE_TRIP_ID)).resolves.toEqual({
+      status: 'error',
+      message,
+    });
+  });
+});
+
+describe('claimParticipant, recorded', () => {
+  it('updates the caller’s own roster row and reads the person back', async () => {
+    const { client, described } = fakeSupabase(() => ({
+      data: [{ person_id: 'person-alice' }],
+      error: null,
+    }));
+
+    await claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice');
+
+    expect(described()).toEqual([
+      'trip_members.update({"person_id":"person-alice"})' +
+        `.eq(trip_id, ${REMOTE_TRIP_ID}).eq(user_id, user-1).select(person_id)`,
+    ]);
+  });
+
+  it.each([
+    ['an Error', new Error('Failed to fetch'), 'Failed to fetch'],
+    ['a plain value', 'offline', 'offline'],
+  ])('reports a claim that throws %s', async (_label, thrown, message) => {
+    const { client } = fakeSupabase(() => {
+      throw thrown;
+    });
+
+    await expect(
+      claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice'),
+    ).resolves.toEqual({ status: 'error', message });
+  });
+});
+
+describe('fetchClaimedParticipants, recorded', () => {
+  it('reads the roster of this trip', async () => {
+    const { client, described } = fakeSupabase(() => ({ data: [], error: null }));
+
+    await fetchClaimedParticipants(client, REMOTE_TRIP_ID, 'user-1');
+
+    expect(described()).toEqual([
+      `trip_members.select(user_id, person_id).eq(trip_id, ${REMOTE_TRIP_ID})`,
+    ]);
+  });
+
+  it('offers every name when the read reports an error, even with rows', async () => {
+    const { client } = fakeSupabase(() => ({
+      data: [{ user_id: 'user-2', person_id: 'person-bob' }],
+      error: { message: 'denied' },
+    }));
+
+    expect(await fetchClaimedParticipants(client, REMOTE_TRIP_ID, 'user-1')).toEqual(new Set());
+  });
+
+  it('offers every name when the read throws', async () => {
+    const { client } = fakeSupabase(() => {
+      throw new Error('Failed to fetch');
+    });
+
+    expect(await fetchClaimedParticipants(client, REMOTE_TRIP_ID, 'user-1')).toEqual(new Set());
   });
 });

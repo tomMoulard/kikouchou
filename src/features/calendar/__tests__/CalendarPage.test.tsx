@@ -304,6 +304,9 @@ describe('CalendarPage', () => {
     });
     renderCalendarPage();
     expect(screen.getByText('errors.tripNotFound')).toBeInTheDocument();
+    expect(screen.getByText('errors.tripNotFoundDescription')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'calendar.title' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'common.back' })).toHaveAttribute('href', '/trips');
   });
 
   it('renders trip-not-found when tripId in URL mismatches context', () => {
@@ -450,6 +453,9 @@ describe('CalendarPage', () => {
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // Card view shows the calendar header and grid
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
+    // The grid scrolls sideways on a phone, and says how to move inside it.
+    expect(screen.getByRole('region', { name: 'calendar.scrollableCalendar' })).toBeInTheDocument();
+    expect(screen.getByRole('grid')).toHaveAccessibleDescription('calendar.keyboardHelp');
   });
 
   it('defaults to timeline view', () => {

@@ -120,10 +120,15 @@ export const ViewerUnlockCard = memo(function ViewerUnlockCard({
     if (attemptedForRef.current === key) {
       return;
     }
-    attemptedForRef.current = key;
     // Deferred a tick so the effect body itself sets no state: the redeem
     // reports its outcome after a round trip, never synchronously.
+    //
+    // The attempt is recorded when the redeem starts, not when it is
+    // scheduled. A re-run before the tick (a fresh trip object from the live
+    // query, StrictMode's double effect) clears this timer, and a key recorded
+    // at scheduling time made the re-run skip, so the redeem never ran at all.
     const timer = setTimeout(() => {
+      attemptedForRef.current = key;
       void tryUpgrade();
     }, 0);
     return () => {

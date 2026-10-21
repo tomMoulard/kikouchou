@@ -467,3 +467,67 @@ describe('projecting rides and vehicles into Dexie', () => {
     expect((await db.rides.get('r1'))?.tripId).toBe(tripId);
   });
 });
+
+describe('ride kinds crossing the trust boundary', () => {
+  function rideDoc(kind: unknown): Y.Doc {
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'rides',
+      [
+        {
+          id: 'r1',
+          direction: 'pickup',
+          kind,
+          meetDatetime: '2026-07-15T15:02:00.000Z',
+          location: 'Lyon Part-Dieu',
+        },
+      ],
+      { allowDeletions: false },
+    );
+    return doc;
+  }
+
+  it('keeps a kind this build knows', async () => {
+    await syncDocToDexie(rideDoc('shuttle'), tripId);
+
+    expect((await db.rides.get('r1'))?.kind).toBe('shuttle');
+  });
+
+  it('drops a kind a newer peer invented', async () => {
+    await syncDocToDexie(rideDoc('hovercraft'), tripId);
+
+    expect(await db.rides.get('r1')).not.toHaveProperty('kind');
+  });
+});
+
+describe('empty sort keys crossing the trust boundary', () => {
+  it('drops a leg and a ride whose time is an empty string, and keeps their neighbours', async () => {
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'transport',
+      [
+        { id: 'leg-ok', personId: 'p1', type: 'arrival', datetime: '2026-07-15T15:02:00.000Z', location: 'Lyon', needsPickup: false },
+        { id: 'leg-blank', personId: 'p1', type: 'arrival', datetime: '', location: 'Lyon', needsPickup: false },
+      ],
+      { allowDeletions: false },
+    );
+    replaceDocCollection(
+      doc,
+      'rides',
+      [
+        { id: 'ride-ok', direction: 'pickup', meetDatetime: '2026-07-15T15:02:00.000Z', location: 'Lyon' },
+        { id: 'ride-blank', direction: 'pickup', meetDatetime: '', location: 'Lyon' },
+      ],
+      { allowDeletions: false },
+    );
+
+    await syncDocToDexie(doc, tripId);
+
+    expect(await db.transports.get('leg-ok')).toBeDefined();
+    expect(await db.transports.get('leg-blank')).toBeUndefined();
+    expect(await db.rides.get('ride-ok')).toBeDefined();
+    expect(await db.rides.get('ride-blank')).toBeUndefined();
+  });
+});

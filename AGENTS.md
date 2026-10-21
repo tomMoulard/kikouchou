@@ -1222,8 +1222,21 @@ test fails on is a "survivor": code that the suite runs but does not check.
 - Static mutants (code that runs only when a module loads) are skipped, because
   each one needs a new process and the whole suite. Add
   `--ignoreStatic false` with a narrow `--mutate` to test them.
-- A `Timeout` counts as killed. A mutated component often makes a test wait on
-  text that never appears, until the 10s `testTimeout`.
+- A `Timeout` counts as killed, so a limit that is too short hides survivors.
+  With Stryker's default limit, the first full run reported 20,394 Timeouts.
+  A re-test of 5 files at 60s turned 3,196 Timeouts into 1,721 Killed and
+  1,470 Survived. The configuration therefore sets `timeoutMS: 60000` and
+  `concurrency: 3`.
+- A survivor whose covering tests did not run is not a real survivor. In
+  `reports/mutation/mutation.json`, its `testsCompleted` is lower than the
+  length of its `coveredBy`. This happens on a loaded machine. Run that file
+  again before you write a test for it.
+- An equivalent mutant is one that no input can make visible. "The tests never
+  do X" is a missing test, not equivalence. Three kinds of mutant look
+  equivalent but are not. An option passed to `t()` is hidden by the i18n mock,
+  so test it with `renderWithRealI18n`. A React `key` mutant shows as a
+  duplicate key warning on `console.error`. A production-only branch is
+  reachable with `vi.stubEnv('DEV', false)`.
 - Open `reports/mutation/index.html` to see each survivor in its source.
 
 **E2E tests** — `e2e/{feature}.spec.ts`; use `@playwright/test`; `@axe-core/playwright` available for a11y checks.

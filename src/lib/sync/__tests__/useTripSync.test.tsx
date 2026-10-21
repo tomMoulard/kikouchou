@@ -283,3 +283,129 @@ describe('useTripSync — asking for a sync', () => {
     visibility.mockRestore();
   });
 });
+
+// ============================================================================
+// Edges the mutation run found unpinned
+// ============================================================================
+
+describe('useTripSync — edges', () => {
+  it('reads as local again once the trip stops syncing, whatever was reported', async () => {
+    const { result, rerender } = renderSync();
+    await waitFor(() => {
+      expect(providers).toHaveLength(1);
+    });
+    act(() => {
+      providers[0]!.report(SYNCED);
+    });
+
+    rerender({ isSignedIn: false });
+
+    expect(result.current.state.status).toBe('local');
+  });
+
+  it.each([
+    ['no document yet', { doc: null }],
+    ['no trip', { tripId: null }],
+  ])('reads as local and builds nothing with %s', async (_label, props) => {
+    const { result } = renderSync(props);
+
+    expect(result.current.state.status).toBe('local');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockedGetClient).not.toHaveBeenCalled();
+  });
+
+  it('leaves out an empty user id', async () => {
+    renderSync({ userId: '' });
+
+    await waitFor(() => {
+      expect(providers).toHaveLength(1);
+    });
+    expect(providers[0]!.options).not.toHaveProperty('userId');
+  });
+
+  it('ignores a status the previous trip reports after the switch', async () => {
+    const { result, rerender } = renderSync();
+    await waitFor(() => {
+      expect(providers).toHaveLength(1);
+    });
+
+    rerender({ remoteTripId: 'remote-2' });
+    await waitFor(() => {
+      expect(providers).toHaveLength(2);
+    });
+    act(() => {
+      providers[1]!.report(SYNCED);
+    });
+    act(() => {
+      providers[0]!.report({ status: 'offline', pendingCount: 2, onlineCount: null });
+    });
+
+    expect(result.current.state).toEqual(SYNCED);
+  });
+
+  it('builds no provider when the client arrives after unmount', async () => {
+    let release: (client: unknown) => void = () => {};
+    mockedGetClient.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+
+    const { unmount } = renderSync();
+    await waitFor(() => {
+      expect(mockedGetClient).toHaveBeenCalled();
+    });
+    unmount();
+    await act(async () => {
+      release({});
+      await Promise.resolve();
+    });
+
+    expect(providers).toHaveLength(0);
+  });
+
+  it('forgets the provider of a trip that stopped syncing', async () => {
+    const { result, rerender } = renderSync();
+    await waitFor(() => {
+      expect(providers).toHaveLength(1);
+    });
+
+    rerender({ remoteTripId: null });
+    act(() => {
+      result.current.syncNow();
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(providers[0]!.syncNow).not.toHaveBeenCalled();
+  });
+
+  it('asks for nothing, and throws nothing, when no provider is mounted', () => {
+    const errors = vi.fn();
+    window.addEventListener('error', errors);
+    const { result } = renderSync({ remoteTripId: null });
+
+    expect(() => {
+      result.current.syncNow();
+    }).not.toThrow();
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    window.removeEventListener('error', errors);
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('stops listening for the tab coming back once unmounted', () => {
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+
+    const { unmount } = renderSync({ remoteTripId: null });
+    const listener = add.mock.calls.find(([type]) => type === 'visibilitychange')?.[1];
+    unmount();
+
+    expect(listener).toBeDefined();
+    expect(remove).toHaveBeenCalledWith('visibilitychange', listener);
+  });
+});

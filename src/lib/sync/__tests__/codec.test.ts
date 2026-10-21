@@ -163,6 +163,14 @@ describe('areStateVectorsEqual', () => {
     expect(areStateVectorsEqual(undefined, undefined)).toBe(false);
   });
 
+  it('is false when one vector extends the other', () => {
+    // Same prefix, different length: the longer side knows a client the
+    // shorter one has never seen.
+    expect(
+      areStateVectorsEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2, 3])),
+    ).toBe(false);
+  });
+
   it('is false for equal-length vectors that differ in content', () => {
     expect(
       areStateVectorsEqual(new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4])),

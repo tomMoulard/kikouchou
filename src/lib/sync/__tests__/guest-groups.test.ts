@@ -7,12 +7,14 @@
  *
  * @module lib/sync/__tests__/guest-groups.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
 import { isClockSkewMessage,
   isNetworkFailureMessage, syncGuestGroups } from '@/lib/sync/guest-groups';
 import type { GuestGroup, GuestGroupId, GuestGroupMemberId, HexColor } from '@/types';
+
+import { fakeSupabase, hasCall } from './support/fake-supabase';
 
 // ============================================================================
 // Fakes
@@ -572,5 +574,345 @@ describe('when the request never reached the server', () => {
     'rejected',
   ])('reads "%s" as the server answering', (message) => {
     expect(isNetworkFailureMessage(message)).toBe(false);
+  });
+
+  it('reads a bare fetch failure, without the TypeError prefix', () => {
+    expect(isNetworkFailureMessage('Failed to fetch')).toBe(true);
+  });
+
+  it.each([
+    'Request Failed to fetch the row',
+    'Wrapped AbortError: signal is aborted',
+  ])('only matches the wording at the start: "%s"', (message) => {
+    expect(isNetworkFailureMessage(message)).toBe(false);
+  });
+});
+
+// ============================================================================
+// Member bounds, field by field
+// ============================================================================
+
+/** Pulls one server row holding `members`, and returns what was stored. */
+async function pullMembers(members: unknown): Promise<Record<string, unknown>[]> {
+  const { client } = fakeClient([serverRow({ members })]);
+  const result = await syncGuestGroups(client, USER_ID);
+  expect(result).toMatchObject({ status: 'synced' });
+  const stored = await db.guestGroups.get('group-1');
+  return (stored?.members ?? []) as unknown as Record<string, unknown>[];
+}
+
+const VALID = { id: 'm-ok', name: 'Bob', color: '#22c55e' };
+
+describe('member bounds', () => {
+  it('drops an entry that is not an object, without failing the pull', async () => {
+    const members = await pullMembers([null, 5, 'Alice', VALID]);
+
+    expect(members.map((member) => member.id)).toEqual(['m-ok']);
+  });
+
+  it.each([
+    ['an empty id', { ...VALID, id: '' }],
+    ['an id that is not a string', { ...VALID, id: 7 }],
+    ['an id longer than 64', { ...VALID, id: 'i'.repeat(65) }],
+    ['a name that is not a string', { ...VALID, name: 5 }],
+    ['a colour that is not a string', { ...VALID, color: ['#22c55e'] }],
+  ])('drops a member with %s', async (_label, member) => {
+    expect(await pullMembers([member, { ...VALID, id: 'm-2' }])).toHaveLength(1);
+  });
+
+  it('keeps an id of exactly 64 characters', async () => {
+    const members = await pullMembers([{ ...VALID, id: 'i'.repeat(64) }]);
+
+    expect(members[0]?.id).toBe('i'.repeat(64));
+  });
+
+  it('stores only the fields a bare member carries', async () => {
+    const members = await pullMembers([VALID]);
+
+    expect(Object.keys(members[0]!).sort()).toEqual(['color', 'id', 'name']);
+  });
+
+  it('trims and clips the member name', async () => {
+    const members = await pullMembers([
+      { ...VALID, name: '  Alice  ' },
+      { ...VALID, id: 'm-2', name: 'N'.repeat(150) },
+    ]);
+
+    expect(members[0]?.name).toBe('Alice');
+    expect(members[1]?.name).toBe('N'.repeat(100));
+  });
+
+  it.each([
+    ['one person, the default', 1],
+    ['zero', 0],
+    ['a string', '3'],
+    ['infinity', Infinity],
+    ['not a number', Number.NaN],
+  ])('leaves the headcount off for %s', async (_label, headcount) => {
+    const members = await pullMembers([{ ...VALID, headcount }]);
+
+    expect(members[0]).not.toHaveProperty('headcount');
+  });
+
+  it('rounds a fractional headcount', async () => {
+    const members = await pullMembers([{ ...VALID, headcount: 2.6 }]);
+
+    expect(members[0]?.headcount).toBe(3);
+  });
+
+  it.each([
+    ['notes', 2000],
+    ['phone', 32],
+  ])('trims, clips and keeps %s', async (field, max) => {
+    const members = await pullMembers([
+      { ...VALID, [field]: '  hello  ' },
+      { ...VALID, id: 'm-2', [field]: 'x'.repeat(max + 10) },
+    ]);
+
+    expect(members[0]?.[field]).toBe('hello');
+    expect(members[1]?.[field]).toBe('x'.repeat(max));
+  });
+
+  it.each(['notes', 'phone'])('leaves %s off when blank or not text', async (field) => {
+    const members = await pullMembers([
+      { ...VALID, [field]: '   ' },
+      { ...VALID, id: 'm-2', [field]: 42 },
+    ]);
+
+    expect(members[0]).not.toHaveProperty(field);
+    expect(members[1]).not.toHaveProperty(field);
+  });
+});
+
+describe('group bounds', () => {
+  it.each([
+    ['an empty local id', { local_id: '' }],
+    ['a local id that is not a string', { local_id: 5 as unknown as string }],
+    ['a name that is not a string', { name: 5 as unknown as string }],
+    ['an unreadable update time', { updated_at: 'yesterday' }],
+  ])('drops a row with %s and keeps the next', async (_label, overrides) => {
+    const { client } = fakeClient([
+      serverRow({ id: 'remote-bad', ...overrides }),
+      serverRow({ id: 'remote-ok', local_id: 'group-ok', name: 'Ski crew' }),
+    ]);
+
+    expect(await syncGuestGroups(client, USER_ID)).toMatchObject({ pulled: 1 });
+    expect((await db.guestGroups.get('group-ok'))?.name).toBe('Ski crew');
+  });
+
+  it('trims the group name', async () => {
+    const { client } = fakeClient([serverRow({ name: '  Ski crew  ' })]);
+
+    await syncGuestGroups(client, USER_ID);
+
+    expect((await db.guestGroups.get('group-1'))?.name).toBe('Ski crew');
+  });
+});
+
+// ============================================================================
+// Recording where a group lives
+// ============================================================================
+
+describe('recording the server copy on a group the local copy of which wins', () => {
+  it('records the server id and account even when the push then fails', async () => {
+    await db.guestGroups.add(localGroup({ updatedAt: 9_000 }));
+    const { client } = fakeClient([serverRow({ updated_at: new Date(1_000).toISOString() })], {
+      upsertError: 'rejected',
+    });
+
+    await syncGuestGroups(client, USER_ID);
+
+    const stored = await db.guestGroups.get('group-1');
+    expect(stored?.remoteGroupId).toBe('remote-1');
+    expect(stored?.remoteOwnerId).toBe(USER_ID);
+  });
+
+  it('claims the group for this account when another one was recorded', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 9_000, remoteGroupId: 'remote-1', remoteOwnerId: 'user-2' }),
+    );
+    const { client } = fakeClient([serverRow({ updated_at: new Date(1_000).toISOString() })], {
+      upsertError: 'rejected',
+    });
+
+    await syncGuestGroups(client, USER_ID);
+
+    expect((await db.guestGroups.get('group-1'))?.remoteOwnerId).toBe(USER_ID);
+  });
+
+  it('writes nothing in the pull when the record is already right', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 9_000, remoteGroupId: 'remote-1', remoteOwnerId: USER_ID }),
+    );
+    const { client } = fakeClient([serverRow({ updated_at: new Date(1_000).toISOString() })]);
+    const update = vi.spyOn(db.guestGroups, 'update');
+
+    await syncGuestGroups(client, USER_ID);
+
+    // Once, from the push recording where the upload landed; never from the pull.
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an uploaded group the server still lists', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 5_000, remoteGroupId: 'remote-1', remoteOwnerId: USER_ID }),
+    );
+    const { client } = fakeClient([serverRow()]);
+
+    expect(await syncGuestGroups(client, USER_ID)).toMatchObject({ pruned: 0 });
+    expect(await db.guestGroups.get('group-1')).toBeDefined();
+  });
+
+  it('never prunes a group of this account that has no server id', async () => {
+    await db.guestGroups.add(localGroup({ remoteOwnerId: USER_ID }));
+    const { client } = fakeClient([], { upsertError: 'rejected' });
+
+    await syncGuestGroups(client, USER_ID);
+
+    expect(await db.guestGroups.get('group-1')).toBeDefined();
+  });
+});
+
+// ============================================================================
+// What goes over the wire
+// ============================================================================
+
+describe('guest group queries', () => {
+  it('reads this account’s rows, then upserts on the account and local id', async () => {
+    await db.guestGroups.add(localGroup());
+    const { client, described } = fakeSupabase((query) =>
+      hasCall(query, 'upsert')
+        ? { data: [{ id: 'remote-1', local_id: 'group-1' }], error: null }
+        : { data: [], error: null },
+    );
+
+    expect(await syncGuestGroups(client, USER_ID)).toMatchObject({ status: 'synced', pushed: 1 });
+
+    const [read, write] = described();
+    expect(read).toBe(
+      `guest_groups.select(id, local_id, owner_id, name, members, updated_at).eq(owner_id, ${USER_ID})`,
+    );
+    expect(write).toMatch(/^guest_groups\.upsert\(/);
+    expect(write).toContain(', {"onConflict":"owner_id,local_id"})');
+    expect(write).toMatch(/\.select\(id, local_id\)$/);
+  });
+
+  it('treats a pull with no data as an empty account', async () => {
+    const { client } = fakeSupabase(() => ({ data: null, error: null }));
+
+    expect(await syncGuestGroups(client, USER_ID)).toEqual({
+      status: 'synced',
+      pulled: 0,
+      pushed: 0,
+      pruned: 0,
+    });
+  });
+
+  it('treats an upsert with no rows back as uploaded and recorded nowhere', async () => {
+    await db.guestGroups.add(localGroup());
+    const { client } = fakeSupabase(() => ({ data: null, error: null }));
+
+    expect(await syncGuestGroups(client, USER_ID)).toMatchObject({
+      status: 'synced',
+      pushed: 1,
+    });
+    expect((await db.guestGroups.get('group-1'))?.remoteGroupId).toBeUndefined();
+  });
+
+  it('reports a thrown non-Error by its text', async () => {
+    const { client } = fakeSupabase(() => {
+      throw 'socket closed';
+    });
+
+    expect(await syncGuestGroups(client, USER_ID)).toEqual({
+      status: 'error',
+      message: 'socket closed',
+      reason: 'server',
+    });
+  });
+});
+
+// ============================================================================
+// A group the server lists under a new id is not a deleted group
+// ============================================================================
+
+describe('a group whose server row has a new id', () => {
+  // The device recorded `remote-old` for group-1, and the account now lists
+  // group-1 under `remote-1`: the row was recreated, by another device or a
+  // restore. The server still lists the group, so nothing was deleted.
+
+  it('keeps the local copy that wins, under the id the server reports', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 9_000, remoteGroupId: 'remote-old', remoteOwnerId: USER_ID }),
+    );
+    const { client } = fakeClient([serverRow({ updated_at: new Date(1_000).toISOString() })], {
+      upsertError: 'rejected',
+    });
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    const stored = await db.guestGroups.get('group-1');
+    expect(stored?.name).toBe('Family');
+    expect(stored?.remoteGroupId).toBe('remote-1');
+    expect(result).toMatchObject({ status: 'error' });
+  });
+
+  it('keeps the server copy that wins, rather than pruning what it just wrote', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 1_000, remoteGroupId: 'remote-old', remoteOwnerId: USER_ID }),
+    );
+    const { client } = fakeClient([serverRow({ updated_at: new Date(9_000).toISOString() })]);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'synced', pulled: 1, pruned: 0 });
+    const stored = await db.guestGroups.get('group-1');
+    expect(stored?.name).toBe('Family (server)');
+    expect(stored?.remoteGroupId).toBe('remote-1');
+  });
+
+  it('keeps the group when the recreated row is one the pull cannot use', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 9_000, remoteGroupId: 'remote-old', remoteOwnerId: USER_ID }),
+    );
+    // Listed under its local id, with an unreadable time: dropped as input,
+    // and still evidence that the account has the group.
+    const { client } = fakeClient([serverRow({ updated_at: 'yesterday' })]);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'synced', pruned: 0 });
+    expect((await db.guestGroups.get('group-1'))?.name).toBe('Family');
+  });
+
+  it('keeps a group the server lists under its server id, whatever local id the row carries', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 9_000, remoteGroupId: 'remote-1', remoteOwnerId: USER_ID }),
+    );
+    const { client } = fakeClient([serverRow({ local_id: '' })], { upsertError: 'rejected' });
+
+    await syncGuestGroups(client, USER_ID);
+
+    expect(await db.guestGroups.get('group-1')).toBeDefined();
+  });
+
+  it('still prunes a vanished group in the same pull as a recreated one', async () => {
+    await db.guestGroups.add(
+      localGroup({ updatedAt: 9_000, remoteGroupId: 'remote-old', remoteOwnerId: USER_ID }),
+    );
+    await db.guestGroups.add(
+      localGroup({
+        id: 'group-2' as GuestGroupId,
+        remoteGroupId: 'remote-2',
+        remoteOwnerId: USER_ID,
+      }),
+    );
+    const { client } = fakeClient([serverRow({ updated_at: new Date(1_000).toISOString() })]);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'synced', pruned: 1 });
+    expect(await db.guestGroups.get('group-1')).toBeDefined();
+    expect(await db.guestGroups.get('group-2')).toBeUndefined();
   });
 });

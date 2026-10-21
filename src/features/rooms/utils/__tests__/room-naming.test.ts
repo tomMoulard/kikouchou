@@ -99,3 +99,29 @@ describe('buildDuplicateRoomName', () => {
     expect(name).not.toBe('a'.repeat(100));
   });
 });
+
+describe('room names at the edges', () => {
+  it('reads the stem of a name typed with spaces around it', () => {
+    expect(roomNameStem('  Double bed 3 ')).toBe('Double bed');
+  });
+
+  it('trims a single room’s name too', () => {
+    expect(buildBulkRoomNames('  Attic ', 1, [])).toEqual(['Attic']);
+  });
+
+  it('drops the space a shortened name would end on before its number', () => {
+    const name = `${'a'.repeat(97)} b`;
+
+    expect(buildBulkRoomNames(name, 2, [])[0]).toBe(`${'a'.repeat(97)} 1`);
+  });
+});
+
+describe('room names when every number is taken', () => {
+  // MAX_SUFFIX is documented as where the search gives up and reuses a name,
+  // so a loop over input it did not choose still ends. This pins that bound.
+  it('falls back on the first number once all ten thousand are in use', () => {
+    const taken = Array.from({ length: 10_000 }, (_, index) => `Bunk ${index + 1}`);
+
+    expect(buildBulkRoomNames('Bunk', 2, taken)[0]).toBe('Bunk 1');
+  });
+});

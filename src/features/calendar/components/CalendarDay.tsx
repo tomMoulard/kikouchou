@@ -271,7 +271,9 @@ const CalendarDay = memo(function CalendarDay({
         {/* Hidden items indicator */}
         {totalHiddenCount > 0 && (
           <div className="text-xs text-muted-foreground text-center">
-            +{totalHiddenCount}
+            {/* The sentence below says the same for a screen reader, which
+                otherwise heard the bare count as well: "+2 2 more items". */}
+            <span aria-hidden="true">+{totalHiddenCount}</span>
             <span className="sr-only">
               {t('calendar.moreItemsHidden', '{{count}} more items in this day', {
                 count: totalHiddenCount,

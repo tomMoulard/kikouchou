@@ -96,4 +96,29 @@ describe('MarkdownText', () => {
     expect(screen.getByRole('columnheader', { name: 'a' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '2' })).toBeInTheDocument();
   });
+
+  it('keeps the bullets of an ordinary list', () => {
+    const container = renderMarkdown('- one\n- two');
+
+    const list = container.querySelector('ul');
+    expect(list).toHaveClass('my-2', 'list-disc', 'space-y-1', 'pl-5');
+    expect(list).not.toHaveClass('list-none');
+  });
+
+  it('names an image with no alt text by its address', () => {
+    renderMarkdown('![](https://example.com/house.png)');
+
+    expect(screen.getByRole('link', { name: 'https://example.com/house.png' })).toHaveAttribute(
+      'href',
+      'https://example.com/house.png',
+    );
+  });
+
+  it('wraps the whole note in small text that breaks long words', () => {
+    const { container } = render(<MarkdownText className="extra">plain</MarkdownText>, {
+      withProviders: false,
+    });
+
+    expect(container.firstElementChild).toHaveClass('text-sm', 'break-words', 'extra');
+  });
 });

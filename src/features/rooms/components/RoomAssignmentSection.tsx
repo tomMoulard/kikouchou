@@ -412,14 +412,22 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   if (!hasValidConflictInputs && prevHadValidInputs) {
     setPrevHadValidInputs(false);
     setConflictError(undefined);
+    // A check still out is cancelled by the effect's cleanup, and a cancelled
+    // check never clears this flag itself.
+    setIsCheckingConflict(false);
   }
   if (hasValidConflictInputs && !prevHadValidInputs) {
     setPrevHadValidInputs(true);
   }
 
-  // Check for conflicts asynchronously when person or dates change
+  // Check for conflicts asynchronously when person or dates change.
+  //
+  // Only while the form is open. Closing it clears the stay being edited,
+  // which re-ran this effect with the closed form's guest and dates still in
+  // state: a check nobody could see, whose "checking" flag outlived the reopen
+  // and left a fresh add form locked behind "Checking availability...".
   useEffect(() => {
-    if (!selectedPersonId || !dateRange?.from || !dateRange?.to) {
+    if (!open || !selectedPersonId || !dateRange?.from || !dateRange?.to) {
       return;
     }
 
@@ -455,7 +463,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [selectedPersonId, dateRange, checkConflict, existingAssignment, t]);
+  }, [open, selectedPersonId, dateRange, checkConflict, existingAssignment, t]);
 
   // Form validation
   const isFormValid = useMemo(() => (

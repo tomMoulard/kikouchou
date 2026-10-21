@@ -3,9 +3,67 @@
  * @module components/shared/__tests__/LoadingState.test
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@/test/utils';
-import { LoadingState } from '@/components/shared/LoadingState';
+
+/**
+ * Loaded inside the first test: the size tables are load-time constants, and
+ * Stryker can only test a mutant in load-time code against the test that was
+ * running when the module loaded.
+ */
+let LoadingState: typeof import('@/components/shared/LoadingState').LoadingState;
+
+beforeEach(async () => {
+  ({ LoadingState } = await import('@/components/shared/LoadingState'));
+});
+
+describe('LoadingState sizes and frames', () => {
+  it('sizes the spinner and the label together, in both variants', () => {
+    for (const variant of ['inline', 'fullPage'] as const) {
+      for (const [size, spinner, text] of [
+        ['sm', 'size-4', 'text-xs'],
+        ['md', 'size-6', 'text-sm'],
+        ['lg', 'size-8', 'text-base'],
+      ] as const) {
+        const { container, unmount } = render(
+          <LoadingState variant={variant} size={size} showLabel label="Busy" />,
+          { withProviders: false },
+        );
+        expect(container.querySelector('svg'), `${variant} ${size}`).toHaveClass(
+          spinner,
+          'text-primary',
+          'motion-safe:animate-spin',
+        );
+        const visible = container.querySelector('[aria-hidden="true"]:not(svg)');
+        expect(visible, `${variant} ${size}`).toHaveClass(text, 'text-muted-foreground');
+        expect(visible).toHaveTextContent('Busy');
+        unmount();
+      }
+    }
+  });
+
+  it('covers the page with a blurred, centred overlay in full-page mode', () => {
+    render(<LoadingState variant="fullPage" className="extra" />, { withProviders: false });
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveClass(
+      'fixed', 'inset-0', 'z-50', 'flex', 'flex-col', 'items-center', 'justify-center', 'gap-3',
+      'bg-background/80', 'backdrop-blur-sm', 'extra',
+    );
+    expect(screen.getAllByText('common.loading')[0]).toHaveClass('sr-only');
+  });
+
+  it('sits in the flow, compact, when inline', () => {
+    render(<LoadingState />, { withProviders: false });
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveClass('inline-flex', 'items-center', 'justify-center', 'gap-2', 'py-2');
+    expect(status).not.toHaveClass('fixed');
+    expect(screen.getByText('common.loading')).toHaveClass('sr-only');
+  });
+});
 
 // ============================================================================
 // Tests

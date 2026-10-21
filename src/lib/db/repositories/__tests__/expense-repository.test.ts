@@ -6,7 +6,7 @@
  *
  * @module lib/db/repositories/__tests__/expense-repository.test
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
 import {
@@ -333,5 +333,98 @@ describe('expense-repository', () => {
 
       expect(await db.expenses.where('tripId').equals(tripId).count()).toBe(0);
     });
+  });
+});
+
+describe('expense-repository, in detail', () => {
+  async function storeRaw(row: Record<string, unknown>): Promise<void> {
+    await db.expenses.put({
+      kind: 'expense',
+      category: 'meal',
+      title: 'Lunch',
+      date: '2026-07-16',
+      amount: 10,
+      payerId: 'payer',
+      splitMode: 'equal',
+      splits: [],
+      ...row,
+    } as never);
+  }
+
+  it('names the line it failed to create', async () => {
+    const tripId = await createTestTrip();
+    const payerId = await createTestPerson(tripId);
+    vi.spyOn(db.expenses, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(createExpense(tripId, expenseData(payerId))).rejects.toThrow(
+      `Failed to create expense "Courses du samedi" for trip ${tripId}`,
+    );
+  });
+
+  it('lists only the lines of the trip it is asked about', async () => {
+    await storeRaw({ id: 'other', tripId: 'a-trip' });
+    await storeRaw({ id: 'this', tripId: 'b-trip' });
+
+    expect((await getExpensesByTripId('b-trip' as TripId)).map((e) => e.id)).toEqual(['this']);
+  });
+
+  it('orders a payer\'s lines by day, whatever their ids', async () => {
+    await storeRaw({ id: 'a-late', tripId: 'trip', date: '2026-07-20' });
+    await storeRaw({ id: 'b-early', tripId: 'trip', date: '2026-07-15' });
+
+    expect((await getExpensesByPayerId('payer' as PersonId)).map((e) => e.id)).toEqual([
+      'b-early',
+      'a-late',
+    ]);
+  });
+
+  it('refuses to delete a line that does not exist', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(
+      deleteExpenseWithOwnershipCheck('ghost' as ExpenseId, tripId),
+    ).rejects.toThrow('Expense with ID "ghost" not found');
+  });
+
+  it('trims a description a patch names', async () => {
+    const tripId = await createTestTrip();
+    const payerId = await createTestPerson(tripId);
+    const expense = await createExpense(tripId, expenseData(payerId));
+
+    await updateExpenseWithOwnershipCheck(expense.id, tripId, { description: '  Market  ' });
+
+    expect((await getExpenseById(expense.id))?.description).toBe('Market');
+  });
+});
+
+describe('updateExpenseWithOwnershipCheck, field by field', () => {
+  it('keeps every field a patch does not name, and writes the ones it does', async () => {
+    const tripId = await createTestTrip();
+    const payerId = await createTestPerson(tripId);
+    const expense = await createExpense(tripId, expenseData(payerId));
+
+    await updateExpenseWithOwnershipCheck(expense.id, tripId, { category: 'meal' });
+
+    expect(await getExpenseById(expense.id)).toMatchObject({
+      category: 'meal',
+      title: 'Courses du samedi',
+      amount: 84.2,
+      splits: [{ personId: payerId, value: 1 }],
+    });
+  });
+
+  it('de-duplicates the shares a patch names', async () => {
+    const tripId = await createTestTrip();
+    const payerId = await createTestPerson(tripId);
+    const expense = await createExpense(tripId, expenseData(payerId));
+
+    await updateExpenseWithOwnershipCheck(expense.id, tripId, {
+      splits: [
+        { personId: payerId, value: 1 },
+        { personId: payerId, value: 3 },
+      ],
+    });
+
+    expect((await getExpenseById(expense.id))?.splits).toEqual([{ personId: payerId, value: 3 }]);
   });
 });

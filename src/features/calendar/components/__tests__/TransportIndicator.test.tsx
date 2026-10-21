@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { fireEvent, render, screen } from '@/test/utils';
 import { resolveRides } from '@/features/transports/utils/ride-model';
 import { TransportIndicator } from '../TransportIndicator';
 import type { CalendarTransport } from '../../types';
@@ -242,6 +242,143 @@ describe('TransportIndicator', () => {
 
       expect(screen.queryByTestId('ride-glyph')).not.toBeInTheDocument();
       expect(screen.getByTitle('14:30 Alice - Paris Gare du Nord')).toBeInTheDocument();
+    });
+
+    it('appends the ride to the label it already had', () => {
+      const { transport, type } = makeTransport();
+      const { calendarTransport } = withRide(transport);
+
+      render(<TransportIndicator transport={calendarTransport} type={type} />, {
+        withProviders: false,
+      });
+
+      const pill = screen.getByLabelText(/calendar\.personArriving/);
+      expect(pill).toHaveAttribute('aria-label', 'calendar.personArriving · rides.partOfRideWithDriver');
+      expect(pill).toHaveAttribute(
+        'title',
+        '14:30 Alice - Paris Gare du Nord · rides.partOfRideWithDriver',
+      );
+    });
+  });
+
+  describe('labels, colours and keys', () => {
+    it.each([
+      ['arrival', 'calendar.personArriving', 'border-success-border'],
+      ['departure', 'calendar.personDeparting', 'border-departure-border'],
+    ] as const)('names a read-only %s and colours it', (type, label, tone) => {
+      const { transport } = makeTransport({ type });
+      render(<TransportIndicator transport={transport} type={type} />, { withProviders: false });
+
+      const pill = screen.getByLabelText(label);
+      expect(pill).toHaveAttribute('aria-label', label);
+      expect(pill).toHaveClass('flex', 'rounded', 'border', 'min-h-[44px]', tone);
+      expect(pill).not.toHaveClass('cursor-pointer');
+    });
+
+    it('names a tappable leg after its details and makes it look tappable', () => {
+      const { transport, type } = makeTransport();
+      render(<TransportIndicator transport={transport} type={type} onClick={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      const button = screen.getByRole('button');
+      expect(button).toHaveAttribute('aria-label', 'calendar.viewTransportDetails');
+      expect(button).toHaveClass('cursor-pointer', 'hover:opacity-80', 'focus-visible:ring-2');
+    });
+
+    it('leaves the place out of a leg that has none', () => {
+      const { transport, type } = makeTransport();
+      render(
+        <TransportIndicator
+          transport={{ ...transport, transport: { ...transport.transport, location: '' } }}
+          type={type}
+        />,
+        { withProviders: false },
+      );
+
+      expect(screen.getByTitle('14:30 Alice')).toBeInTheDocument();
+      expect(screen.queryByText(/^- /)).not.toBeInTheDocument();
+    });
+
+    it('carries the guest colour on its dot', () => {
+      const { transport, type } = makeTransport({ color: '#abcdef' as HexColor });
+      const { container } = render(<TransportIndicator transport={transport} type={type} />, {
+        withProviders: false,
+      });
+
+      expect(container.querySelector('.rounded-full')).toHaveStyle({ backgroundColor: '#abcdef' });
+    });
+
+    it.each(['Enter', ' '])('opens the leg on the %j key', (key) => {
+      const { transport, type } = makeTransport();
+      const onClick = vi.fn();
+      render(<TransportIndicator transport={transport} type={type} onClick={onClick} />, {
+        withProviders: false,
+      });
+
+      expect(fireEvent.keyDown(screen.getByRole('button'), { key })).toBe(false);
+      expect(onClick).toHaveBeenCalledWith(transport);
+    });
+
+    it('leaves every other key to the browser', () => {
+      const { transport, type } = makeTransport();
+      const onClick = vi.fn();
+      render(<TransportIndicator transport={transport} type={type} onClick={onClick} />, {
+        withProviders: false,
+      });
+
+      expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'a' })).toBe(true);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('draws the icon of the mode, and a neutral one for a leg with none', () => {
+      const { transport, type } = makeTransport();
+      const { container, rerender } = render(<TransportIndicator transport={transport} type={type} />, {
+        withProviders: false,
+      });
+      expect(container.querySelector('svg.lucide-tram-front')).not.toBeNull();
+
+      rerender(
+        <TransportIndicator
+          transport={{ ...transport, transport: { ...transport.transport, transportMode: undefined } }}
+          type={type}
+        />,
+      );
+      expect(container.querySelector('svg.lucide-circle-dot')).not.toBeNull();
+    });
+
+    it('prefixes the place with a dash in its own span', () => {
+      const { transport, type } = makeTransport();
+      render(<TransportIndicator transport={transport} type={type} />, { withProviders: false });
+
+      expect(screen.getByText('- Paris Gare du Nord')).toHaveClass('truncate', 'opacity-75');
+    });
+
+    it('fades on hover once it can be tapped', () => {
+      const { transport, type } = makeTransport();
+      render(<TransportIndicator transport={transport} type={type} onClick={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      expect(screen.getByRole('button')).toHaveClass('transition-opacity');
+    });
+
+    it('opens with the handler it was last given', () => {
+      const { transport, type } = makeTransport();
+      const first = vi.fn();
+      const second = vi.fn();
+      const { rerender } = render(
+        <TransportIndicator transport={transport} type={type} onClick={first} />,
+        { withProviders: false },
+      );
+
+      rerender(<TransportIndicator transport={transport} type={type} onClick={second} />);
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+      fireEvent.keyDown(button, { key: 'Enter' });
+
+      expect(second).toHaveBeenCalledTimes(2);
+      expect(first).not.toHaveBeenCalled();
     });
   });
 });

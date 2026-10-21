@@ -146,4 +146,65 @@ describe('PlanOwnTripPrompt', () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('says what it offers, set apart from the list', () => {
+    const trip = makeStartedTrip();
+    joinAsGuest(trip);
+
+    const { container } = render(<PlanOwnTripPrompt trips={[trip]} onCreateTrip={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    expect(screen.getByText('trips.ownTripPrompt.description')).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('mb-4', 'border-primary/20');
+  });
+
+  it('counts the trips in the impression, and reports it once across updates', () => {
+    const trip = makeStartedTrip();
+    const second = { ...makeStartedTrip(), id: 'trip-2' as TripId, shareId: 'share-2' as ShareId };
+    joinAsGuest(trip);
+    joinAsGuest(second);
+
+    const { rerender } = render(<PlanOwnTripPrompt trips={[trip]} onCreateTrip={vi.fn()} />, {
+      withProviders: false,
+    });
+    expect(captureFor('own_trip_prompt_shown')).toEqual(['own_trip_prompt_shown', { trip_count: 1 }]);
+
+    rerender(<PlanOwnTripPrompt trips={[trip, second]} onCreateTrip={vi.fn()} />);
+
+    expect(
+      mockCapture.mock.calls.filter((call) => call[0] === 'own_trip_prompt_shown'),
+    ).toHaveLength(1);
+  });
+
+  it('reports the impression when the card appears after the first render', () => {
+    const own = makeStartedTrip();
+    const joined = { ...makeStartedTrip(), id: 'trip-2' as TripId, shareId: 'share-2' as ShareId };
+    joinAsGuest(joined);
+
+    const { rerender } = render(<PlanOwnTripPrompt trips={[own]} onCreateTrip={vi.fn()} />, {
+      withProviders: false,
+    });
+    expect(captureFor('own_trip_prompt_shown')).toBeUndefined();
+
+    rerender(<PlanOwnTripPrompt trips={[joined]} onCreateTrip={vi.fn()} />);
+
+    expect(captureFor('own_trip_prompt_shown')).toEqual(['own_trip_prompt_shown', { trip_count: 1 }]);
+  });
+
+  it('calls the create handler it was given last', async () => {
+    const trip = makeStartedTrip();
+    joinAsGuest(trip);
+    const first = vi.fn();
+    const latest = vi.fn();
+
+    const { user, rerender } = render(<PlanOwnTripPrompt trips={[trip]} onCreateTrip={first} />, {
+      withProviders: false,
+    });
+    rerender(<PlanOwnTripPrompt trips={[trip]} onCreateTrip={latest} />);
+    await user.click(screen.getByText('trips.ownTripPrompt.action'));
+
+    expect(latest).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
 });

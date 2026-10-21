@@ -7,7 +7,7 @@
  *
  * @module lib/db/repositories/__tests__/assignment-repository.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createAssignment,
@@ -20,6 +20,8 @@ import {
   checkAssignmentConflict,
   getAssignmentsForDate,
   getAssignmentCount,
+  updateAssignmentWithOwnershipCheck,
+  deleteAssignmentWithOwnershipCheck,
 } from '@/lib/db/repositories/assignment-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
@@ -1485,5 +1487,116 @@ describe('getAssignmentCount', () => {
 
     expect(count1).toBe(2);
     expect(count2).toBe(1);
+  });
+});
+
+describe('assignment-repository, in detail', () => {
+  async function storeRaw(row: Record<string, unknown> & { readonly id: string }): Promise<RoomAssignmentId> {
+    const assignment = {
+      roomId: 'room-1',
+      personId: 'person-1',
+      startDate: '2024-07-15',
+      endDate: '2024-07-20',
+      ...row,
+    };
+    await db.roomAssignments.put(assignment as never);
+    return assignment.id as RoomAssignmentId;
+  }
+
+  it('names the stay it failed to create', async () => {
+    const tripId = await createTestTrip();
+    vi.spyOn(db.roomAssignments, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      createAssignment(tripId, createTestAssignmentData('room-1' as RoomId, 'person-1' as PersonId)),
+    ).rejects.toThrow(
+      'Failed to create assignment for person person-1 in room room-1 (2024-07-15 to 2024-07-20)',
+    );
+  });
+
+  it('names the stay it failed to delete', async () => {
+    vi.spyOn(db.roomAssignments, 'delete').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(deleteAssignment('assignment-1' as RoomAssignmentId)).rejects.toThrow(
+      'Failed to delete assignment assignment-1',
+    );
+  });
+
+  it('orders a room\'s and a guest\'s stays by start, whatever their ids', async () => {
+    const tripId = await createTestTrip();
+    await storeRaw({ id: 'a-late', tripId, startDate: '2024-07-25', endDate: '2024-07-27' });
+    await storeRaw({ id: 'b-early', tripId, startDate: '2024-07-15', endDate: '2024-07-17' });
+
+    expect((await getAssignmentsByRoomId('room-1' as RoomId)).map((a) => a.id)).toEqual([
+      'b-early',
+      'a-late',
+    ]);
+    expect((await getAssignmentsByPersonId('person-1' as PersonId)).map((a) => a.id)).toEqual([
+      'b-early',
+      'a-late',
+    ]);
+  });
+
+  it('leaves the dates alone when a patch does not move them', async () => {
+    const tripId = await createTestTrip();
+    // An inverted range a peer's document could have carried in.
+    const id = await storeRaw({ id: 'inverted', tripId, startDate: '2024-07-20', endDate: '2024-07-15' });
+
+    await updateAssignment(id, { roomId: 'room-2' as RoomId });
+
+    expect((await getAssignmentById(id))?.roomId).toBe('room-2');
+  });
+
+  it('only lists the stays of the trip it is asked about', async () => {
+    await storeRaw({ id: 'other-trip', tripId: 'a-trip', startDate: '2024-07-15', endDate: '2024-07-20' });
+    await storeRaw({ id: 'this-trip', tripId: 'b-trip', startDate: '2024-07-15', endDate: '2024-07-20' });
+
+    expect(
+      (await getAssignmentsForDate('b-trip' as TripId, '2024-07-16')).map((a) => a.id),
+    ).toEqual(['this-trip']);
+  });
+
+  it('refuses a checked patch whose new start falls after the stored end', async () => {
+    const tripId = await createTestTrip();
+    const id = await storeRaw({ id: 'stay', tripId });
+
+    await expect(
+      updateAssignmentWithOwnershipCheck(id, tripId, { startDate: isoDate('2024-07-25') }),
+    ).rejects.toThrow('Invalid date range');
+  });
+
+  it('refuses a checked patch whose new end falls before the stored start', async () => {
+    const tripId = await createTestTrip();
+    const id = await storeRaw({ id: 'stay', tripId });
+
+    await expect(
+      updateAssignmentWithOwnershipCheck(id, tripId, { endDate: isoDate('2024-07-10') }),
+    ).rejects.toThrow('Invalid date range');
+  });
+
+  it('refuses a checked update of a stay that does not exist', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(
+      updateAssignmentWithOwnershipCheck('ghost' as RoomAssignmentId, tripId, {}),
+    ).rejects.toThrow('Assignment with ID "ghost" not found');
+  });
+
+  it('refuses a checked update of another trip\'s stay, and keeps it', async () => {
+    const tripId = await createTestTrip();
+    const id = await storeRaw({ id: 'stay', tripId: 'other-trip' });
+
+    await expect(
+      updateAssignmentWithOwnershipCheck(id, tripId, { roomId: 'room-2' as RoomId }),
+    ).rejects.toThrow('Cannot update assignment: assignment does not belong to current trip');
+    expect((await getAssignmentById(id))?.roomId).toBe('room-1');
+  });
+
+  it('refuses a checked delete of a stay that does not exist', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(
+      deleteAssignmentWithOwnershipCheck('ghost' as RoomAssignmentId, tripId),
+    ).rejects.toThrow('Assignment with ID "ghost" not found');
   });
 });

@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { tripDay } from '@/features/rooms/__tests__/fixture-days';
 import { inferGuestParties } from '../guest-parties';
 import type {
   HexColor,
@@ -178,5 +179,80 @@ describe('inferGuestParties', () => {
     });
 
     expect([...parties.keys()]).toEqual(['alice']);
+  });
+});
+
+describe('inferGuestParties, the key a party gets', () => {
+  it.each([
+    ['the smaller id first', ['amy', 'zed']],
+    ['the larger id first', ['zed', 'amy']],
+  ])('names a party after its smallest id, with %s', (_name, order) => {
+    const parties = inferGuestParties({
+      persons: [makePerson('amy'), makePerson('zed')],
+      assignments: order.map((personId, index) =>
+        makeAssignment(`a${index}`, personId, 'room-1', tripDay(1), tripDay(5)),
+      ),
+      arrivals: [],
+    });
+
+    expect(parties.get('amy' as PersonId)).toBe('amy');
+    expect(parties.get('zed' as PersonId)).toBe('amy');
+  });
+
+  it('lets no stranger to the trip join or rename a party', () => {
+    const parties = inferGuestParties({
+      persons: [makePerson('bob'), makePerson('cat')],
+      assignments: [
+        makeAssignment('a1', 'aaa', 'room-1', tripDay(1), tripDay(5)),
+        makeAssignment('a2', 'bob', 'room-1', tripDay(1), tripDay(5)),
+      ],
+      arrivals: [
+        makeArrival('t1', 'aaa', `${tripDay(1)}T14:00:00`, 'Gare'),
+        makeArrival('t2', 'cat', `${tripDay(1)}T14:00:00`, 'Gare'),
+      ],
+    });
+
+    expect(parties.get('bob' as PersonId)).toBe('bob');
+    expect(parties.get('cat' as PersonId)).toBe('cat');
+  });
+
+  it('ignores an arrival with no time, however exact the place', () => {
+    const parties = inferGuestParties({
+      persons: [makePerson('alice'), makePerson('bob')],
+      assignments: [],
+      arrivals: [
+        makeArrival('t1', 'alice', '', 'Gare de Lyon'),
+        makeArrival('t2', 'bob', '', 'Gare de Lyon'),
+      ],
+    });
+
+    expect(parties.get('alice' as PersonId)).not.toBe(parties.get('bob' as PersonId));
+  });
+
+  it('ignores an arrival whose place was never filled in', () => {
+    const noPlace = (id: string, personId: string): Transport => ({
+      ...makeArrival(id, personId, `${tripDay(1)}T14:00:00`, ''),
+      location: undefined as unknown as string,
+    });
+    const parties = inferGuestParties({
+      persons: [makePerson('alice'), makePerson('bob')],
+      assignments: [],
+      arrivals: [noPlace('t1', 'alice'), noPlace('t2', 'bob')],
+    });
+
+    expect(parties.get('alice' as PersonId)).not.toBe(parties.get('bob' as PersonId));
+  });
+
+  it('keeps the spaces between words when it compares places', () => {
+    const parties = inferGuestParties({
+      persons: [makePerson('alice'), makePerson('bob')],
+      assignments: [],
+      arrivals: [
+        makeArrival('t1', 'alice', `${tripDay(1)}T14:00:00`, 'Gare de Lyon'),
+        makeArrival('t2', 'bob', `${tripDay(1)}T14:00:00`, 'Gare deLyon'),
+      ],
+    });
+
+    expect(parties.get('alice' as PersonId)).not.toBe(parties.get('bob' as PersonId));
   });
 });

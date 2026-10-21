@@ -199,3 +199,28 @@ describe('searchPersonsByName', () => {
     expect(results).toHaveLength(0);
   });
 });
+
+describe('deletePersonWithOwnershipCheck, cars and rides', () => {
+  it('keeps the guest\'s ride and car but forgets who drove and owned them', async () => {
+    const tripId = await createTestTrip();
+    const person = await createPerson(tripId, { name: 'Alice', color: hexColor('#ef4444') });
+    const other = await createPerson(tripId, { name: 'Bob', color: hexColor('#3b82f6') });
+    await db.rides.bulkPut([
+      { id: 'ride-1', tripId, direction: 'pickup', meetDatetime: '2024-07-15T10:00:00.000Z', location: 'Station', driverId: person.id },
+      { id: 'ride-2', tripId, direction: 'pickup', meetDatetime: '2024-07-15T11:00:00.000Z', location: 'Station', driverId: other.id },
+    ] as never);
+    await db.vehicles.bulkPut([
+      { id: 'vehicle-1', tripId, name: 'Espace', ownerId: person.id },
+      { id: 'vehicle-2', tripId, name: 'Clio', ownerId: other.id },
+    ] as never);
+
+    await deletePersonWithOwnershipCheck(person.id, tripId);
+
+    expect(await db.rides.get('ride-1')).toMatchObject({ id: 'ride-1' });
+    expect((await db.rides.get('ride-1'))?.driverId).toBeUndefined();
+    expect((await db.rides.get('ride-2'))?.driverId).toBe(other.id);
+    expect(await db.vehicles.get('vehicle-1')).toMatchObject({ name: 'Espace' });
+    expect((await db.vehicles.get('vehicle-1'))?.ownerId).toBeUndefined();
+    expect((await db.vehicles.get('vehicle-2'))?.ownerId).toBe(other.id);
+  });
+});

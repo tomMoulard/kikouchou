@@ -4,7 +4,7 @@
  * @module components/shared/__tests__/nav-items.test
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_MOBILE_NAV_MODE,
@@ -14,6 +14,30 @@ import {
   tripNavItemsInOrder,
 } from '../nav-items';
 import { MOBILE_NAV_PAGES } from '@/types';
+
+describe('nav items load-time tables', () => {
+  // A fresh copy of the module, so its tables are built while this test runs:
+  // Stryker can only test a mutant in load-time code against the test that was
+  // running when the module loaded.
+  it('lists every trip page with its key, path, icons and trip scope, and defaults the mobile mode to auto', async () => {
+    vi.resetModules();
+    const fresh = await import('../nav-items');
+    const icons = await import('../nav-icons');
+    const lucide = await import('lucide-react');
+
+    expect(fresh.DEFAULT_MOBILE_NAV_MODE).toBe('auto');
+    expect(fresh.TRIP_NAV_ITEMS).toEqual([
+      { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: lucide.Calendar, activeIcon: icons.CalendarSolid, requiresTrip: true },
+      { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: lucide.Home, activeIcon: icons.HouseSolid, requiresTrip: true },
+      { labelKey: 'nav.persons', pathSuffix: 'persons', icon: lucide.Users, activeIcon: icons.UsersSolid, requiresTrip: true },
+      { labelKey: 'nav.money', pathSuffix: 'money', icon: lucide.Wallet, activeIcon: icons.WalletSolid, requiresTrip: true },
+      { labelKey: 'nav.activities', pathSuffix: 'activities', icon: lucide.PartyPopper, requiresTrip: true },
+      { labelKey: 'nav.transports', pathSuffix: 'transports', icon: lucide.Car, requiresTrip: true },
+      { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: lucide.BarChart2, requiresTrip: true },
+      { labelKey: 'nav.tripSettings', pathSuffix: 'edit', icon: lucide.Settings2, requiresTrip: true },
+    ]);
+  });
+});
 
 describe('TRIP_NAV_ITEMS', () => {
   it('lists every page the bar can hold, in the default order', () => {

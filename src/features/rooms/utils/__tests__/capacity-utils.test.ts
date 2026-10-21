@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 
+import { tripDay } from '@/features/rooms/__tests__/fixture-days';
 import type { ISODateString, PersonId, RoomAssignment, RoomAssignmentId, RoomId, TripId } from '@/types';
 import {
   buildNightlyOccupancyByRoom,
@@ -440,5 +441,38 @@ describe('buildNightlyOccupancyByRoom', () => {
         .get('room-a' as RoomId)
         ?.get('2024-07-16'),
     ).toBeUndefined();
+  });
+});
+
+describe('stay windows that do not parse', () => {
+  it('lists no night for a window it cannot read as dates', () => {
+    expect(listStayNights('abc', 'xyz')).toEqual([]);
+  });
+
+  it('lists no night when check-out is the check-in day written longer', () => {
+    // Later as a string, the same instant as a date: no night in between.
+    expect(listStayNights(tripDay(5), `${tripDay(5)}T00:00`)).toEqual([]);
+  });
+
+  it('says a stay with a missing bound overlaps nothing', () => {
+    const full = { startDate: tripDay(1), endDate: tripDay(10) };
+    expect(stayNightsOverlap({ ...full, startDate: '' as ISODateString }, full)).toBe(false);
+    expect(stayNightsOverlap(full, { ...full, endDate: '' as ISODateString })).toBe(false);
+  });
+});
+
+describe('stayNightsOverlap with a second stay that holds no night', () => {
+  const week = { startDate: tripDay(1), endDate: tripDay(10) };
+
+  it.each([
+    ['ends before it starts', tripDay(5), tripDay(3)],
+    ['starts and ends the same day', tripDay(5), tripDay(5)],
+  ])('finds no overlap with a stay that %s', (_name, startDate, endDate) => {
+    expect(
+      stayNightsOverlap(week, {
+        startDate: startDate as ISODateString,
+        endDate: endDate as ISODateString,
+      }),
+    ).toBe(false);
   });
 });

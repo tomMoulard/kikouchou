@@ -102,4 +102,52 @@ describe('StatusAnnouncer', () => {
     // is called from plain functions that cannot know what is rendered.
     expect(() => announceStatus('Room created successfully')).not.toThrow();
   });
+
+  it('starts empty', () => {
+    render(<StatusAnnouncer />, { withProviders: false });
+
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('drops a pending message when a newer one arrives before it is read out', () => {
+    render(<StatusAnnouncer />, { withProviders: false });
+
+    act(() => {
+      announceStatus('Room created successfully');
+    });
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    act(() => {
+      announceStatus('Assignment created');
+    });
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+
+    // The first message's frame has passed, and it never reached the region.
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Assignment created');
+  });
+
+  it('cancels its pending frame and stops listening when unmounted', () => {
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    const { unmount } = render(<StatusAnnouncer />, { withProviders: false });
+    act(() => {
+      announceStatus('Room created successfully');
+    });
+    const index = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 100);
+    const timer: unknown = setTimeoutSpy.mock.results[index]?.value;
+
+    unmount();
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timer);
+
+    setTimeoutSpy.mockClear();
+    announceStatus('Assignment created');
+    expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 100);
+  });
 });

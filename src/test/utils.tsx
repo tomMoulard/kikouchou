@@ -22,7 +22,7 @@ import type { RenderOptions, RenderResult } from '@testing-library/react';
 import type { i18n as I18nInstance, Resource } from 'i18next';
 
 import { expect } from 'vitest';
-import { render as rtlRender, waitFor } from '@testing-library/react';
+import { act, render as rtlRender, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -510,6 +510,67 @@ export async function renderWithRealI18n(
   return {
     ...result,
     i18n: instance,
+  };
+}
+
+/**
+ * Result of {@link renderSwitchingLanguage}.
+ */
+export interface LanguageSwitchRenderResult extends RealI18nRenderResult {
+  /** Changes the language under the mounted tree, inside `act`. */
+  readonly switchTo: (language: TestLanguage) => Promise<void>;
+}
+
+/**
+ * Renders like {@link renderWithRealI18n}, through an instance of its own that
+ * the test may switch to another language while the tree stays mounted.
+ *
+ * {@link createRealI18n} caches one shared instance per language per file, so
+ * changing its language would leak into later tests. This builds a fresh one
+ * with the same configuration, bundles and unmock guards instead.
+ *
+ * @param ui - React element to render
+ * @param options - Render options, plus the language to start in
+ * @returns Render result, the instance, and a way to change its language
+ *
+ * @example
+ * ```tsx
+ * vi.unmock('i18next');
+ * vi.unmock('react-i18next');
+ *
+ * const { switchTo } = await renderSwitchingLanguage(<MapView center={[0, 0]} />, {
+ *   withProviders: false,
+ * });
+ * await switchTo('fr');
+ * expect(screen.getByRole('application', { name: 'Carte interactive' })).toBeInTheDocument();
+ * ```
+ */
+export async function renderSwitchingLanguage(
+  ui: ReactElement,
+  options: RealI18nRenderOptions = {}
+): Promise<LanguageSwitchRenderResult> {
+  const { language = DEFAULT_TEST_LANGUAGE, ...renderOptions } = options;
+
+  const [instance, { I18nextProvider }] = await Promise.all([
+    initRealI18n(language),
+    importRealReactI18next(),
+  ]);
+
+  const result = renderInternal(ui, {
+    ...renderOptions,
+    outerWrapper: (children) => (
+      <I18nextProvider i18n={instance}>{children}</I18nextProvider>
+    ),
+  });
+
+  return {
+    ...result,
+    i18n: instance,
+    switchTo: async (next) => {
+      await act(async () => {
+        await instance.changeLanguage(next);
+      });
+    },
   };
 }
 

@@ -16,7 +16,7 @@ import {
   rewriteChangesetTripId,
 } from '@/lib/sharing/import-from-changeset';
 import type { AppChangeset, TripSnapshotMeta } from '@/lib/sharing/types';
-import type { HexColor, ISODateString, PersonId, Room, RoomAssignmentId, RoomId, Trip, TripId } from '@/types';
+import type { HexColor, ISODateString, PersonId, Room, RoomAssignmentId, RoomId, Transport, Trip, TripId } from '@/types';
 
 // ============================================================================
 // Mocks
@@ -291,5 +291,125 @@ describe('ImportChangesetError', () => {
     expect(error.code).toBe('import_snapshot_required');
     expect(error.message).toBe('test message');
     expect(error).toBeInstanceOf(Error);
+  });
+});
+
+describe('buildRoomIdMapByName: matching rules', () => {
+  function room(id: string, name: string, order: number, tripId: TripId = TRIP_A): Room {
+    return { id: id as RoomId, tripId, name, capacity: 2, order };
+  }
+
+  it('does not treat a lower-case sharp s as a double s', () => {
+    const map = buildRoomIdMapByName([room('exp', 'Straße', 0)], [room('loc', 'STRASSE', 0, TRIP_B)]);
+
+    expect(map.size).toBe(0);
+  });
+
+  it('keeps the space between two words', () => {
+    const map = buildRoomIdMapByName(
+      [room('exp', 'Master  Bedroom', 0)],
+      [room('loc', 'MasterBedroom', 0, TRIP_B)],
+    );
+
+    expect(map.size).toBe(0);
+  });
+
+  it('pairs rooms of the same name in their order on both sides', () => {
+    const map = buildRoomIdMapByName(
+      [room('exp-2', 'Bunk', 2), room('exp-0', 'Bunk', 0), room('exp-1', 'Bunk', 1)],
+      [room('loc-1', 'Bunk', 1, TRIP_B), room('loc-2', 'Bunk', 2, TRIP_B), room('loc-0', 'Bunk', 0, TRIP_B)],
+    );
+
+    expect(Object.fromEntries(map)).toEqual({
+      'exp-0': 'loc-0',
+      'exp-1': 'loc-1',
+      'exp-2': 'loc-2',
+    });
+  });
+
+  it('gives one local room to one export room only', () => {
+    const map = buildRoomIdMapByName(
+      [room('exp-0', 'Bunk', 0), room('exp-1', 'Bunk', 1)],
+      [room('loc-0', 'Bunk', 0, TRIP_B)],
+    );
+
+    expect(Object.fromEntries(map)).toEqual({ 'exp-0': 'loc-0' });
+  });
+});
+
+describe('rewrites carry the travel legs', () => {
+  const leg = {
+    id: 't1' as Transport['id'],
+    tripId: TRIP_A,
+    personId: 'p1' as PersonId,
+    type: 'arrival' as const,
+    datetime: '2026-07-01T10:00:00.000Z',
+    location: 'Station',
+    needsPickup: false,
+  };
+  const changeset: AppChangeset = {
+    version: 1,
+    tripId: TRIP_A,
+    shareId: 'share1',
+    exportedBy: 'p1' as PersonId,
+    exportedAt: 1,
+    baseSnapshotAt: 1,
+    added: { persons: [], assignments: [], transports: [leg], rooms: [] },
+    modified: { persons: [], assignments: [], transports: [leg], rooms: [] },
+  };
+
+  it('moves every leg to the new trip on a cold import', () => {
+    const out = rewriteChangesetTripId(changeset, TRIP_B);
+
+    expect(out.added.transports).toEqual([{ ...leg, tripId: TRIP_B }]);
+    expect(out.modified.transports).toEqual([{ ...leg, tripId: TRIP_B }]);
+  });
+
+  it('moves every leg to the matched trip', () => {
+    const out = rewriteChangesetForTargetTrip(changeset, TRIP_B, new Map());
+
+    expect(out.added.transports).toEqual([{ ...leg, tripId: TRIP_B }]);
+    expect(out.modified.transports).toEqual([{ ...leg, tripId: TRIP_B }]);
+  });
+});
+
+describe('prepareChangesetForLocalImport: no false matches', () => {
+  const changeset: AppChangeset = {
+    version: 1,
+    tripId: TRIP_A,
+    shareId: 'share-none',
+    exportedBy: 'p1' as PersonId,
+    exportedAt: 1,
+    baseSnapshotAt: 1,
+    added: { persons: [], assignments: [], transports: [], rooms: [] },
+    modified: { persons: [], assignments: [], transports: [], rooms: [] },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetTripByShareId.mockResolvedValue(null);
+    mockGetRoomsByTripId.mockResolvedValue([]);
+  });
+
+  it('creates a trip rather than adopting one with another name', async () => {
+    mockGetAllTrips.mockResolvedValue([{ id: TRIP_B, name: 'Ski week' } as Trip]);
+    mockCreateTrip.mockResolvedValue({ id: 'new-trip' as TripId } as Trip);
+
+    const result = await prepareChangesetForLocalImport({
+      ...changeset,
+      tripSnapshot: {
+        name: 'Beach Trip',
+        startDate: '2026-07-01' as ISODateString,
+        endDate: '2026-07-10' as ISODateString,
+      },
+    });
+
+    expect(result.targetTripId).toBe('new-trip');
+  });
+
+  it('says why it cannot import without a snapshot', async () => {
+    await expect(prepareChangesetForLocalImport(changeset)).rejects.toThrow(
+      'Trip snapshot metadata is required to import this changeset on a new device',
+    );
   });
 });

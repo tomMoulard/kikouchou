@@ -603,3 +603,176 @@ describe('syncDocToDexie — rows the document no longer holds', () => {
     await expect(db.expenses.where('tripId').equals(trip.id).count()).resolves.toBe(0);
   });
 });
+
+describe('buildGuestRecord: a guest with no usable name', () => {
+  async function projectBlankGuest(): Promise<TripId> {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+    const doc = makeDoc({ name: 'Brittany', startDate: '2024-08-01', endDate: '2024-08-05' });
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: '   ', color: '#ef4444' });
+    await syncDocToDexie(doc, trip.id);
+    return trip.id;
+  }
+
+  it('keeps the name this device already had for the guest', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+    await db.persons.put({
+      id: 'p1',
+      tripId: trip.id,
+      name: 'Marie',
+      color: '#ef4444',
+    } as Person);
+    const doc = makeDoc({ name: 'Brittany', startDate: '2024-08-01', endDate: '2024-08-05' });
+    upsertDocEntity(doc, 'guests', { id: 'p1', name: '', color: '#ef4444' });
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect((await db.persons.get('p1'))?.name).toBe('Marie');
+  });
+
+  it('falls back to the placeholder for a guest this device never named', async () => {
+    await projectBlankGuest();
+
+    expect((await db.persons.get('p1'))?.name).toBe('persons.unnamed');
+  });
+});
+
+describe('buildTripRecord: the window, the clock and the fallbacks', () => {
+  const makeTrip = () =>
+    createTrip({
+      name: 'Brittany',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+  it('takes a new window from the document', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ startDate: '2024-08-02', endDate: '2024-08-09' }), trip.id);
+
+    expect(await db.trips.get(trip.id)).toMatchObject({
+      startDate: '2024-08-02',
+      endDate: '2024-08-09',
+    });
+  });
+
+  it('keeps the window this device had when the document carries none, or garbage', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ startDate: 20_240_802 }), trip.id);
+
+    expect(await db.trips.get(trip.id)).toMatchObject({
+      startDate: '2024-08-01',
+      endDate: '2024-08-05',
+    });
+  });
+
+  it('takes the timestamps the document carries', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ createdAt: 1_000, updatedAt: 2_000 }), trip.id);
+
+    expect(await db.trips.get(trip.id)).toMatchObject({ createdAt: 1_000, updatedAt: 2_000 });
+  });
+
+  it('keeps the timestamps this device had when the document carries none', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({}), trip.id);
+
+    expect(await db.trips.get(trip.id)).toMatchObject({
+      createdAt: trip.createdAt,
+      updatedAt: trip.updatedAt,
+    });
+  });
+
+  it('ignores a location that is not a string', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ location: 42 }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.location).toBeUndefined();
+  });
+
+  it('falls back to the placeholder when neither side has a usable name', async () => {
+    const trip = await makeTrip();
+    await db.trips.update(trip.id, { name: '   ' });
+
+    await syncDocToDexie(makeDoc({}), trip.id);
+
+    expect((await db.trips.get(trip.id))?.name).toBe('trips.untitled');
+  });
+});
+
+describe('buildTripRecord: coordinates', () => {
+  const makeTrip = () =>
+    createTrip({
+      name: 'Brittany',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+  it('projects the trip when the document holds null coordinates', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ name: 'Bretagne', coordinates: null }), trip.id);
+
+    const stored = await db.trips.get(trip.id);
+    expect(stored?.name).toBe('Bretagne');
+    expect(stored?.coordinates).toBeUndefined();
+  });
+
+  it.each([
+    ['a latitude', { lat: '47.6', lon: -2.7 }],
+    ['a longitude', { lat: 47.6, lon: '-2.7' }],
+  ])('ignores coordinates with %s that is not a number', async (_label, coordinates) => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ coordinates }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.coordinates).toBeUndefined();
+  });
+
+  it('takes coordinates that are two numbers', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ coordinates: { lat: 47.6, lon: -2.7 } }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.coordinates).toEqual({ lat: 47.6, lon: -2.7 });
+  });
+});
+
+describe('buildGuestRecord: a phone from both sides', () => {
+  it('takes the phone the document carries over the one this device holds', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+    await db.persons.put({
+      id: 'p1',
+      tripId: trip.id,
+      name: 'Marie',
+      color: '#ef4444',
+      phone: '+33 1 00 00 00 00',
+    } as Person);
+    const doc = makeDoc({ name: 'Brittany', startDate: '2024-08-01', endDate: '2024-08-05' });
+    upsertDocEntity(doc, 'guests', {
+      id: 'p1',
+      name: 'Marie',
+      color: '#ef4444',
+      phone: '+33 6 12 34 56 78',
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect((await db.persons.get('p1'))?.phone).toBe('+33 6 12 34 56 78');
+  });
+});

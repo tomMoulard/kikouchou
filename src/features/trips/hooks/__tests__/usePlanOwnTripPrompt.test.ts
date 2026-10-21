@@ -13,11 +13,11 @@
  */
 
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { installLocalStorageDouble } from '@/test/local-storage';
 import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
-import { markTripOrganised } from '../usePlanOwnTripPrompt';
+import { ORGANISED_STORAGE_KEY, markTripOrganised } from '../usePlanOwnTripPrompt';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { usePlanOwnTripPrompt } from '../usePlanOwnTripPrompt';
 import type { PersonId, ShareId, Trip, TripId, UnixTimestamp } from '@/types';
@@ -187,5 +187,118 @@ describe('usePlanOwnTripPrompt', () => {
     // A malformed value is not a dismissal. Treating it as one would hide the
     // card forever on the browser that wrote it.
     expect(result.current.isVisible).toBe(true);
+  });
+
+  describe('at the edges', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it('lets the card back exactly when the cooldown ends', () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date());
+      const trip = makeTrip();
+      joinAsGuest(trip);
+      localStorage.setItem(
+        'kikouchou-own-trip-prompt-dismissed',
+        (Date.now() - 30 * 24 * 60 * 60 * 1000).toString(),
+      );
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([trip]));
+
+      expect(result.current.isVisible).toBe(true);
+    });
+
+    it('shows the card when the dismissal cannot be read', () => {
+      const trip = makeTrip();
+      joinAsGuest(trip);
+      // A fresh dismissal is stored: only the refused read can bring the card back.
+      localStorage.setItem('kikouchou-own-trip-prompt-dismissed', Date.now().toString());
+      const read = localStorage.getItem.bind(localStorage);
+      vi.spyOn(localStorage, 'getItem').mockImplementation((key: string) => {
+        if (key === 'kikouchou-own-trip-prompt-dismissed') {
+          throw new DOMException('SecurityError');
+        }
+        return read(key);
+      });
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([trip]));
+
+      expect(result.current.isVisible).toBe(true);
+    });
+
+    it('falls back to the guest test when the organiser flag cannot be read', () => {
+      const trip = makeTrip();
+      joinAsGuest(trip);
+      // The flag is set: only the refused read can let the guest test decide.
+      markTripOrganised();
+      const read = localStorage.getItem.bind(localStorage);
+      vi.spyOn(localStorage, 'getItem').mockImplementation((key: string) => {
+        if (key === ORGANISED_STORAGE_KEY) {
+          throw new DOMException('SecurityError');
+        }
+        return read(key);
+      });
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([trip]));
+
+      expect(result.current.isVisible).toBe(true);
+    });
+
+    it('counts a trip that starts today as started', () => {
+      const trip = makeTrip({ startDate: dayFromToday(0), endDate: dayFromToday(3) });
+      joinAsGuest(trip);
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([trip]));
+
+      expect(result.current.isVisible).toBe(true);
+    });
+
+    it('needs one started trip, not all of them', () => {
+      const started = makeTrip();
+      const later = makeTrip({
+        id: 'trip-2' as TripId,
+        shareId: 'share-2' as ShareId,
+        startDate: dayFromToday(10),
+        endDate: dayFromToday(12),
+      });
+      joinAsGuest(started);
+      joinAsGuest(later);
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([started, later]));
+
+      expect(result.current.isVisible).toBe(true);
+    });
+
+    it('follows the trip list as a joined trip arrives', () => {
+      const own = makeTrip();
+      const joined = makeTrip({ id: 'trip-2' as TripId, shareId: 'share-2' as ShareId });
+      joinAsGuest(joined);
+
+      const { result, rerender } = renderHook(
+        ({ trips }: { trips: readonly Trip[] }) => usePlanOwnTripPrompt(trips),
+        { initialProps: { trips: [own] as readonly Trip[] } },
+      );
+      expect(result.current.isVisible).toBe(false);
+
+      rerender({ trips: [joined] });
+      expect(result.current.isVisible).toBe(true);
+    });
+
+    it('follows the trip list as a joined trip starts', () => {
+      const future = makeTrip({ startDate: dayFromToday(10), endDate: dayFromToday(12) });
+      const started = makeTrip();
+      joinAsGuest(future);
+
+      const { result, rerender } = renderHook(
+        ({ trips }: { trips: readonly Trip[] }) => usePlanOwnTripPrompt(trips),
+        { initialProps: { trips: [future] as readonly Trip[] } },
+      );
+      expect(result.current.isVisible).toBe(false);
+
+      rerender({ trips: [started] });
+      expect(result.current.isVisible).toBe(true);
+    });
   });
 });

@@ -6,7 +6,7 @@
  *
  * @module lib/db/repositories/__tests__/activity-repository.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
 import {
@@ -388,5 +388,199 @@ describe('activity-repository', () => {
       expect(updated?.participantIds).toEqual([otherId]);
       expect(updated?.organizerId).toBeUndefined();
     });
+  });
+});
+
+describe('activity-repository, in detail', () => {
+  async function storeRaw(row: Record<string, unknown> & { readonly id: string }): Promise<ActivityId> {
+    const activity = {
+      title: 'Market',
+      category: 'market',
+      startDatetime: '2024-07-16T09:00:00.000Z',
+      allDay: false,
+      participantIds: [],
+      ...row,
+    };
+    await db.activities.put(activity as never);
+    return activity.id as ActivityId;
+  }
+
+  it('names the activity it failed to create', async () => {
+    const tripId = await createTestTrip();
+    vi.spyOn(db.activities, 'add').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(createActivity(tripId, createTestActivityData())).rejects.toThrow(
+      `Failed to create activity "Fête des plantes" for trip ${tripId}`,
+    );
+  });
+
+  it('orders a guest\'s activities by start, whatever their ids', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createTestPerson(tripId);
+    await storeRaw({ id: 'a-late', tripId, startDatetime: '2024-07-18T09:00:00.000Z', participantIds: [marie], organizerId: marie });
+    await storeRaw({ id: 'b-early', tripId, startDatetime: '2024-07-16T09:00:00.000Z', participantIds: [marie], organizerId: marie });
+
+    expect((await getActivitiesByParticipantId(marie)).map((a) => a.id)).toEqual([
+      'b-early',
+      'a-late',
+    ]);
+    expect((await getActivitiesByOrganizerId(marie)).map((a) => a.id)).toEqual([
+      'b-early',
+      'a-late',
+    ]);
+  });
+
+  it('leaves an activity nothing can place off every day', async () => {
+    const tripId = await createTestTrip();
+    await storeRaw({ id: 'unplaceable', tripId, startDatetime: 'not a time' });
+
+    expect(await getActivitiesForDate(tripId, '2024-07-16')).toEqual([]);
+  });
+
+  it('counts the trip\'s activities', async () => {
+    const tripId = await createTestTrip();
+    await createActivity(tripId, createTestActivityData());
+    await createActivity(tripId, createTestActivityData({ title: 'Hike' }));
+
+    expect(await getActivityCount(tripId)).toBe(2);
+  });
+
+  it('refuses to update an activity that does not exist', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(
+      updateActivityWithOwnershipCheck('activity-ghost' as ActivityId, tripId, { title: 'x' }),
+    ).rejects.toThrow('Activity with ID "activity-ghost" not found');
+  });
+
+  it('refuses to delete an activity that does not exist', async () => {
+    const tripId = await createTestTrip();
+
+    await expect(
+      deleteActivityWithOwnershipCheck('activity-ghost' as ActivityId, tripId),
+    ).rejects.toThrow('Activity with ID "activity-ghost" not found');
+  });
+
+  it('refuses a seat on an activity that does not exist', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createTestPerson(tripId);
+
+    await expect(
+      setActivityParticipation('activity-ghost' as ActivityId, tripId, marie, true),
+    ).rejects.toThrow('Activity with ID "activity-ghost" not found');
+  });
+
+  it('refuses a seat on another trip\'s activity', async () => {
+    const tripId = await createTestTrip();
+    const otherTripId = await createTestTrip('Other');
+    const marie = await createTestPerson(tripId);
+    const activity = await createActivity(otherTripId, createTestActivityData());
+
+    await expect(setActivityParticipation(activity.id, tripId, marie, true)).rejects.toThrow(
+      'Cannot update activity: activity does not belong to current trip',
+    );
+  });
+
+  it('seats a guest on an activity stored without a participant list', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createTestPerson(tripId);
+    const id = await storeRaw({ id: 'no-list', tripId, participantIds: undefined });
+
+    expect(await setActivityParticipation(id, tripId, marie, true)).toEqual([marie]);
+  });
+
+  it('sanitises each field a patch names', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createTestPerson(tripId);
+    const activity = await createActivity(tripId, createTestActivityData({ maxParticipants: 4 }));
+
+    await updateActivityWithOwnershipCheck(activity.id, tripId, {
+      location: '  Le port  ',
+      notes: '  Bring cash  ',
+      participantIds: [marie, marie],
+      maxParticipants: 0,
+    });
+
+    const stored = await getActivityById(activity.id);
+    expect(stored).toMatchObject({
+      location: 'Le port',
+      notes: 'Bring cash',
+      participantIds: [marie],
+    });
+    expect(stored?.maxParticipants).toBeUndefined();
+  });
+
+  it('keeps the cap when a patch does not name it', async () => {
+    const tripId = await createTestTrip();
+    const activity = await createActivity(tripId, createTestActivityData({ maxParticipants: 4 }));
+
+    await updateActivityWithOwnershipCheck(activity.id, tripId, { title: 'Renamed' });
+
+    expect((await getActivityById(activity.id))?.maxParticipants).toBe(4);
+  });
+
+  it('never calls an activity with a cap of zero full', () => {
+    expect(isActivityFull({ participantIds: [], maxParticipants: 0 })).toBe(false);
+  });
+
+  it('is not full below the cap', () => {
+    expect(
+      isActivityFull({ participantIds: ['a' as PersonId], maxParticipants: 2 }),
+    ).toBe(false);
+  });
+
+  it('reads a capped activity with no participant list as empty', () => {
+    expect(isActivityFull({ maxParticipants: 1 } as never)).toBe(false);
+  });
+});
+
+describe('activity-repository, partial writes', () => {
+  it('keeps the other guests when one leaves', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createTestPerson(tripId, 'Marie');
+    const paul = await createTestPerson(tripId, 'Paul');
+    const activity = await createActivity(
+      tripId,
+      createTestActivityData({ participantIds: [marie, paul] }),
+    );
+
+    expect(await setActivityParticipation(activity.id, tripId, marie, false)).toEqual([paul]);
+    expect((await getActivityById(activity.id))?.participantIds).toEqual([paul]);
+  });
+
+  it('keeps the title, notes and participants a patch does not name', async () => {
+    const tripId = await createTestTrip();
+    const marie = await createTestPerson(tripId);
+    const activity = await createActivity(
+      tripId,
+      createTestActivityData({ notes: 'Bring cash', participantIds: [marie] }),
+    );
+
+    await updateActivityWithOwnershipCheck(activity.id, tripId, { location: 'Le port' });
+
+    expect(await getActivityById(activity.id)).toMatchObject({
+      title: 'Fête des plantes',
+      notes: 'Bring cash',
+      participantIds: [marie],
+      location: 'Le port',
+    });
+  });
+});
+
+describe('getActivitiesByTripId, other trips', () => {
+  it('leaves out the activities of a trip whose id sorts first', async () => {
+    await db.activities.put({
+      id: 'theirs',
+      tripId: '!other-trip',
+      title: 'Theirs',
+      category: 'market',
+      startDatetime: '2024-07-16T09:00:00.000Z',
+      allDay: false,
+      participantIds: [],
+    } as never);
+    const tripId = await createTestTrip();
+    const ours = await createActivity(tripId, createTestActivityData());
+
+    expect((await getActivitiesByTripId(tripId)).map((a) => a.id)).toEqual([ours.id]);
   });
 });

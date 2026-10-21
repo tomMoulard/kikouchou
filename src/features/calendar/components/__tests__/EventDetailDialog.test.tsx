@@ -5,19 +5,24 @@
  */
 
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import {
   EventDetailDialog,
   isAssignmentEvent,
   isTransportEvent,
+  type ActivityEventData,
   type AssignmentEventData,
   type TransportEventData,
 } from '../EventDetailDialog';
 import { resolveRides } from '@/features/transports/utils/ride-model';
+import { STALL_TIMEOUT_MS } from '@/hooks/useStalled';
+import { notify } from '@/lib/notifications';
 import type { GuestOverview } from '../../utils/guest-overview';
 import type {
+  Activity,
+  ActivityId,
   HexColor,
   ISODateString,
   Person,
@@ -50,7 +55,9 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@/features/transports/components/DirectionsButton', () => ({
-  DirectionsButton: () => <button>directions</button>,
+  DirectionsButton: ({ locationName }: { readonly locationName?: string }) => (
+    <button data-location={locationName ?? ''}>directions</button>
+  ),
 }));
 
 // ============================================================================
@@ -260,6 +267,7 @@ describe('EventDetailDialog', () => {
     it('renders dialog title for room assignment', () => {
       render(<EventDetailDialog {...defaultProps} event={makeAssignmentEvent()} />);
       expect(screen.getByText('Room Assignment')).toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription('Event details');
     });
 
     it('displays person badge', () => {
@@ -709,5 +717,522 @@ describe('the guest overview', () => {
     const overview = screen.getByTestId('guest-overview');
     expect(within(overview).getByText('Other travel')).toBeInTheDocument();
     expect(within(overview).getByText('Gare de Lyon')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// Travel listed under a stay
+// ============================================================================
+
+describe('the travel listed under a stay', () => {
+  function renderLegs(legs: readonly Transport[]) {
+    return render(
+      <EventDetailDialog {...defaultProps} event={makeAssignmentEvent({ relatedTransports: legs })} />,
+    );
+  }
+
+  it('marks an arrival with a down arrow, in the arrival colours', () => {
+    renderLegs([makeTransport()]);
+
+    const badge = screen.getByText(/↓/);
+    expect(badge).toHaveTextContent('↓ Arrival');
+    expect(badge).toHaveClass('border-success-border', '[a&]:hover:bg-primary/90');
+  });
+
+  it('marks a departure with an up arrow, in the departure colours', () => {
+    renderLegs([makeTransport({ type: 'departure' })]);
+
+    const badge = screen.getByText(/↑/);
+    expect(badge).toHaveTextContent('↑ Departure');
+    expect(badge).toHaveClass('border-departure-border', '[a&]:hover:bg-secondary/90');
+  });
+
+  it('names the mode and the service number', () => {
+    renderLegs([makeTransport()]);
+
+    expect(screen.getByText('transports.modes.plane · AF1234')).toBeInTheDocument();
+  });
+
+  it('falls back to "other" and adds nothing when the leg has no mode or number', () => {
+    renderLegs([makeTransport({ transportMode: undefined, transportNumber: undefined })]);
+
+    expect(screen.getByText('transports.modes.other')).toHaveTextContent(/^transports\.modes\.other$/);
+  });
+});
+
+// ============================================================================
+// Transport details
+// ============================================================================
+
+describe('a leg opened on its own', () => {
+  it('falls back to "other" when the leg has no mode', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeTransportEvent({
+          transport: makeTransport({ transportMode: undefined, transportNumber: undefined }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('transports.modes.other')).toBeInTheDocument();
+  });
+
+  it('asks before deleting a leg', async () => {
+    const user = userEvent.setup();
+    render(<EventDetailDialog {...defaultProps} event={makeTransportEvent()} />);
+
+    await user.click(screen.getByText('common.delete'));
+
+    const prompt = await screen.findByRole('alertdialog');
+    expect(within(prompt).getByText('confirm.deleteTransportDescription')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// Activity details
+// ============================================================================
+
+describe('an activity', () => {
+  function makeActivity(overrides: Partial<Activity> = {}): Activity {
+    return {
+      id: 'activity-1' as ActivityId,
+      tripId: 'trip-1' as TripId,
+      title: 'Plant fair',
+      category: 'horticulture',
+      startDatetime: '2026-01-11T09:00:00',
+      endDatetime: '2026-01-11T12:00:00',
+      allDay: false,
+      participantIds: [],
+      ...overrides,
+    };
+  }
+
+  function makeActivityEvent(overrides: Partial<ActivityEventData> = {}): ActivityEventData {
+    return {
+      type: 'activity',
+      activity: makeActivity(),
+      participants: [],
+      ...overrides,
+    };
+  }
+
+  it('is titled after the activity and names its category, day and hours', () => {
+    render(<EventDetailDialog {...defaultProps} event={makeActivityEvent()} />);
+
+    expect(screen.getByRole('heading', { name: 'Plant fair' })).toBeInTheDocument();
+    expect(screen.getByText('activities.categories.horticulture')).toBeInTheDocument();
+    expect(screen.getByText('Sun 11 Jan')).toBeInTheDocument();
+    expect(screen.getByText(/^09:00 \S 12:00$/u)).toBeInTheDocument();
+  });
+
+  it('says "all day" instead of hours for an all-day activity', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({ activity: makeActivity({ allDay: true }) })}
+      />,
+    );
+
+    expect(screen.getByText('activities.allDay')).toBeInTheDocument();
+  });
+
+  it('shows the place and gives directions to it', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({
+            location: 'Saint-Jean',
+            coordinates: { lat: 45.7, lon: 4.8 },
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Saint-Jean')).toBeInTheDocument();
+    expect(screen.getByText('directions')).toHaveAttribute('data-location', 'Saint-Jean');
+  });
+
+  it('gives directions under the title when the place has no name', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({ coordinates: { lat: 45.7, lon: 4.8 } }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('directions')).toHaveAttribute('data-location', 'Plant fair');
+  });
+
+  it('counts the guests who signed up and lists them', () => {
+    const bob = makePerson({ id: 'p2' as PersonId, name: 'Bob' });
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({ participantIds: [makePerson().id, bob.id] }),
+          participants: [makePerson(), bob],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('activities.participantCount')).toBeInTheDocument();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('activities.full')).not.toBeInTheDocument();
+  });
+
+  it('says nobody has signed up yet', () => {
+    render(<EventDetailDialog {...defaultProps} event={makeActivityEvent()} />);
+
+    expect(screen.getByText('Nobody has signed up yet')).toBeInTheDocument();
+  });
+
+  it('shows the places taken out of the cap, and flags a full activity', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({
+            participantIds: ['p1' as PersonId, 'p2' as PersonId],
+            maxParticipants: 2,
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('2/2')).toBeInTheDocument();
+    expect(screen.getByText('activities.full')).toHaveClass('border-warning');
+  });
+
+  it('does not flag an activity with places left', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({
+            participantIds: ['p1' as PersonId, 'p2' as PersonId],
+            maxParticipants: 3,
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('2/3')).toBeInTheDocument();
+    expect(screen.queryByText('activities.full')).not.toBeInTheDocument();
+  });
+
+  it('names the organiser and shows the notes', () => {
+    const organizer = makePerson({ id: 'p9' as PersonId, name: 'Olga' });
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({ notes: 'Bring gloves' }),
+          organizer,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('activities.organizer:')).toBeInTheDocument();
+    expect(screen.getByText('Olga')).toBeInTheDocument();
+    expect(screen.getByText('Bring gloves')).toBeInTheDocument();
+  });
+
+  it('asks before deleting an activity', async () => {
+    const user = userEvent.setup();
+    render(<EventDetailDialog {...defaultProps} event={makeActivityEvent()} />);
+
+    await user.click(screen.getByText('common.delete'));
+
+    const prompt = await screen.findByRole('alertdialog');
+    expect(within(prompt).getByText('confirm.deleteActivity')).toBeInTheDocument();
+    expect(within(prompt).getByText('confirm.deleteActivityDescription')).toBeInTheDocument();
+  });
+
+  it('counts nobody when the activity carries no participant list', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: { ...makeActivity(), participantIds: undefined } as unknown as Activity,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('activities.participantCount')).toBeInTheDocument();
+  });
+
+  it('tints the category icon with the category colour', () => {
+    render(<EventDetailDialog {...defaultProps} event={makeActivityEvent()} />);
+
+    const icon = screen.getByText('activities.categories.horticulture').previousElementSibling;
+    expect(icon).toHaveStyle({ color: '#16a34a' });
+  });
+
+  it('gives the place and the notes a row of their own', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({ location: 'Saint-Jean', notes: 'Bring gloves' }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Saint-Jean').tagName).toBe('SPAN');
+    expect(screen.getByText('Saint-Jean').previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    expect(screen.getByText('Bring gloves')).toHaveClass('rounded-md', 'bg-muted/50', 'p-3');
+  });
+});
+
+// ============================================================================
+// Details the first pass left loose
+// ============================================================================
+
+describe('EventDetailDialog details', () => {
+  /** An offset-less leg, so the rendered day does not move with the runner. */
+  function localLeg(overrides: Partial<Transport> = {}): Transport {
+    return makeTransport({ datetime: '2026-01-10T14:30:00', ...overrides });
+  }
+
+  it('dates a leg in full', () => {
+    render(
+      <EventDetailDialog {...defaultProps} event={makeTransportEvent({ transport: localLeg() })} />,
+    );
+
+    expect(screen.getByText('January 10th, 2026')).toBeInTheDocument();
+  });
+
+  it('dates the travel listed under a stay in full', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({ relatedTransports: [localLeg()] })}
+      />,
+    );
+
+    expect(screen.getByText('January 10th, 2026')).toBeInTheDocument();
+  });
+
+  it('shows no travel section for an empty list of legs', () => {
+    render(
+      <EventDetailDialog {...defaultProps} event={makeAssignmentEvent({ relatedTransports: [] })} />,
+    );
+
+    expect(screen.queryByText('Travel')).not.toBeInTheDocument();
+  });
+
+  it('marks the badge of an arrival and of a departure with their variants', () => {
+    const { rerender } = render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({
+          relatedTransports: [localLeg(), localLeg({ id: 'out' as TransportId, type: 'departure' })],
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/↓/)).toHaveAttribute('data-variant', 'default');
+    expect(screen.getByText(/↑/)).toHaveAttribute('data-variant', 'secondary');
+
+    rerender(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeTransportEvent({ transport: localLeg({ type: 'departure' }) })}
+      />,
+    );
+    const departure = screen.getByText('↑');
+    expect(departure).toHaveAttribute('data-variant', 'secondary');
+    expect(departure).toHaveClass('border-departure-border');
+
+    rerender(<EventDetailDialog {...defaultProps} event={makeTransportEvent({ transport: localLeg() })} />);
+    const arrival = screen.getByText('↓');
+    expect(arrival).toHaveAttribute('data-variant', 'default');
+    expect(arrival).toHaveClass('border-success-border');
+  });
+
+  it('gives the place and the notes of a leg rows of their own', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeTransportEvent({ transport: localLeg({ notes: 'Gate B42' }) })}
+      />,
+    );
+
+    expect(screen.getByText('Paris CDG Airport').tagName).toBe('SPAN');
+    expect(
+      screen.getByText('Paris CDG Airport').previousElementSibling?.tagName.toLowerCase(),
+    ).toBe('svg');
+    expect(screen.getByText('Gate B42')).toHaveClass('rounded-md', 'p-3');
+  });
+
+  it('offers directions to a leg only when it has a position', () => {
+    const { rerender } = render(
+      <EventDetailDialog {...defaultProps} event={makeTransportEvent({ transport: localLeg() })} />,
+    );
+    expect(screen.queryByText('directions')).not.toBeInTheDocument();
+
+    rerender(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeTransportEvent({
+          transport: localLeg({ coordinates: { lat: 48.8, lon: 2.35 } }),
+        })}
+      />,
+    );
+    expect(screen.getByText('directions')).toHaveAttribute('data-location', 'Paris CDG Airport');
+  });
+
+  it('heads the car that serves the leg', () => {
+    const { event } = makeRideEvent();
+    render(<EventDetailDialog {...defaultProps} event={event} />);
+
+    expect(screen.getByRole('heading', { name: 'Ride' })).toBeInTheDocument();
+  });
+
+  it('drops the pickup badge when a ride with a driver arrives while open', () => {
+    const { event } = makeRideEvent({ needsPickup: true });
+    const { rerender } = render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={{ ...event, ride: undefined }}
+      />,
+    );
+    expect(screen.getByText('transports.needsPickup')).toBeInTheDocument();
+
+    rerender(<EventDetailDialog {...defaultProps} event={event} />);
+
+    expect(screen.queryByText('transports.needsPickup')).not.toBeInTheDocument();
+  });
+
+  it('draws the room icon, and redraws it when the room changes', () => {
+    const { rerender } = render(<EventDetailDialog {...defaultProps} event={makeAssignmentEvent()} />);
+    expect(screen.getByText('Blue Room').previousElementSibling).toHaveClass('lucide-bed-double');
+
+    rerender(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({ room: makeRoom({ icon: 'bed-single' }) })}
+      />,
+    );
+    expect(screen.getByText('Blue Room').previousElementSibling).toHaveClass('lucide-bed-single');
+  });
+
+  it('lists a leg under "other travel" once the stay stops showing it', () => {
+    const leg = localLeg();
+    const overview = makeGuestOverview({ transports: [leg] });
+    const { rerender } = render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({ relatedTransports: [leg], guestOverview: overview })}
+      />,
+    );
+    expect(screen.queryByText('Other travel')).not.toBeInTheDocument();
+
+    rerender(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({ relatedTransports: undefined, guestOverview: overview })}
+      />,
+    );
+    expect(screen.getByText('Other travel')).toBeInTheDocument();
+  });
+
+  it('shows no delete prompt until Delete is pressed', () => {
+    render(<EventDetailDialog {...defaultProps} event={makeTransportEvent()} />);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('closes the delete prompt on Cancel', async () => {
+    const user = userEvent.setup();
+    render(<EventDetailDialog {...defaultProps} event={makeTransportEvent()} />);
+
+    await user.click(screen.getByText('common.delete'));
+    const prompt = await screen.findByRole('alertdialog');
+    await user.click(within(prompt).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the prompt while a delete is still running', async () => {
+    const user = userEvent.setup();
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        onDelete={() => new Promise<void>(() => undefined)}
+        event={makeTransportEvent()}
+      />,
+    );
+
+    await user.click(screen.getByText('common.delete'));
+    const prompt = await screen.findByRole('alertdialog');
+    await user.click(within(prompt).getByRole('button', { name: 'common.delete' }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  });
+
+  it('lets Escape close the prompt once a delete has stalled', async () => {
+    // A delete that never settles (a write blocked by another tab, say) must
+    // not hold the prompt forever: past STALL_TIMEOUT_MS the prompt offers its
+    // way out again, and the event dialog must not take it back.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(
+        <EventDetailDialog
+          {...defaultProps}
+          onDelete={() => new Promise<void>(() => undefined)}
+          event={makeTransportEvent()}
+        />,
+      );
+
+      await user.click(screen.getByText('common.delete'));
+      const prompt = await screen.findByRole('alertdialog');
+      await user.click(within(prompt).getByRole('button', { name: 'common.delete' }));
+      await act(async () => {
+        vi.advanceTimersByTime(STALL_TIMEOUT_MS + 1000);
+      });
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => {
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says the delete failed, and lets the prompt be cancelled after', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const notifyError = vi.spyOn(notify, 'error').mockImplementation(() => undefined);
+    const onDelete = vi.fn().mockRejectedValue(new Error('offline'));
+    const user = userEvent.setup();
+    render(<EventDetailDialog {...defaultProps} onDelete={onDelete} event={makeTransportEvent()} />);
+
+    await user.click(screen.getByText('common.delete'));
+    let prompt = await screen.findByRole('alertdialog');
+    await user.click(within(prompt).getByRole('button', { name: 'common.delete' }));
+    await waitFor(() => {
+      expect(notifyError).toHaveBeenCalledWith('Failed to delete', expect.anything());
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('common.delete'));
+    prompt = await screen.findByRole('alertdialog');
+    await user.click(within(prompt).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
   });
 });

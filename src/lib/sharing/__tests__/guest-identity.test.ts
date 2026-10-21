@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   clearGuestIdentity,
+  findGuestIdentityShareId,
   getGuestIdentityStorageKey,
   getTripGuestPersonId,
   readGuestIdentity,
@@ -158,5 +159,60 @@ describe('guest identity storage', () => {
       globalThis.window = original;
       setItem.mockRestore();
     }
+  });
+});
+
+describe('findGuestIdentityShareId', () => {
+  beforeEach(() => {
+    entries.clear();
+    storageThrows = false;
+  });
+
+  it('finds the share id whose entry claims the trip', () => {
+    writeGuestIdentity('share-other', { personId: PERSON_ID, tripId: 'trip-2' as TripId });
+    writeGuestIdentity(SHARE_ID, { personId: PERSON_ID, tripId: TRIP_ID });
+
+    expect(findGuestIdentityShareId(TRIP_ID)).toBe(SHARE_ID);
+  });
+
+  it('reads only keys under the guest identity prefix', () => {
+    entries.set('kikouchou_other_share-abc', JSON.stringify({ tripId: TRIP_ID }));
+
+    expect(findGuestIdentityShareId(TRIP_ID)).toBeUndefined();
+  });
+
+  it('skips a malformed entry and keeps looking', () => {
+    entries.set(getGuestIdentityStorageKey('share-broken'), '{not json');
+    writeGuestIdentity(SHARE_ID, { personId: PERSON_ID, tripId: TRIP_ID });
+
+    expect(findGuestIdentityShareId(TRIP_ID)).toBe(SHARE_ID);
+  });
+});
+
+describe('readGuestIdentity on a malformed entry', () => {
+  beforeEach(() => {
+    entries.clear();
+    storageThrows = false;
+  });
+
+  it.each([
+    ['a guest id that is not a string', { personId: 5, tripId: TRIP_ID }],
+    ['a trip id that is not a string', { personId: PERSON_ID, tripId: 5 }],
+    ['no trip id at all', { personId: PERSON_ID }],
+  ])('reads an entry with %s as no identity', (_label, payload) => {
+    entries.set(getGuestIdentityStorageKey(SHARE_ID), JSON.stringify(payload));
+
+    expect(readGuestIdentity(SHARE_ID)).toBeUndefined();
+    expect(getTripGuestPersonId(trip)).toBeUndefined();
+  });
+
+  it.each([
+    ['null', 'null'],
+    ['a bare string', '"person-1"'],
+    ['broken JSON', '{"personId":'],
+  ])('reads %s as no identity', (_label, raw) => {
+    entries.set(getGuestIdentityStorageKey(SHARE_ID), raw);
+
+    expect(readGuestIdentity(SHARE_ID)).toBeUndefined();
   });
 });

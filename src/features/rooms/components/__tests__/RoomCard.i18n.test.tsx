@@ -82,3 +82,27 @@ describe('RoomCard capacity wording', () => {
     expect(screen.getByText('0 sur 1 place prise')).toBeInTheDocument();
   });
 });
+
+describe('RoomCard spoken name', () => {
+  it('names the room, its beds and how many are taken, and keeps up', async () => {
+    const room = { ...singleBedRoom, capacity: 4 };
+    const props = {
+      occupants: [],
+      availableSpots: 3,
+      isFull: false,
+      onClick: vi.fn(),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+    };
+    const { rerender } = await renderWithRealI18n(
+      <RoomCard room={room} peakOccupancy={1} {...props} />,
+      { withProviders: false },
+    );
+
+    expect(screen.getByRole('button', { name: 'Attic, 4 beds, 1 of 4 spots taken' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', '1 of 4 spots taken');
+
+    rerender(<RoomCard room={room} peakOccupancy={2} {...props} />);
+    expect(screen.getByRole('button', { name: 'Attic, 4 beds, 2 of 4 spots taken' })).toBeInTheDocument();
+  });
+});

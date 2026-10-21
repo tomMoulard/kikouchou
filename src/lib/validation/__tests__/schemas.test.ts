@@ -11,6 +11,8 @@ import {
   PersonFormDataSchema,
   RoomAssignmentFormDataSchema,
   TransportFormDataSchema,
+  ActivityFormDataSchema,
+  ExpenseFormDataSchema,
   isoDateStringSchema,
   isoDateTimeStringSchema,
   hexColorSchema,
@@ -838,5 +840,189 @@ describe('Edge Cases', () => {
       });
       expect(result.success).toBe(false);
     });
+  });
+});
+
+// ============================================================================
+// Cross-field rules
+// ============================================================================
+
+describe('cross-field date rules', () => {
+  it('accepts a guest with a stay start and no stay end', () => {
+    expect(
+      PersonFormDataSchema.safeParse({
+        name: 'Marie',
+        color: '#ef4444',
+        stayStartDate: '2024-07-22',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts a guest who arrives and leaves on the same day', () => {
+    expect(
+      PersonFormDataSchema.safeParse({
+        name: 'Marie',
+        color: '#ef4444',
+        stayStartDate: '2024-07-22',
+        stayEndDate: '2024-07-22',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts an assignment that starts and ends on the same day', () => {
+    expect(
+      RoomAssignmentFormDataSchema.safeParse({
+        roomId: 'room123',
+        personId: 'person456',
+        startDate: '2024-07-15',
+        endDate: '2024-07-15',
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('ActivityFormDataSchema', () => {
+  const activity = {
+    title: 'Plant fair',
+    category: 'horticulture',
+    startDatetime: '2026-07-16T09:00:00.000Z',
+    allDay: false,
+    participantIds: ['p1', 'p2', 'p3'],
+  };
+
+  it('accepts an activity that ends the moment it starts', () => {
+    expect(
+      ActivityFormDataSchema.safeParse({ ...activity, endDatetime: activity.startDatetime })
+        .success,
+    ).toBe(true);
+  });
+
+  it('accepts as many participants as the cap', () => {
+    expect(
+      ActivityFormDataSchema.safeParse({ ...activity, maxParticipants: 3 }).success,
+    ).toBe(true);
+  });
+
+  it('refuses more participants than the cap, on the cap field', () => {
+    const result = ActivityFormDataSchema.safeParse({ ...activity, maxParticipants: 2 });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path)).toEqual([['maxParticipants']]);
+  });
+});
+
+describe('ExpenseFormDataSchema', () => {
+  const line = {
+    kind: 'expense',
+    category: 'groceries',
+    title: 'Market',
+    date: '2026-07-16',
+    amount: 30,
+    payerId: 'payer',
+    splitMode: 'equal',
+    splits: [],
+  };
+
+  it('accepts a transfer to exactly one other guest', () => {
+    expect(
+      ExpenseFormDataSchema.safeParse({
+        ...line,
+        kind: 'transfer',
+        splits: [{ personId: 'other', value: 1 }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a transfer to the payer, on the splits field', () => {
+    const result = ExpenseFormDataSchema.safeParse({
+      ...line,
+      kind: 'transfer',
+      splits: [{ personId: 'payer', value: 1 }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['splits'],
+        message: 'A transfer goes to exactly one other guest',
+      }),
+    ]);
+  });
+
+  it('refuses a transfer with no guest to pay', () => {
+    expect(ExpenseFormDataSchema.safeParse({ ...line, kind: 'transfer' }).success).toBe(false);
+  });
+
+  it('refuses a transfer to two guests', () => {
+    expect(
+      ExpenseFormDataSchema.safeParse({
+        ...line,
+        kind: 'transfer',
+        splits: [
+          { personId: 'other', value: 1 },
+          { personId: 'third', value: 1 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts an expense split between several guests', () => {
+    expect(
+      ExpenseFormDataSchema.safeParse({
+        ...line,
+        splits: [
+          { personId: 'payer', value: 1 },
+          { personId: 'other', value: 1 },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts amounts that add up to the total, to the cent', () => {
+    expect(
+      ExpenseFormDataSchema.safeParse({
+        ...line,
+        amount: 30.3,
+        splitMode: 'amounts',
+        splits: [
+          { personId: 'payer', value: 10.1 },
+          { personId: 'other', value: 20.2 },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses amounts that do not add up, on the splits field', () => {
+    const result = ExpenseFormDataSchema.safeParse({
+      ...line,
+      splitMode: 'amounts',
+      splits: [
+        { personId: 'payer', value: 10 },
+        { personId: 'other', value: 15 },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ['splits'],
+        message: 'The amounts must add up to the total',
+      }),
+    ]);
+  });
+
+  it('accepts an amounts line with no shares yet', () => {
+    expect(
+      ExpenseFormDataSchema.safeParse({ ...line, splitMode: 'amounts', splits: [] }).success,
+    ).toBe(true);
+  });
+
+  it('does not ask an equal split to add up', () => {
+    expect(
+      ExpenseFormDataSchema.safeParse({
+        ...line,
+        splits: [{ personId: 'other', value: 1 }],
+      }).success,
+    ).toBe(true);
   });
 });
