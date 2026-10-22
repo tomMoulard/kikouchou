@@ -249,6 +249,20 @@ export class SupabaseYjsProvider {
   private hydrationTimer: ReturnType<typeof setTimeout> | null = null;
   private rowsSinceCompaction = 0;
   private compacting = false;
+  /**
+   * The highest log id *this instance* has applied to its document.
+   *
+   * The cursor in Dexie is shared by every tab on the trip, and each tab holds
+   * its own document. A tab that misses a Realtime row — a throttled
+   * background tab whose socket lapsed — used to come back, read the cursor
+   * another tab had already advanced past that row, and never fetch it. Its
+   * projection then deleted the entity from Dexie, and the trusted-mirror sync
+   * deleted it from the shared document for everyone. So a pull starts from
+   * the lower of the two: what this document has seen, not what the device has.
+   * Null until the first pull, when the document was just hydrated from the
+   * persisted updates every tab writes and the shared cursor describes it.
+   */
+  private appliedThroughId: number | null = null;
   private readonly userId: string | undefined;
   private pullTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -420,13 +434,15 @@ export class SupabaseYjsProvider {
       const snapshotThroughId = await this.fetchSnapshotThroughId();
       if (
         snapshotThroughId !== null &&
-        snapshotThroughId > cursor.lastSeenUpdateId
+        snapshotThroughId > this.floorOf(cursor.lastSeenUpdateId)
       ) {
         await this.applySnapshot();
       }
 
       // Re-read: applySnapshot advances the cursor to the snapshot's through_id.
-      let highestApplied = (await readCursor(this.tripId)).lastSeenUpdateId;
+      // Then take the lower of the device's cursor and this document's own
+      // position, so a row another tab consumed is still fetched here.
+      let highestApplied = this.floorOf((await readCursor(this.tripId)).lastSeenUpdateId);
       for (;;) {
         if (this.destroyed) {
           // Teardown during a multi-page pull: the document is about to be
@@ -441,6 +457,7 @@ export class SupabaseYjsProvider {
         this.applyRows(rows);
         this.rowsSinceCompaction += rows.length;
         highestApplied = rows[rows.length - 1]!.id;
+        this.noteApplied(highestApplied);
 
         // The cursor advances per page, so an interrupted multi-page pull
         // resumes where it stopped instead of starting over.
@@ -542,8 +559,21 @@ export class SupabaseYjsProvider {
 
     const throughId = (data as { through_id?: unknown }).through_id;
     if (typeof throughId === 'number' && throughId > 0) {
+      this.noteApplied(throughId);
       await advanceCursor(this.tripId, throughId);
     }
+  }
+
+  /** Where a pull starts: the shared cursor, unless this document is behind it. */
+  private floorOf(sharedCursor: number): number {
+    return this.appliedThroughId === null
+      ? sharedCursor
+      : Math.min(sharedCursor, this.appliedThroughId);
+  }
+
+  /** Records that this document now holds the log through `id`. */
+  private noteApplied(id: number): void {
+    this.appliedThroughId = Math.max(this.appliedThroughId ?? 0, id);
   }
 
   /**

@@ -453,6 +453,43 @@ function makeProvider(
   });
 }
 
+/**
+ * Two tabs, one cursor.
+ *
+ * Every tab on a trip shares the Dexie cursor and holds its own document. A
+ * tab that misses a Realtime row while another tab pulls it used to find the
+ * cursor already past that row and never fetch it; its projection then
+ * deleted the entity, and the trusted-mirror sync deleted it for everyone.
+ */
+describe('a tab that fell behind the shared cursor', () => {
+  it('still fetches the rows another tab consumed', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'g1', 'Alice');
+    server.append(Y.encodeStateAsUpdate(seed));
+
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+    expect(guestNames(doc)).toEqual(['Alice']);
+    expect((await readCursor(TRIP_ID)).lastSeenUpdateId).toBe(1);
+
+    // Another tab receives row 2 and advances the shared cursor; this tab's
+    // socket was asleep and never saw it.
+    const other = new Y.Doc();
+    Y.applyUpdate(other, Y.encodeStateAsUpdate(doc));
+    addGuest(other, 'g2', 'Bob');
+    server.append(Y.encodeStateAsUpdate(other, Y.encodeStateVector(doc)));
+    await advanceCursor(TRIP_ID, 2);
+
+    await provider.syncNow();
+    await settle();
+
+    expect(guestNames(doc)).toEqual(['Alice', 'Bob']);
+  });
+});
+
 /** Adds a guest the way doc-model does, so updates look realistic. */
 function addGuest(doc: Y.Doc, id: string, name: string): void {
   Y.transact(doc, () => {
