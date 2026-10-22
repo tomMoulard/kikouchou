@@ -40,11 +40,12 @@ interface Shareable {
  * allowed to share.
  *
  * The phone is **deleted from the returned object rather than set to
- * `undefined`**, and the difference matters at both call sites:
- * `upsertDocEntity` prunes any key the entity does not carry, so an absent
- * `phone` actively removes a number the document already held — flipping the
- * flag off un-shares what a previous session shared, instead of leaving it
- * behind on every other member's device.
+ * `undefined`**: a QR changeset carries no key for it, and `upsertDocEntity`
+ * prunes any key the entity does not carry. The document writers in
+ * `lib/yjs/dexie-bridge` therefore do not take this answer as final: a number
+ * the document already holds is carried forward there, because the flag is
+ * answered per device and one member's "off" must not delete what another
+ * member stored. The QR export has no document to consult and drops it.
  *
  * @param guest - The guest row as Dexie holds it
  * @param options.sharePhone - Whether the phone may leave this device

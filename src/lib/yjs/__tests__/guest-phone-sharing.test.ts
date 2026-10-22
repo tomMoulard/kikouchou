@@ -116,9 +116,12 @@ describe('publishing a guest while sharing is off', () => {
     expect((await db.persons.get(guest.id))?.phone).toBe('+33 6 12 34 56 78');
   });
 
-  it('un-shares a number a previous session published', () => {
-    // The flag went off between sessions. Leaving the old value behind would
-    // keep it on every other member's device forever.
+  it('leaves a number the document already holds where it is', () => {
+    // Another member, whose flag is on, published it. The flag is answered per
+    // device, so this device's "off" says nothing about theirs: an absent key
+    // here is a deletion in the shared document, pushed to everyone, and it
+    // used to strip every stored phone on the first live-query tick of any
+    // member in the control cohort.
     const doc = stampedDoc();
     upsertDocEntity(doc, 'guests', {
       id: 'guest-1',
@@ -130,11 +133,35 @@ describe('publishing a guest while sharing is off', () => {
     syncDexieToDoc(
       doc,
       'guests',
-      [{ id: 'guest-1', name: 'Mary', color: '#3b82f6', phone: '+33 6 12 34 56 78' }],
+      [{ id: 'guest-1', name: 'Mary (renamed)', color: '#3b82f6', phone: '0600000000' }],
       { allowDeletions: false },
     );
 
-    expect(docPhoneOf(doc, 'guest-1')).toBeUndefined();
+    // The rename goes through; the number stays the document's, not this
+    // device's, which it may not publish.
+    const row = readDocCollection(doc, 'guests').find((guest) => guest.id === 'guest-1');
+    expect(row?.name).toBe('Mary (renamed)');
+    expect(row?.phone).toBe('+33 6 12 34 56 78');
+  });
+
+  it('keeps a held number across the initial seed too', async () => {
+    const trip = await makeTrip();
+    const guest = await createPerson(trip.id, {
+      name: 'Mary',
+      color: hexColor('#3b82f6'),
+      phone: '0600000000',
+    });
+    const doc = stampedDoc();
+    upsertDocEntity(doc, 'guests', {
+      id: guest.id,
+      name: 'Mary',
+      color: '#3b82f6',
+      phone: '+33 6 12 34 56 78',
+    });
+
+    await populateDocFromDexie(doc, trip.id);
+
+    expect(docPhoneOf(doc, guest.id)).toBe('+33 6 12 34 56 78');
   });
 });
 
