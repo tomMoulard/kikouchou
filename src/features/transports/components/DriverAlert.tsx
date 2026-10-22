@@ -89,9 +89,12 @@ export interface DriverAlertProps {
    *
    * The seam for `lib/notifications`. Left undefined the banner is entirely
    * self-contained — it still watermarks the ride, so wiring a notifier in
-   * later cannot re-announce a ride this device already showed.
+   * later cannot re-announce a ride this device already showed. Awaited
+   * before the watermark is written: `notifyRide` reads the same `rideNotices`
+   * row to decide whether it has already spoken, so a watermark written first
+   * would silence the very notice it was handed.
    */
-  readonly onAnnounce?: (announcement: RideDepartureAnnouncement) => void;
+  readonly onAnnounce?: (announcement: RideDepartureAnnouncement) => void | Promise<void>;
 }
 
 /** Props for one row of the banner. */
@@ -354,7 +357,7 @@ const DriverAlertRow = memo(function DriverAlertRow({
           latestRef.current;
 
         if (due !== undefined) {
-          announce?.(due);
+          await announce?.(due);
         }
 
         // Watermarked whether or not anybody is listening on the seam. The row

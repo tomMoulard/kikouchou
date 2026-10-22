@@ -251,6 +251,32 @@ describe('notifyRide', () => {
       expect(registration.showNotification).not.toHaveBeenCalled();
     });
 
+    it('speaks again when the car was moved past the recorded fire', async () => {
+      // Fired for the 10:00 run; the group then moved it to 12:00. Keyed on
+      // the ride alone, the first fire would silence the ride for good.
+      await markNoticeFired(TRIP_ID, 'leave', RIDE_ID, 1_700_000_000_000);
+
+      const registration = createRegistration();
+      setServiceWorker(registration);
+
+      await expect(
+        notifyRide({ ...LEAVE_NOTICE, leaveAtMs: 1_700_000_000_001 }),
+      ).resolves.toBe(true);
+      expect(registration.showNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays silent when the recorded fire is at or after the leave time', async () => {
+      await markNoticeFired(TRIP_ID, 'leave', RIDE_ID, 1_700_000_000_000);
+
+      const registration = createRegistration();
+      setServiceWorker(registration);
+
+      await expect(
+        notifyRide({ ...LEAVE_NOTICE, leaveAtMs: 1_700_000_000_000 }),
+      ).resolves.toBe(false);
+      expect(registration.showNotification).not.toHaveBeenCalled();
+    });
+
     it('announces one due ride exactly once however often it is asked', async () => {
       const registration = createRegistration();
       setServiceWorker(registration);
