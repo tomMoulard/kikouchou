@@ -199,6 +199,13 @@ fields only — the `optional:` line documents the rest.
 Done check: *could the assistant both answer a question about this feature and
 change it, from the prompt alone?* If not, the feature is not finished.
 
+**An action that removes data waits for the user.** The prompt carries every
+member's guest names and notes, and a small model does what the text in front
+of it says. `listDestructiveActions` names the `remove*` blocks in an answer
+and `AssistantPage` asks before any of them run; a declined answer stands as
+words with `actionsDeclined` set. A new `remove*` action goes in
+`DESTRUCTIVE_ACTIONS` in `useTripActions.ts`.
+
 ### Three engines, and one of them never talks
 
 The presets in `models.ts` run on three different runtimes, and the `engine`
@@ -399,11 +406,43 @@ owner's rooms and guests for everybody, permanently.
   `syncDocToDexie` has actually projected that document into Dexie — tracked on a
   `WeakMap` keyed by the document, so a fresh document earns the right again
   rather than inheriting it.
-- `populateDocFromDexie` **seeds and never prunes**. It runs on mount with
-  whatever Dexie holds, which on a freshly joined device is nothing.
+- `populateDocFromDexie` **seeds and never prunes**, and it seeds a
+  **local-only trip** alone. A trip with `remoteTripId` is seeded by the
+  server: on a freshly joined device Dexie holds the placeholder row
+  `join-trip` wrote, and seeding the empty document from it put "Untitled
+  trip" into the CRDT as items concurrent with the owner's, which Yjs resolves
+  by client id. The meta effect in `YjsTripSync` waits the same way, until the
+  document carries a `name`.
+- **The trust flag is withdrawn when a projection fails.** `syncDocToDexie`
+  un-marks the trip in its `catch`: a flag granted by an earlier success would
+  otherwise let the next Dexie-to-document sync delete, for everyone, the rows
+  the aborted transaction never wrote.
 - The CRDT layer is not the hazard. Yjs updates are additive, so a document that
   merely *lacks* an entry deletes nothing when it merges. Only an inferred
   deletion does damage.
+
+### Per-device state does not describe one document
+
+Three things on a device are shared by every tab and every document on it,
+and each one has deleted data when it was read as if it described the one
+document in front of it.
+
+- **The sync cursor** (`syncCursors`, keyed on the trip). Two tabs hold two
+  documents. A tab whose socket lapsed missed a Realtime row, came back, read
+  the cursor the other tab had advanced past that row, and never fetched it;
+  its projection then deleted the entity from Dexie and the trusted mirror
+  deleted it from the document. `SupabaseYjsProvider` keeps the highest id
+  *its* document applied and pulls from the lower of the two.
+- **The `guest-phone-sharing` flag** is answered per device. A member whose
+  flag was off (the control cohort, or flags not loaded yet) published guests
+  without a `phone` key, and `upsertDocEntity` prunes an absent key, so every
+  stored phone was deleted for the group on that member's first live-query
+  tick. `toPublishedGuests` in the bridge carries a number the document
+  already holds forward; a device whose flag is off neither publishes nor
+  removes one.
+- **The push endpoint** serves every trip on the device, and
+  `unsubscribe_reminders` with the endpoint alone deleted every trip's row.
+  `disableTripReminders` names the trip.
 
 ### Unmount guards are set on setup, not only in cleanup
 
@@ -517,6 +556,10 @@ subscriptions in `push_subscriptions`. Three rules hold the feature together:
 The client half (`lib/notifications/push.ts`) asks for permission from a click
 and from nowhere else, and the reminder card renders only where a push can
 arrive; an iPhone's Safari tab gets the install nudge instead (`Layout`).
+The ride notices (`leave`) reach the OS through `notifyRide`, which
+`TransportListPage` hands to `DriverAlert`'s `onAnnounce`; the banner awaits
+that seam before it watermarks the ride, because `notifyRide` reads the same
+`rideNotices` row to decide whether it has already spoken.
 
 **A click is reported as `notification_opened`, with the kind that was clicked**
 — `trip_start`, `own_arrival`, `pickup` from the server, `leave` or `moved` from
@@ -606,6 +649,11 @@ defensive:
 - **Rows coming back are remote input.** They arrive from Postgres but were
   *written* by another device, so every field is bounded on the way in and an
   invalid member is dropped on its own rather than taking its group with it.
+- **A deletion is carried, never inferred.** The push is an upsert of what
+  Dexie holds and the pull restores any server row Dexie lacks, so a deleted
+  group came straight back. `rememberGuestGroupDeletion` records the local id
+  in `localStorage['kikouchou-guest-group-deletions']`, and `syncGuestGroups`
+  deletes those rows on the server before it pulls.
 
 ### A projection writes what changed, not everything it read
 
@@ -721,7 +769,11 @@ a merge that broke the build shipped to production while the CI run that would
 have said so was still going. It triggers on CI's completion now and refuses
 anything but `success` — a `workflow_run` fires on failure too — and it checks
 out `workflow_run.head_sha` rather than `github.sha`, which on that event is the
-branch head at trigger time rather than the commit that was tested.
+branch head at trigger time rather than the commit that was tested. It also
+refuses a run whose event is not a `push` to this repository: the trigger's
+`branches` filter matches the *head* branch of the finished run, so a green
+pull request from a fork branch named `main` matched it, and would have been
+built with the job's secrets and published.
 
 A sixth, cheaper to miss than any of them: `POSTHOG_URL_PATTERN` in
 `e2e/support/external-services.ts` matched `posthog.com` and `posthog.io`. A
@@ -805,6 +857,18 @@ call the REST API with that key.
   statement rather than a list of names, so a function added tomorrow is covered
   by a test written today — the old per-name form passed green for a year while
   four functions were open.
+- **A client updates the columns it is granted, and nothing else.** The
+  UPDATE grant on `trip_members` covered every column while the policy pinned
+  `user_id` alone, which reads as "any account can PATCH its own roster row's
+  `trip_id` onto any trip whose uuid it knows". Measured, it could not:
+  Postgres checks the updated row against the SELECT policy as well, and
+  "members read the roster" admits only a trip the caller is already on. That
+  is a rule of the engine applied to a policy written for reading, and
+  nothing in the schema said so. The grant is now `update (person_id)`
+  (`20261022090000`); column grants are checked before any policy. When a
+  table gets an UPDATE grant, name the columns. `function_exposure_test.sql`
+  pins the function catalogue for `authenticated` as well as `anon`, since the
+  project's default privileges leave EXECUTE to both.
 - **A privileged write users must be able to make goes in a `security definer`
   function, never a policy.** `redeem_invite` writes `trip_members`, which has no
   INSERT policy — joining requires a token, and that *is* the security property.
