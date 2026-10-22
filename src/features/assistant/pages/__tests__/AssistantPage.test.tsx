@@ -67,7 +67,10 @@ vi.mock('../../hooks/useTripSystemPrompt', () => ({
   }),
 }));
 
-vi.mock('../../hooks/useTripActions', () => ({
+vi.mock('../../hooks/useTripActions', async (importOriginal) => ({
+  // The parser that names an answer's deletions stays real: the page asks
+  // before running those, and a stub that lost it would fail every turn.
+  ...(await importOriginal<typeof import('../../hooks/useTripActions')>()),
   useTripActions: () => ({
     executeActions: vi.fn().mockResolvedValue({ count: 0, summaries: [] }),
   }),
