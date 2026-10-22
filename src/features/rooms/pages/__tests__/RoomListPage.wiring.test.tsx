@@ -250,28 +250,27 @@ vi.mock('@/contexts/RoomContext', () => ({
   },
 }));
 
-const getAssignmentsByRoomFor = new WeakMap<
-  readonly RoomAssignment[],
-  (roomId: RoomId) => RoomAssignment[]
->();
+vi.mock('@/contexts/AssignmentContext', () => {
+  // Stable, as the real one is: `AssignmentContext` memoises
+  // `getAssignmentsByRoom` on `[]` and reads a ref, so a memo keyed on it
+  // never recomputes. This stub used to be rebuilt per assignments array, and
+  // that hid exactly that bug — the cards followed every write in this file
+  // while in the app their occupancy froze at the moment the page opened.
+  const getAssignmentsByRoom = (roomId: RoomId): RoomAssignment[] =>
+    (store.get() as World).assignments.filter((item) => item.roomId === roomId);
 
-vi.mock('@/contexts/AssignmentContext', () => ({
-  useAssignmentContext: () => {
-    const state = useWorld();
-    let byRoom = getAssignmentsByRoomFor.get(state.assignments);
-    if (!byRoom) {
-      const all = state.assignments;
-      byRoom = (roomId: RoomId) => all.filter((item) => item.roomId === roomId);
-      getAssignmentsByRoomFor.set(state.assignments, byRoom);
-    }
-    return {
-      assignments: state.assignments,
-      getAssignmentsByRoom: byRoom,
-      createAssignment: state.createAssignment,
-      updateAssignment: state.updateAssignment,
-    };
-  },
-}));
+  return {
+    useAssignmentContext: () => {
+      const state = useWorld();
+      return {
+        assignments: state.assignments,
+        getAssignmentsByRoom,
+        createAssignment: state.createAssignment,
+        updateAssignment: state.updateAssignment,
+      };
+    },
+  };
+});
 
 const getPersonByIdFor = new WeakMap<readonly Person[], (id: string) => Person | undefined>();
 

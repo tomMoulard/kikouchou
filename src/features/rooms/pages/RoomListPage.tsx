@@ -373,9 +373,31 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // Calculate rooms with occupancy data
    headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]),
 
+  /**
+   * The trip's assignments grouped by room, from the context's array.
+   *
+   * Not through `getAssignmentsByRoom`: that callback is memoised on `[]` and
+   * reads a ref, so a memo keyed on it never recomputes, and every card's
+   * "spots taken", its Complete badge, its claim button and its place in the
+   * sort froze at the moment the page opened. `RoomAssignmentSection` learned
+   * the same lesson for its expanded list.
+   */
+   assignmentsByRoom = useMemo(() => {
+    const byRoom = new Map<RoomId, RoomAssignment[]>();
+    for (const assignment of assignments) {
+      const list = byRoom.get(assignment.roomId);
+      if (list) {
+        list.push(assignment);
+      } else {
+        byRoom.set(assignment.roomId, [assignment]);
+      }
+    }
+    return byRoom;
+  }, [assignments]),
+
    roomsWithOccupancy = useMemo((): readonly RoomWithOccupancy[] => rooms.map((room) => {
       // Get all assignments for this room
-      const roomAssignments = getAssignmentsByRoom(room.id),
+      const roomAssignments = assignmentsByRoom.get(room.id) ?? [],
 
       // Filter to assignments active today (for current occupants display)
        activeAssignments = roomAssignments.filter((assignment) =>
@@ -416,7 +438,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         isFull,
         isOverCapacity,
       };
-    }), [rooms, getAssignmentsByRoom, getPersonById, todayStr, effectiveDateRange, headcountOf]),
+    }), [rooms, assignmentsByRoom, getPersonById, todayStr, effectiveDateRange, headcountOf]),
 
   // Sort rooms: available first (by room.order), then full rooms (by room.order)
    sortedRoomsWithOccupancy = useMemo(() => {
@@ -866,7 +888,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    * Opens the QuickAssignmentDialog with the room pre-selected.
    */
    handleClaimRoom = useCallback((room: Room) => {
-    // Re-check capacity at click time (room may have filled between render and click)
+    // Re-check capacity at click time (room may have filled between render and
+    // click). Through the context's callback on purpose: it reads a ref the
+    // live query updates before React re-renders, so it is fresher than the
+    // `assignmentsByRoom` memo the cards are drawn from.
     const roomAssignments = getAssignmentsByRoom(room.id);
     const startDate = effectiveDateRange?.startDate ?? currentTrip?.startDate ?? '';
     const endDate = effectiveDateRange?.endDate ?? currentTrip?.endDate ?? '';
