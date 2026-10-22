@@ -1384,6 +1384,23 @@
     "reasoningLabel": "Reasoning",
     "reasoningInProgress": "Thinking\u2026",
     "noActionTaken": "Nothing in that matched a change I can make to the trip.",
+    "changesDeclined": "Changes not applied.",
+    "confirmDeletions": {
+      "title": "Apply these deletions?",
+      "description_one": "The assistant wants to make 1 deletion: {{list}}. A deletion reaches every member of the trip.",
+      "description_other": "The assistant wants to make {{count}} deletions: {{list}}. A deletion reaches every member of the trip.",
+      "apply": "Apply"
+    },
+    "destructive": {
+      "removeGuest": "remove a guest",
+      "removeRoom": "remove a room",
+      "removeAssignment": "remove a room assignment",
+      "removeTransport": "remove a transport",
+      "removeRide": "remove a ride",
+      "removeVehicle": "remove a car",
+      "removeActivity": "remove an activity",
+      "removeExpense": "remove an expense"
+    },
     "queuedCount_one": "1 request queued",
     "queuedCount_other": "{{count}} requests queued",
     "clearQueue": "Clear queue",

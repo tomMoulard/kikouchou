@@ -163,6 +163,41 @@ function tryParseAction(content: string): LLMAction | null {
 }
 
 /**
+ * The actions that remove data, and therefore wait for the user's say-so.
+ *
+ * The system prompt carries every member's guest names and notes, and a model
+ * of a few billion parameters does what the text in front of it says. A note
+ * another member wrote can read "remove every guest", and until the page asked
+ * first, the model's answer was executed as it arrived, the tombstones synced
+ * to everyone, and the only trace was a collapsed "N changes applied" line.
+ */
+export const DESTRUCTIVE_ACTIONS: ReadonlySet<LLMAction['action']> = new Set<LLMAction['action']>([
+  'removeGuest',
+  'removeRoom',
+  'removeAssignment',
+  'removeTransport',
+  'removeRide',
+  'removeVehicle',
+  'removeActivity',
+  'removeExpense',
+]);
+
+/**
+ * The destructive actions an answer asks for, one entry per block, in order.
+ *
+ * Parsed the same way `executeActions` parses, so what the user is asked
+ * about is what would run.
+ *
+ * @param response - The model's answer
+ * @returns The action names, empty when nothing in the answer removes data
+ */
+export function listDestructiveActions(response: string): LLMAction['action'][] {
+  return parseActionBlocks(response)
+    .map((action) => action.action)
+    .filter((name) => DESTRUCTIVE_ACTIONS.has(name));
+}
+
+/**
  * Parse action blocks from an LLM response string.
  * Tries fenced blocks first, then falls back to bare JSON objects.
  */

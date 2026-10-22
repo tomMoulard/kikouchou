@@ -47,6 +47,11 @@ export interface ChatMessageData {
   /** Human-readable line per applied action (enables expandable details) */
   readonly actionSummaries?: readonly string[];
   /**
+   * Set when the answer asked for deletions and the user refused them. The
+   * answer stands as the model's words; none of its actions ran.
+   */
+  readonly actionsDeclined?: boolean;
+  /**
    * Set on a user prompt that is waiting its turn behind the answer currently
    * being generated. Never persisted — an unanswered prompt is dropped on
    * reload rather than restored as a turn the model never saw.
@@ -231,6 +236,19 @@ const ChatMessage = memo(function ChatMessage({
               })}
             </div>
           )
+        )}
+
+        {message.actionsDeclined === true && (
+          <div
+            className={cn(
+              'mt-1.5 pt-1.5 border-t text-xs',
+              isUser
+                ? 'border-primary-foreground/20 text-primary-foreground/70'
+                : 'border-border text-muted-foreground',
+            )}
+          >
+            {t('assistant.changesDeclined', 'Changes not applied.')}
+          </div>
         )}
       </div>
     </div>

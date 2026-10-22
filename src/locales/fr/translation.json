@@ -1384,6 +1384,23 @@
     "reasoningLabel": "Raisonnement",
     "reasoningInProgress": "R\u00e9flexion\u2026",
     "noActionTaken": "Rien dans cette demande ne correspond \u00e0 une modification que je peux faire sur le voyage.",
+    "changesDeclined": "Modifications non appliquées.",
+    "confirmDeletions": {
+      "title": "Appliquer ces suppressions ?",
+      "description_one": "L'assistant veut faire 1 suppression : {{list}}. Une suppression touche tous les membres du séjour.",
+      "description_other": "L'assistant veut faire {{count}} suppressions : {{list}}. Une suppression touche tous les membres du séjour.",
+      "apply": "Appliquer"
+    },
+    "destructive": {
+      "removeGuest": "supprimer un invité",
+      "removeRoom": "supprimer une chambre",
+      "removeAssignment": "supprimer une attribution de chambre",
+      "removeTransport": "supprimer un transport",
+      "removeRide": "supprimer un trajet",
+      "removeVehicle": "supprimer une voiture",
+      "removeActivity": "supprimer une activité",
+      "removeExpense": "supprimer une dépense"
+    },
     "queuedCount_one": "1 demande en attente",
     "queuedCount_other": "{{count}} demandes en attente",
     "clearQueue": "Vider la file d'attente",

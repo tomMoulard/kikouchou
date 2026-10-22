@@ -55,6 +55,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { PageHeader } from '@/components/shared/PageHeader';
 
 import { cn } from '@/lib/utils';
@@ -72,7 +73,7 @@ import {
   saveAssistantChatMessages,
   trimChatHistoryForPrompt,
 } from '../chat-storage';
-import { useTripActions } from '../hooks/useTripActions';
+import { listDestructiveActions, useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import { redactAiMessages, redactAiOutput } from '../ai-telemetry';
 import { splitReasoning } from '../reasoning';
@@ -357,6 +358,19 @@ type TurnOutcome = 'answered' | 'failed' | 'abandoned' | 'engine-lost';
 /**
  * A prompt accepted by the UI and waiting for the assistant to reach it.
  */
+/**
+ * An answer whose deletions are waiting for the user's say-so.
+ *
+ * `resolve` settles the turn: `true` applies every action in the answer,
+ * `false` applies none of it. The dialog that asks is the one place a model's
+ * instruction to remove data meets a person, so a note another member wrote
+ * into the prompt cannot empty the trip on its own.
+ */
+interface PendingDeletions {
+  readonly actions: readonly string[];
+  readonly resolve: (apply: boolean) => void;
+}
+
 interface QueuedPrompt {
   /** Id of the user bubble already rendered in the transcript. */
   readonly messageId: string;
@@ -941,6 +955,43 @@ function AssistantPageComponent(): ReactElement {
   generateRef.current = generate;
   const executeActionsRef = useRef(executeActions);
   executeActionsRef.current = executeActions;
+
+  const [pendingDeletions, setPendingDeletions] = useState<PendingDeletions | null>(null);
+
+  /** Asks before an answer's deletions run; resolves with the user's choice. */
+  const askBeforeDeleting = useCallback(
+    (actions: readonly string[]): Promise<boolean> =>
+      new Promise<boolean>((resolve) => {
+        setPendingDeletions({ actions, resolve });
+      }),
+    [],
+  );
+
+  const handleDeletionsConfirmed = useCallback((): void => {
+    pendingDeletions?.resolve(true);
+  }, [pendingDeletions]);
+
+  const handleDeletionsOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) {
+        // After a confirm this resolve is a no-op: the promise already settled.
+        pendingDeletions?.resolve(false);
+        setPendingDeletions(null);
+      }
+    },
+    [pendingDeletions],
+  );
+
+  const pendingDeletionsDescription = useMemo(() => {
+    const actions = pendingDeletions?.actions ?? [];
+    const names = actions.map((action) => t(`assistant.destructive.${action}`, action));
+    return t('assistant.confirmDeletions.description', {
+      count: actions.length,
+      list: names.join(', '),
+      defaultValue:
+        'The assistant wants to make {{count}} deletion(s): {{list}}. A deletion reaches every member of the trip.',
+    });
+  }, [pendingDeletions, t]);
   const selectedModelRef = useRef(selectedModel);
   selectedModelRef.current = selectedModel;
   const tRef = useRef(t);
@@ -1175,9 +1226,17 @@ function AssistantPageComponent(): ReactElement {
         // Add to chat history
         chatHistoryRef.current.push({ role: 'assistant', content: answer });
 
+        // A deletion waits for the user. The prompt carries text every member
+        // of the trip wrote, so an answer that removes data is applied only
+        // once a person has read what it removes.
+        const deletions = listDestructiveActions(answer);
+        const apply = deletions.length === 0 || (await askBeforeDeleting(deletions));
+        if (!isSameConversation()) return 'abandoned';
+
         // Execute any action blocks in the response
-        const { count: actionsExecuted, summaries: actionSummaries } =
-          await executeActionsRef.current(answer);
+        const { count: actionsExecuted, summaries: actionSummaries } = apply
+          ? await executeActionsRef.current(answer)
+          : { count: 0, summaries: [] };
 
         // A router preset answers with actions and a rationale and never with
         // words, so an empty answer there is the normal shape of "nothing to
@@ -1202,6 +1261,7 @@ function AssistantPageComponent(): ReactElement {
                   thinking: false,
                   actionsExecuted,
                   actionSummaries,
+                  ...(apply ? {} : { actionsDeclined: true }),
                 }
               : msg,
           ),
@@ -1211,6 +1271,9 @@ function AssistantPageComponent(): ReactElement {
           duration_ms: Date.now() - startedAt,
           answer_length: response.length,
           action_count: actionsExecuted,
+          // How often the gate on deletions is met, and how often it refuses.
+          deletion_count: deletions.length,
+          deletions_declined: !apply,
         });
 
         // One $ai_generation per turn, sharing the turn's trace id and the
@@ -1290,7 +1353,7 @@ function AssistantPageComponent(): ReactElement {
         return fatal ? 'engine-lost' : 'failed';
       }
     },
-    [],
+    [askBeforeDeleting],
   );
 
   /**
@@ -1575,6 +1638,16 @@ function AssistantPageComponent(): ReactElement {
             disabled={status !== 'ready' && status !== 'generating'}
             queuedCount={queuedCount}
             onClearQueue={handleClearQueue}
+          />
+
+          <ConfirmDialog
+            open={pendingDeletions !== null}
+            onOpenChange={handleDeletionsOpenChange}
+            title={t('assistant.confirmDeletions.title', 'Apply these deletions?')}
+            description={pendingDeletionsDescription}
+            confirmLabel={t('assistant.confirmDeletions.apply', 'Apply')}
+            variant="destructive"
+            onConfirm={handleDeletionsConfirmed}
           />
         </>
       )}

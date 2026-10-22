@@ -58,6 +58,9 @@ function isChatMessageData(value: unknown): value is ChatMessageData {
     if (!Array.isArray(o.actionSummaries)) return false;
     if (!o.actionSummaries.every((s) => typeof s === 'string')) return false;
   }
+  if (o.actionsDeclined !== undefined && typeof o.actionsDeclined !== 'boolean') {
+    return false;
+  }
   return true;
 }
 
