@@ -73,6 +73,20 @@ describe('YjsSyncObserver seeding', () => {
     expect(mockPopulate).not.toHaveBeenCalled();
   });
 
+  it('does not seed a trip the server holds', async () => {
+    // The row is whatever `join-trip` or an earlier projection wrote; the
+    // document arrives with the first pull, and seeding it from the row first
+    // puts that row into the CRDT as items concurrent with every member's.
+    mockPopulate.mockResolvedValue(undefined);
+    const tripId = await makeTrip();
+    await db.trips.update(tripId, { remoteTripId: 'aaaaaaaa-0000-0000-0000-000000000001' });
+
+    await openTrip(tripId);
+    await waitForDb(100);
+
+    expect(mockPopulate).not.toHaveBeenCalled();
+  });
+
   it('logs a seed that failed', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockPopulate.mockRejectedValue(new Error('disk full'));
