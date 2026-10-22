@@ -1178,10 +1178,7 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     ][] = [
       // Redacted on the way out, never on the way into Dexie: the phone stays
       // in this device's IndexedDB whatever the flag says.
-      [
-        'guests',
-        guests.map((guest) => toSharedGuest(guest, { sharePhone: isGuestPhoneSharingEnabled() })),
-      ],
+      ['guests', toPublishedGuests(doc, guests)],
       ['rooms', rooms],
       ['roomAssignments', assignments],
       ['transport', transport],
@@ -1243,12 +1240,7 @@ export function syncDexieToDoc(
   // waist every live Dexie change passes through on its way to the document and
   // therefore to the server, so redacting here is the one edit a future caller
   // cannot forget to make.
-  const entities =
-    table === 'guests'
-      ? identified.map((guest) =>
-          toSharedGuest(guest, { sharePhone: isGuestPhoneSharingEnabled() }),
-        )
-      : identified;
+  const entities = table === 'guests' ? toPublishedGuests(doc, identified) : identified;
 
   if (!allowDeletions && entities.length === 0) {
     // Nothing to add and no standing to remove: the whole call is a no-op, and
@@ -1263,6 +1255,44 @@ export function syncDexieToDoc(
     },
     ORIGIN_DEXIE_SYNC,
   );
+}
+
+/**
+ * Guests as this device may publish them.
+ *
+ * With `guest-phone-sharing` on, the rows go out as they are. With it off, the
+ * phone is held back — and a number the document *already* holds is carried
+ * forward rather than deleted. `upsertDocEntity` prunes any key the entity does
+ * not carry, so an absent `phone` is a deletion in the shared document, pushed
+ * to every member. The flag is answered per device: a member in the control
+ * cohort, or one whose PostHog flags had not loaded yet, used to strip every
+ * phone the rest of the group had stored, on their first live-query tick, and
+ * again each time somebody typed one back in.
+ *
+ * So a device whose flag is off neither publishes a phone nor removes one. The
+ * QR export (`lib/sharing/export-service`) still drops it: that payload is
+ * built from Dexie alone and has no document to consult.
+ */
+function toPublishedGuests<T extends { readonly id: string; phone?: unknown }>(
+  doc: Y.Doc,
+  guests: readonly T[],
+): T[] {
+  if (isGuestPhoneSharingEnabled()) {
+    return [...guests];
+  }
+
+  const held = new Map<string, unknown>();
+  for (const row of readDocCollection(doc, 'guests')) {
+    if (row.phone !== undefined) {
+      held.set(row.id, row.phone);
+    }
+  }
+
+  return guests.map((guest) => {
+    const redacted = toSharedGuest(guest, { sharePhone: false });
+    const phone = held.get(guest.id);
+    return phone === undefined ? redacted : { ...redacted, phone };
+  });
 }
 
 export function syncTripMetaToDoc(doc: Y.Doc, updates: Record<string, unknown>): void {
