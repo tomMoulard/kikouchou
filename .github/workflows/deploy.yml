@@ -35,9 +35,20 @@ jobs:
     # A manual dispatch deploys on request; a CI run deploys only when it
     # passed. Without this half the trigger above is not a gate at all, because
     # `workflow_run` fires whatever the conclusion was.
+    #
+    # And only a CI run of a push to this repository. The `branches` filter on
+    # the trigger matches the *head* branch of the run that finished, and a
+    # pull request opened from a fork branch named `main` matches it too. The
+    # repository is public, so without the two checks below a green fork PR
+    # would be checked out at its own commit, built with this job's secrets in
+    # the environment, and published to production before anyone reviewed it.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
     # Lifted to the job so the source-map step can test it in an `if:` — the
     # `secrets` context is not available there, but `env` is.
     env:
