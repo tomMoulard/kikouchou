@@ -90,6 +90,41 @@ describe('syncDocToDexie — the deletion right', () => {
     transaction.mockRestore();
   });
 
+  it('takes it back when a projection fails after an earlier one landed', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+    const doc = makeDoc({
+      id: trip.id,
+      name: 'Brittany',
+      startDate: '2024-08-01',
+      endDate: '2024-08-05',
+    });
+
+    await syncDocToDexie(doc, trip.id);
+    expect(isDexieTrustedMirror(doc, trip.id)).toBe(true);
+
+    // The next update aborts part-way. Dexie now holds less than the document
+    // does, and a flag granted by the first projection would let the next
+    // Dexie-to-document sync delete the difference for every member.
+    const transaction = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Error('QuotaExceededError') as never);
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect(isDexieTrustedMirror(doc, trip.id)).toBe(false);
+
+    transaction.mockRestore();
+
+    // A projection that lands earns it again.
+    await syncDocToDexie(doc, trip.id);
+    expect(isDexieTrustedMirror(doc, trip.id)).toBe(true);
+  });
+
   it('grants it once a projection has actually landed', async () => {
     const trip = await createTrip({
       name: 'Shared trip',

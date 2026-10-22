@@ -818,6 +818,18 @@ function markProjected(doc: Y.Doc, tripId: TripId): void {
 }
 
 /**
+ * Takes the right to delete back, because a projection just failed.
+ *
+ * The flag says "Dexie mirrors this document". A transaction that aborted
+ * after an earlier success leaves Dexie holding less than the document does,
+ * and the flag left standing would let the next Dexie-to-document sync read
+ * those absences as deletions. The next projection that lands grants it again.
+ */
+function unmarkProjected(doc: Y.Doc, tripId: TripId): void {
+  projectedTrips.get(doc)?.delete(tripId);
+}
+
+/**
  * Whether Dexie can be trusted as a complete mirror of this document's trip.
  *
  * Exported so the caller that syncs Dexie back into the document can ask rather
@@ -1064,13 +1076,16 @@ export async function syncDocToDexie(
       },
     );
   } catch (error) {
-    // Not projected, so not marked. This used to log and fall through to
-    // `markProjected` below, which handed out the right to delete on the
-    // strength of a projection that had just failed — the precise situation
-    // the flag exists to withhold it in. A half-written or aborted transaction
-    // leaves Dexie holding less than the document does, and the next
-    // Dexie-to-document sync would then read those absences as deletions and
-    // remove the rows from the shared trip.
+    // Not projected, so not marked — and un-marked if an earlier projection
+    // had succeeded. This used to log and fall through to `markProjected`
+    // below, which handed out the right to delete on the strength of a
+    // projection that had just failed — the precise situation the flag exists
+    // to withhold it in. A half-written or aborted transaction leaves Dexie
+    // holding less than the document does, and the next Dexie-to-document sync
+    // would then read those absences as deletions and remove the rows from the
+    // shared trip. Keeping a flag granted by a previous success has exactly the
+    // same effect, one update later.
+    unmarkProjected(doc, tripId);
     reportFailure(
       'dexie-bridge.syncDocToDexie',
       error,
