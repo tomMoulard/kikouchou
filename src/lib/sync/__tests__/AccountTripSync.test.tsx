@@ -416,6 +416,10 @@ describe('AccountTripSync, edges', () => {
     await act(async () => {
       await db.trips.update('trip-x', { remoteTripId: 'remote-x' });
     });
+    // The live query re-emits after the write settles, not inside it. Switching
+    // accounts before that leaves the second sweep queued with trip-x still
+    // pending, which is a different test from the one below.
+    await settle();
 
     signedInAs('user-2');
     rerender(<AccountTripSync />);
