@@ -50,6 +50,15 @@ export interface RideNotification {
   /** The body, already translated. */
   readonly body: string;
   /**
+   * When the driver must set off, epoch ms.
+   *
+   * With it, a notice already recorded for this ride silences this one only if
+   * it fired at or after this leave time. The 17:00 airport run announces at
+   * 16:30; the group moves it to 21:00; 20:30 is a new departure, not a
+   * repeat. Without it, any recorded fire silences the ride for good.
+   */
+  readonly leaveAtMs?: number;
+  /**
    * Where a tap should land, **relative to the app's base** and without a
    * leading slash — `trips/<id>/transports`, never `/trips/<id>/transports`.
    *
@@ -169,7 +178,7 @@ function toAppRelative(path: string): string {
  * ```
  */
 export async function notifyRide(notification: RideNotification): Promise<boolean> {
-  const { tripId, kind, subjectId, title, body, path } = notification;
+  const { tripId, kind, subjectId, title, body, path, leaveAtMs } = notification;
 
   try {
     if (getNotificationState() !== 'granted') {
@@ -185,7 +194,8 @@ export async function notifyRide(notification: RideNotification): Promise<boolea
     const key = rideNoticeKey(kind, subjectId),
       notices = await getRideNotices(tripId);
 
-    if (notices.get(key)?.firedAtMs !== undefined) {
+    const firedAtMs = notices.get(key)?.firedAtMs;
+    if (firedAtMs !== undefined && (leaveAtMs === undefined || leaveAtMs <= firedAtMs)) {
       return false;
     }
 

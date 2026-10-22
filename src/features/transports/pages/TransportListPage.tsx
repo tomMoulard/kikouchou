@@ -110,7 +110,10 @@ import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import { AddRunsToCalendarButton } from '@/features/transports/components/AddRunsToCalendarButton';
-import { DriverAlert } from '@/features/transports/components/DriverAlert';
+import {
+  DriverAlert,
+  type RideDepartureAnnouncement,
+} from '@/features/transports/components/DriverAlert';
 import {
   createHeadcountResolver,
   type HeadcountResolver,
@@ -149,6 +152,7 @@ import type {
   TransportType,
 } from '@/types';
 import { reportFailure } from '@/lib/errors/report-failure';
+import { notifyRide } from '@/lib/notifications';
 
 // ============================================================================
 // Type Definitions
@@ -1352,6 +1356,33 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   }, [transportToDelete, deleteTransport, t, notifySuccess]),
 
   /**
+   * Hands a due departure to the operating system.
+   *
+   * The banner's seam. The Settings switch asks for the permission and
+   * promises "when it is time to leave for a pick-up you are driving"; this is
+   * where that promise is kept. `notifyRide` posts once per ride per device
+   * and returns a status rather than throwing: no worker, no permission, or a
+   * notice already shown are ordinary and not reported.
+   */
+   announceRideDeparture = useCallback(
+    async (announcement: RideDepartureAnnouncement): Promise<void> => {
+      const tripId = currentTrip?.id;
+      if (tripId === undefined) {
+        return;
+      }
+      await notifyRide({
+        tripId,
+        kind: 'leave',
+        subjectId: announcement.rideId,
+        title: announcement.title,
+        body: announcement.body,
+        leaveAtMs: announcement.leaveAtMs,
+      });
+    },
+    [currentTrip?.id],
+  ),
+
+  /**
    * Closes delete confirmation dialog.
    */
    handleCancelDelete = useCallback((open: boolean) => {
@@ -1710,7 +1741,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         the bottom edge.
       */}
       <RideChangeFeed className="mb-6" />
-      <DriverAlert className="mb-6" />
+      <DriverAlert className="mb-6" onAnnounce={announceRideDeparture} />
 
       {/*
         Directly under the banner it answers. The banner is this device

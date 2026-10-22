@@ -322,6 +322,33 @@ describe('DriverAlert', () => {
       });
     });
 
+    it('writes the watermark only once the announcement seam has settled', async () => {
+      // `notifyRide` reads the same `rideNotices` row to decide whether it has
+      // already spoken. A watermark written before the seam ran would silence
+      // the very notice the seam was handed.
+      seedRide(makeRide('r1', minutesFromNow(10)));
+      let release: (() => void) | undefined;
+      const onAnnounce = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      );
+
+      render(<DriverAlert onAnnounce={onAnnounce} />);
+
+      await waitFor(() => {
+        expect(onAnnounce).toHaveBeenCalledTimes(1);
+      });
+      expect(markNoticeFired).not.toHaveBeenCalled();
+
+      release?.();
+
+      await waitFor(() => {
+        expect(markNoticeFired).toHaveBeenCalledWith('trip-1', 'leave', 'r1', NOW_MS);
+      });
+    });
+
     it('stays quiet about a ride this device already announced', async () => {
       seedRide(makeRide('r1', minutesFromNow(10)));
       notices.fired.set('leave:r1', { key: 'leave:r1', tripId: 'trip-1' });
