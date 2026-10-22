@@ -11,7 +11,7 @@
 -- will in production.
 
 begin;
-select plan(36);
+select plan(38);
 
 -- ===========================================================================
 -- Fixtures
@@ -301,6 +301,31 @@ select is(
    where trip_id = 'aaaaaaaa-0000-0000-0000-000000000001' and person_id is null),
   1,
   'unclaimed members coexist: nulls are distinct in the unique constraint'
+);
+
+-- The claim is the only UPDATE a client may make. The grant used to cover every
+-- column while the policy pinned `user_id` alone; the move was refused all the
+-- same, because Postgres checks the updated row against the SELECT policy too,
+-- but that is a rule of the engine applied to a policy written for reading.
+-- The column grant (20261022090000) makes the refusal explicit, and checked
+-- before the policy, the foreign key or anything else: the target uuid here
+-- need not exist.
+select throws_ok(
+  $$update public.trip_members set trip_id = 'aaaaaaaa-0000-0000-0000-000000000009'
+    where trip_id = 'aaaaaaaa-0000-0000-0000-000000000001'
+      and user_id = '11111111-1111-1111-1111-111111111111'$$,
+  '42501',
+  null,
+  'a member cannot move their roster row onto another trip'
+);
+
+select throws_ok(
+  $$update public.trip_members set user_id = '33333333-3333-3333-3333-333333333333'
+    where trip_id = 'aaaaaaaa-0000-0000-0000-000000000001'
+      and user_id = '11111111-1111-1111-1111-111111111111'$$,
+  '42501',
+  null,
+  'a member cannot hand their roster row to another account'
 );
 
 -- ===========================================================================
