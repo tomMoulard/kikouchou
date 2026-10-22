@@ -115,12 +115,30 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
    */
   const populatedForRef = useRef<TripId | null>(null);
 
+  const trip = useLiveQuery(() => db.trips.get(tripId), [tripId]);
+
   useEffect(() => {
-    if (readOnly || !yjs?.loaded || populatedForRef.current === tripId) {
+    if (readOnly || !yjs?.loaded || trip?.id !== tripId || populatedForRef.current === tripId) {
       return;
     }
 
     populatedForRef.current = tripId;
+
+    // A trip the server holds is seeded by the server, never from here.
+    //
+    // On a freshly joined device the only row is the placeholder `join-trip`
+    // wrote — "Untitled trip", today to today, when the preview failed — and
+    // the document is empty until the first pull. Seeding it from that row put
+    // the placeholder into the document as CRDT items concurrent with the
+    // owner's, which Yjs resolves by client id: the placeholder renamed and
+    // re-dated the trip for every member about half the time. The same seed on
+    // an owner's shared trip merely re-wrote values the document already held,
+    // as fresh items pushed to the server on every open. The first upload
+    // (`lib/sync/upload-document`) seeds its own document and is unaffected.
+    if (trip.remoteTripId !== undefined) {
+      return;
+    }
+
     const meta = yjs.doc.getMap('meta');
     if (meta.get('id')) {
       return;
@@ -129,9 +147,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     void populateDocFromDexie(yjs.doc, tripId).catch((error) => {
       console.error('[YjsTripSync] Failed to populate Y.Doc from Dexie:', error);
     });
-  }, [readOnly, tripId, yjs?.doc, yjs?.loaded]);
-
-  const trip = useLiveQuery(() => db.trips.get(tripId), [tripId]);
+  }, [readOnly, trip, tripId, yjs?.doc, yjs?.loaded]);
   const persons = useTripScopedRows<Person>(tripId, (id) =>
     db.persons.where('tripId').equals(id).toArray(),
   );
@@ -206,6 +222,16 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     // goes stale in exactly the same window, and writing the previous trip's
     // name and dates into this document renames the trip for every member.
     if (readOnly || !yjs?.loaded || trip?.id !== tripId) {
+      return;
+    }
+
+    // A trip the server holds, whose document this device has not received
+    // yet: the row is the placeholder `join-trip` wrote, or a projection from
+    // an earlier session, and writing it into an empty document would make it
+    // contend with the owner's own meta the moment the first pull lands.
+    // Nothing is lost by waiting — the projection rewrites the row from the
+    // document, and that write re-runs this effect with values that match.
+    if (trip.remoteTripId !== undefined && !yjs.doc.getMap('meta').has('name')) {
       return;
     }
 
