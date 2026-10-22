@@ -274,6 +274,21 @@ describe('disableTripReminders', () => {
     expect(browserSubscription.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  it('names the trip, so the other trips on the same endpoint keep their reminders', async () => {
+    await enableTripReminders(client, MEMBER_TRIP, { locale: 'en' });
+    rpc.mockResolvedValue({ data: 1, error: null });
+
+    expect(await disableTripReminders(client, 'trip-2')).toBe(true);
+
+    // One browser subscription serves every trip on the device, and the server
+    // keys its rows on (trip, endpoint): the endpoint alone deleted all of them.
+    expect(rpc).toHaveBeenLastCalledWith('unsubscribe_reminders', {
+      endpoint: 'https://push.example.test/send/abc',
+      trip: 'aaaaaaaa-0000-0000-0000-000000000001',
+    });
+    expect(readReminderSubscription('trip-2')).toBeUndefined();
+  });
+
   it('keeps the browser subscription while another trip still wants it', async () => {
     await enableTripReminders(client, VIEWER_TRIP, { locale: 'en' });
     await enableTripReminders(client, MEMBER_TRIP, { locale: 'en' });
