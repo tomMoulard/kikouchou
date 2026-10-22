@@ -362,6 +362,7 @@ describe('redactAndMark', () => {
       properties: {
         $current_url: 'https://app.kikouchou.app/join/tok123',
         $pathname: '/join/tok123',
+        $prev_pageview_pathname: '/join/tok123',
         $referrer: 'https://app.kikouchou.app/template/tpl456',
         $set_once: { $initial_current_url: 'https://app.kikouchou.app/join/tok123' },
       },
@@ -371,12 +372,33 @@ describe('redactAndMark', () => {
       'https://app.kikouchou.app/join/[redacted]',
     );
     expect(event.properties['$pathname']).toBe('/join/[redacted]');
+    expect(event.properties['$prev_pageview_pathname']).toBe('/join/[redacted]');
     expect(event.properties['$referrer']).toBe(
       'https://app.kikouchou.app/template/[redacted]',
     );
     expect(
       (event.properties['$set_once'] as Record<string, unknown>)['$initial_current_url'],
     ).toBe('https://app.kikouchou.app/join/[redacted]');
+  });
+
+  it('redacts the page URL a session replay records, fragment included', async () => {
+    const { redactAndMark } = await importPosthog();
+
+    const event = redactAndMark({
+      event: '$snapshot',
+      properties: {
+        $snapshot_data: [
+          { type: 4, data: { href: 'https://app.kikouchou.app/share/abc#s3cr3tkey', width: 1 } },
+          { type: 2, data: { node: {} } },
+          { type: 3, data: null },
+          'not an event',
+        ],
+      },
+    } as never) as { properties: Record<string, unknown> };
+
+    const snapshot = event.properties['$snapshot_data'] as { data?: { href?: string } }[];
+    expect(snapshot[0]?.data?.href).toBe('https://app.kikouchou.app/share/[redacted]');
+    expect(snapshot).toHaveLength(4);
   });
 
   it('drops nothing', async () => {

@@ -555,6 +555,11 @@ export function redactUrl(value: unknown): unknown {
 const URL_PROPERTIES = [
   '$current_url',
   '$pathname',
+  // The page before this one, stamped on every `$pageview` and `$pageleave`.
+  // A guest who opens `/join/<token>` and taps through to the calendar would
+  // otherwise send the token on the second page view, with the first one
+  // redacted.
+  '$prev_pageview_pathname',
   '$referrer',
   '$initial_current_url',
   '$initial_pathname',
@@ -563,6 +568,36 @@ const URL_PROPERTIES = [
   '$session_entry_pathname',
   '$session_entry_referrer',
 ] as const;
+
+/**
+ * Strips credentials out of the URLs a session replay carries.
+ *
+ * rrweb stamps every `Meta` event (and every full snapshot's navigation) with
+ * `location.href` as the page had it, fragment included, under
+ * `$snapshot_data[].data.href`. That is the one place a share link's
+ * encryption key would leave the browser: `$current_url` is redacted above,
+ * but a replay is watched, not queried, and nothing else looks inside the
+ * snapshot. Mutated in place, like the properties above: `before_send` hands
+ * the event on, it does not copy it.
+ */
+function redactSnapshotUrls(snapshot: unknown): void {
+  if (!Array.isArray(snapshot)) {
+    return;
+  }
+  for (const item of snapshot) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const data: unknown = (item as { data?: unknown }).data;
+    if (!data || typeof data !== 'object') {
+      continue;
+    }
+    const bag = data as Record<string, unknown>;
+    if (typeof bag['href'] === 'string') {
+      bag['href'] = redactUrl(bag['href']);
+    }
+  }
+}
 
 /**
  * Strips credentials out of every URL on an event, then hands it on.
@@ -588,6 +623,7 @@ export function redactAndMark(event: CaptureResult | null): CaptureResult | null
         }
       }
     }
+    redactSnapshotUrls(event.properties['$snapshot_data']);
   }
 
   const marked = markOpaqueExceptions(event);
