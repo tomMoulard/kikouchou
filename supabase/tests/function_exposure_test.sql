@@ -8,7 +8,7 @@
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(22);
+select plan(23);
 
 -- ===========================================================================
 -- Where the functions live
@@ -108,6 +108,23 @@ select is(
      and has_function_privilege('anon', p.oid, 'execute')),
   'read_shared_trip, read_trip_template, subscribe_trip_reminders, unsubscribe_reminders',
   'anon can execute exactly the four doors an invite link opens, and nothing else'
+);
+
+-- The same assertion for `authenticated`, which is the role the project's
+-- default privileges leave EXECUTE to, and therefore the role the next internal
+-- helper is left open to when its author writes `revoke ... from public, anon`
+-- by analogy with the 2026-08-31 migration. `store_push_subscription` was open
+-- to both roles on 2026-09-22; the anon half above would have caught that, and
+-- this half catches the other.
+select is(
+  (select coalesce(string_agg(p.proname, ', ' order by p.proname), '')
+   from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.prokind = 'f'
+     and has_function_privilege('authenticated', p.oid, 'execute')),
+  'publish_trip_snapshot, read_shared_trip, read_trip_template, redeem_invite, revoke_invite, subscribe_member_reminders, subscribe_trip_reminders, unsubscribe_reminders',
+  'authenticated can execute exactly the doors a signed-in client calls, and nothing else'
 );
 
 select ok(
