@@ -135,7 +135,7 @@ describe('GuestGroupSync', () => {
 // What the provider hands its children
 // ============================================================================
 
-const SYNCED = { status: 'synced', pulled: 1, pushed: 2, pruned: 0 } as const;
+const SYNCED = { status: 'synced', pulled: 1, pushed: 2, pruned: 0, deleted: 0 } as const;
 
 /** Shows the context, and offers its trigger as a button. */
 function Probe() {

@@ -7,14 +7,23 @@
  *
  * @module lib/sync/__tests__/guest-groups.test
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
-import { isClockSkewMessage,
-  isNetworkFailureMessage, syncGuestGroups } from '@/lib/sync/guest-groups';
+import {
+  isClockSkewMessage,
+  isNetworkFailureMessage,
+  rememberGuestGroupDeletion,
+  syncGuestGroups,
+} from '@/lib/sync/guest-groups';
 import type { GuestGroup, GuestGroupId, GuestGroupMemberId, HexColor } from '@/types';
 
+import { installLocalStorageDouble } from '@/test/local-storage';
+
 import { fakeSupabase, hasCall } from './support/fake-supabase';
+
+// The carried deletions live in localStorage, which this jsdom does not ship.
+installLocalStorageDouble();
 
 // ============================================================================
 // Fakes
@@ -38,21 +47,46 @@ interface FakeClientResult {
   readonly rows: FakeRow[];
   /** Payloads the client sent, so a test can assert on what was uploaded. */
   readonly upserted: Record<string, unknown>[][];
+  /** Local ids the client asked the server to delete, one list per call. */
+  readonly deleted: string[][];
 }
 
 /**
- * A Supabase double covering exactly the two calls this module makes:
- * `select(...).eq('owner_id', …)` and `upsert(…).select(…)`.
+ * A Supabase double covering exactly the three calls this module makes:
+ * `select(...).eq('owner_id', …)`, `upsert(…).select(…)` and
+ * `delete().eq('owner_id', …).in('local_id', …)`.
  */
 function fakeClient(
   initialRows: FakeRow[] = [],
-  options: { readonly selectError?: string; readonly upsertError?: string } = {},
+  options: {
+    readonly selectError?: string;
+    readonly upsertError?: string;
+    readonly deleteError?: string;
+  } = {},
 ): FakeClientResult {
   const rows = [...initialRows],
-    upserted: Record<string, unknown>[][] = [];
+    upserted: Record<string, unknown>[][] = [],
+    deleted: string[][] = [];
 
   const client = {
     from: () => ({
+      delete: () => ({
+        eq: (_column: string, owner: string) => ({
+          in: async (_idColumn: string, localIds: string[]) => {
+            if (options.deleteError) {
+              return { data: null, error: { message: options.deleteError } };
+            }
+            deleted.push([...localIds]);
+            for (let index = rows.length - 1; index >= 0; index -= 1) {
+              const row = rows[index];
+              if (row && row.owner_id === owner && localIds.includes(row.local_id)) {
+                rows.splice(index, 1);
+              }
+            }
+            return { data: null, error: null };
+          },
+        }),
+      }),
       select: () => ({
         eq: async (_column: string, value: string) =>
           options.selectError
@@ -99,7 +133,7 @@ function fakeClient(
     }),
   } as never;
 
-  return { client, rows, upserted };
+  return { client, rows, upserted, deleted };
 }
 
 // ============================================================================
@@ -223,6 +257,72 @@ describe('pulling', () => {
     // Without this the group could never be pruned, because pruning is gated on
     // having a remote id.
     expect((await db.guestGroups.get('group-1'))?.remoteGroupId).toBe('remote-1');
+  });
+});
+
+// ============================================================================
+// Carrying a deletion
+// ============================================================================
+
+describe('a group deleted on this device', () => {
+  const DELETIONS_KEY = 'kikouchou-guest-group-deletions';
+
+  beforeEach(() => {
+    window.localStorage.removeItem(DELETIONS_KEY);
+  });
+
+  afterEach(() => {
+    window.localStorage.removeItem(DELETIONS_KEY);
+  });
+
+  it('is deleted on the server before the pull can put it back', async () => {
+    // The push is an upsert of what Dexie holds and the pull restores any
+    // server row Dexie lacks, so without a carried deletion the group came back
+    // within a second and could not be deleted at all.
+    const { client, rows, deleted } = fakeClient([serverRow()]);
+    rememberGuestGroupDeletion('group-1' as GuestGroupId);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'synced', deleted: 1, pulled: 0 });
+    expect(deleted).toEqual([['group-1']]);
+    expect(rows).toHaveLength(0);
+    expect(await db.guestGroups.count()).toBe(0);
+    expect(window.localStorage.getItem(DELETIONS_KEY)).toBeNull();
+  });
+
+  it('records each id once', () => {
+    rememberGuestGroupDeletion('group-1' as GuestGroupId);
+    rememberGuestGroupDeletion('group-1' as GuestGroupId);
+    rememberGuestGroupDeletion('group-2' as GuestGroupId);
+
+    expect(JSON.parse(window.localStorage.getItem(DELETIONS_KEY) ?? '[]')).toEqual([
+      'group-1',
+      'group-2',
+    ]);
+  });
+
+  it('stays pending when the server cannot be told', async () => {
+    const { client, rows } = fakeClient([serverRow()], { deleteError: 'Failed to fetch' });
+    rememberGuestGroupDeletion('group-1' as GuestGroupId);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'error', reason: 'network' });
+    expect(rows).toHaveLength(1);
+    // Nothing was pulled either: the deletion goes first, so a failed one
+    // cannot be followed by a pull that restores the group.
+    expect(await db.guestGroups.count()).toBe(0);
+    expect(JSON.parse(window.localStorage.getItem(DELETIONS_KEY) ?? '[]')).toEqual(['group-1']);
+  });
+
+  it('sends nothing when there is nothing pending', async () => {
+    const { client, deleted } = fakeClient([serverRow()]);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'synced', deleted: 0, pulled: 1 });
+    expect(deleted).toEqual([]);
   });
 });
 
@@ -802,6 +902,7 @@ describe('guest group queries', () => {
 
     expect(await syncGuestGroups(client, USER_ID)).toEqual({
       status: 'synced',
+      deleted: 0,
       pulled: 0,
       pushed: 0,
       pruned: 0,
