@@ -66,8 +66,18 @@ vi.mock('../../hooks/useTripActions', async (importOriginal) => ({
   }),
 }));
 
+const nativeCallbacks = vi.hoisted(() => ({
+  listener: undefined as ((callback: { code: string; state: string | null }) => void) | undefined,
+}));
+
 vi.mock('../../openrouter/callback', () => ({
   consumeOpenRouterCallback: () => mockConsumeCallback(),
+  onOpenRouterCallback: (listener: (callback: { code: string; state: string | null }) => void) => {
+    nativeCallbacks.listener = listener;
+    return () => {
+      nativeCallbacks.listener = undefined;
+    };
+  },
 }));
 
 vi.mock('../../openrouter/auth', () => ({
@@ -134,6 +144,11 @@ describe('AssistantPage with a cloud model', () => {
     Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
+    // A device that has WebGPU, so the local presets are offered too.
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      value: { requestAdapter: () => Promise.resolve({}) },
+    });
     const { user } = render(<AssistantPage />, { withProviders: false });
     await screen.findByRole('button', { name: 'assistant.cloud.connect' });
 
@@ -144,6 +159,49 @@ describe('AssistantPage with a cloud model', () => {
     expect(
       screen.getByRole('option', { name: /assistant\.models\.qwen3-1-7b\.name/ }),
     ).toHaveTextContent('(qwen3-1-7b)');
+  });
+
+  it('offers a device without WebGPU only the models it can run', async () => {
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+    await screen.findByRole('button', { name: 'assistant.cloud.connect' });
+
+    await user.click(screen.getByRole('combobox', { name: 'assistant.modelLabel' }));
+
+    expect(
+      await screen.findByRole('option', { name: /assistant\.models\.cloud-auto\.name/ }),
+    ).toBeInTheDocument();
+    // Needle runs on the CPU.
+    expect(screen.getByRole('option', { name: /needle-v3/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /qwen3-1-7b/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /gemma-4-e2b/ })).not.toBeInTheDocument();
+  });
+
+  it('opens on the cloud router when the stored model needs WebGPU it does not have', async () => {
+    mockGetSettings.mockResolvedValue({ assistantModelId: 'gemma-4-e2b' });
+
+    render(<AssistantPage />, { withProviders: false });
+
+    // The cloud card, not the "this device cannot run it" dead end.
+    expect(
+      await screen.findByRole('button', { name: 'assistant.cloud.connect' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('assistant.deviceUnsupportedTitle')).not.toBeInTheDocument();
+  });
+
+  it('finishes a sign-in that a store app received as a link', async () => {
+    mockCompleteConnect.mockResolvedValue({ ok: true });
+    render(<AssistantPage />, { withProviders: false });
+    await waitFor(() => expect(nativeCallbacks.listener).toBeDefined());
+
+    nativeCallbacks.listener?.({ code: 'from-the-sheet', state: 'state-1' });
+
+    await waitFor(() => {
+      expect(mockCompleteConnect).toHaveBeenCalledWith({ code: 'from-the-sheet', state: 'state-1' });
+    });
+    expect(mockNotifySuccess).toHaveBeenCalled();
   });
 
   it('shows why the user is back on the connect card', async () => {

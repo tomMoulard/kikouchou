@@ -17,6 +17,12 @@
  * `lib/supabase/auth-callback` makes, for the same reason: the router may
  * normalise the URL before any component looks at it.
  *
+ * In the store apps the sign-in runs in a system browser sheet and returns on
+ * the app's own scheme, `app.kikouchou://openrouter/callback`. That link
+ * reaches the page as an event long after import, so
+ * {@link deliverOpenRouterCallbackUrl} hands it to whoever subscribed with
+ * {@link onOpenRouterCallback}, the assistant page.
+ *
  * @module features/assistant/openrouter/callback
  */
 
@@ -99,4 +105,66 @@ export function consumeOpenRouterCallback(): OpenRouterCallback | null {
   if (consumed || captured === null) return null;
   consumed = true;
   return captured;
+}
+
+// ============================================================================
+// Callbacks that arrive as links (store apps)
+// ============================================================================
+
+/** The path of the store apps' return address, after the scheme and host. */
+export const NATIVE_OPENROUTER_CALLBACK_HOST = 'openrouter';
+
+type OpenRouterCallbackListener = (callback: OpenRouterCallback) => void;
+
+const listeners = new Set<OpenRouterCallbackListener>();
+const pending: OpenRouterCallback[] = [];
+const deliveredCodes = new Set<string>();
+
+/**
+ * Hands the code a link carries to the assistant page.
+ *
+ * @param url - `app.kikouchou://openrouter/callback?code=…&state=…`
+ * @returns Whether the link carried a code this device asked for
+ */
+export function deliverOpenRouterCallbackUrl(url: string): boolean {
+  let params: URLSearchParams;
+  try {
+    params = new URL(url).searchParams;
+  } catch {
+    return false;
+  }
+  const code = params.get('code');
+  if (code === null || code.length === 0 || readPendingConnect() === null) {
+    return false;
+  }
+  if (deliveredCodes.has(code)) {
+    return true;
+  }
+  deliveredCodes.add(code);
+
+  const callback: OpenRouterCallback = { code, state: params.get('state') };
+  if (listeners.size === 0) {
+    pending.push(callback);
+    return true;
+  }
+  for (const listener of listeners) {
+    listener(callback);
+  }
+  return true;
+}
+
+/**
+ * Subscribes to codes that arrive as links. One that arrived before anybody
+ * subscribed is delivered at once.
+ *
+ * @returns The unsubscribe function
+ */
+export function onOpenRouterCallback(listener: OpenRouterCallbackListener): () => void {
+  listeners.add(listener);
+  for (const callback of pending.splice(0)) {
+    listener(callback);
+  }
+  return () => {
+    listeners.delete(listener);
+  };
 }

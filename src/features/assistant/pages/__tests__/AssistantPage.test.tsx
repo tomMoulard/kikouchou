@@ -281,55 +281,62 @@ describe('AssistantPage', () => {
   });
 
   describe('WebGPU device gate', () => {
-    it('offers no download when the device cannot supply a GPU adapter', async () => {
+    // Since 2026-10-22 a device without WebGPU keeps the assistant and is
+    // offered the models it can run. The default preset needs WebGPU, so the
+    // page opens on the cloud router instead of the old "cannot run it" card.
+    it('opens on a model the device can run when the GPU has no adapter', async () => {
       // Android Chrome off the driver allowlist: the API is there, the adapter
       // is not. This is the session that produced "no available backend found".
       stubWebGPU(false);
 
       render(<AssistantPage />, { withProviders: false });
 
-      expect(
-        await screen.findByText('assistant.deviceUnsupportedTitle'),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', { name: 'assistant.loadModel' }),
-      ).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(mockUseWebLLM).toHaveBeenLastCalledWith(
+          expect.objectContaining({ id: 'cloud-auto' }),
+        );
+      });
+      expect(screen.queryByText('assistant.deviceUnsupportedTitle')).not.toBeInTheDocument();
       expect(mockLoadModel).not.toHaveBeenCalled();
     });
 
-    it('offers no download when the browser has no WebGPU API', async () => {
+    it('opens on a model the device can run when the browser has no WebGPU API', async () => {
       Reflect.deleteProperty(navigator, 'gpu');
 
       render(<AssistantPage />, { withProviders: false });
 
-      expect(
-        await screen.findByText('assistant.deviceUnsupportedTitle'),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', { name: 'assistant.loadModel' }),
-      ).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(mockUseWebLLM).toHaveBeenLastCalledWith(
+          expect.objectContaining({ id: 'cloud-auto' }),
+        );
+      });
     });
 
-    it('does not auto-load cached weights on a device that cannot run them', async () => {
+    it('never auto-loads cached WebGPU weights on a device that cannot run them', async () => {
       // Cached files prove the download once worked, not that a session can be
       // built now — the same phone on a browser that has since lost WebGPU, or
       // weights cached before a driver update.
       stubWebGPU(false);
-      mockUseWebLLM.mockReturnValue({
+      mockUseWebLLM.mockImplementation((preset: { readonly engine: string }) => ({
         status: 'idle',
         loadProgress: null,
         error: null,
-        isCached: true,
+        // The local weights are cached; the cloud router is not connected.
+        isCached: preset.engine !== 'openrouter',
         loadModel: mockLoadModel,
         cancelLoad: mockCancelLoad,
         generate: mockGenerate,
         interrupt: mockInterrupt,
         unload: mockUnload,
-      });
+      }));
 
       render(<AssistantPage />, { withProviders: false });
 
-      await screen.findByText('assistant.deviceUnsupportedTitle');
+      await waitFor(() => {
+        expect(mockUseWebLLM).toHaveBeenLastCalledWith(
+          expect.objectContaining({ id: 'cloud-auto' }),
+        );
+      });
       expect(mockLoadModel).not.toHaveBeenCalled();
     });
 
@@ -337,8 +344,6 @@ describe('AssistantPage', () => {
       stubWebGPU(false);
 
       render(<AssistantPage />, { withProviders: false });
-
-      await screen.findByText('assistant.deviceUnsupportedTitle');
 
       await waitFor(() => {
         const reports = mockCapture.mock.calls.filter(

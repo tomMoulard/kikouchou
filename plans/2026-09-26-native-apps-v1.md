@@ -368,10 +368,10 @@ today.
 * The assistant downloads its model into Cache Storage. Qwen3 1.7B is more
   than 1 GB. Test on a real device that the model survives an app restart and
   a low-storage warning.
-* WebGPU. `probeWebGPUSupport()` already hides the assistant when
-  `navigator.gpu` is missing. Test it in WKWebView on iOS 26 and in the
-  Android System WebView. If the WebView has no WebGPU, the assistant is not
-  in the native app, and the store text must not promise it.
+* WebGPU. Without it the assistant offers the cloud models and Needle only
+  (answer 4 below). Test the probe in WKWebView on iOS 26 and in the Android
+  System WebView. If the local models do not run there, the store text must
+  not name them.
 
 ### A9. Data that is already on the phone
 
@@ -553,8 +553,11 @@ These answers came from the product owner on 2026-09-26.
 3. When the owner of a shared trip deletes the account, nothing happens to the
    trip unless the owner was its last member. A trip with other members goes
    to the member who joined first. A trip with no other member is deleted.
-4. Without WebGPU the assistant page is not shown, on every target. The
-   navigation hides the entry and the route redirects to the trips.
+4. Without WebGPU the assistant stays, and offers only what can run there:
+   the cloud models through OpenRouter, and Needle on the CPU. This replaced
+   the first answer, which hid the page, on 2026-10-22: the OpenRouter models
+   arrived on main, and a page that offers them is not a dead end. In an app,
+   the OpenRouter sign-in returns on `app.kikouchou://openrouter/callback`.
 5. The name is Kikouchou. The remaining "Kikoushou" strings were old and are
    renamed: the passkey display name, the wallet sign-in statement, a cache
    key, and the share service's image name.

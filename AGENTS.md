@@ -1200,8 +1200,14 @@ what the website did before.
   the light, transparent and monochrome variants, the iOS appearances
   (default, dark, tinted) and the Android adaptive icon with its monochrome
   layer and night splash screens. Edit the drawing, never a PNG.
-- **The assistant needs WebGPU.** Without it the navigation hides the entry and
-  the route redirects to the trips, on every target (decided on 2026-09-26).
+- **Without WebGPU, the assistant offers what can run.** The page stays on
+  every target, and the picker lists the cloud models and Needle, which runs
+  on the CPU (`offeredAssistantPresets`). A stored choice that needs WebGPU
+  opens on the cloud router instead, without being overwritten (decided on
+  2026-10-22, replacing the 2026-09-26 rule that hid the page). In an app, the
+  OpenRouter sign-in runs in a browser sheet and returns on
+  `app.kikouchou://openrouter/callback`, a host apart from Supabase's `auth`,
+  so neither exchange ever sees the other's code.
 - **An account can be deleted from the app** (`delete_my_account()`, both
   stores require it). A trip shared with other members goes to the earliest of
   them; a trip nobody else is on is deleted; the device keeps its trips as
