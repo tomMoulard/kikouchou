@@ -20,10 +20,11 @@
  * @module lib/notifications/push
  */
 
+import { db } from '@/lib/db/database';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import type { Json } from '@/lib/supabase/database.types';
 import { mapInviteError } from '@/lib/sync/invites';
-import type { Trip } from '@/types';
+import type { Trip, TripId } from '@/types';
 
 import { getNotificationState, requestNotificationPermission } from './permission';
 
@@ -60,6 +61,15 @@ export interface StoredReminderSubscription {
   readonly endpoint: string;
   readonly subscriptionId: string;
   readonly enabledAt: string;
+  /**
+   * The trip's server id, so turning the reminders off names the trip.
+   *
+   * One browser subscription serves every trip on the device, so an
+   * `unsubscribe_reminders` call with the endpoint alone deletes every trip's
+   * row for it. Absent on a record written before this field existed; the
+   * caller then reads it from the trip row.
+   */
+  readonly remoteTripId?: string;
 }
 
 export interface EnableRemindersOptions {
@@ -145,7 +155,11 @@ export function readReminderSubscription(tripId: string): StoredReminderSubscrip
       typeof (parsed as { subscriptionId?: unknown }).subscriptionId === 'string' &&
       typeof (parsed as { enabledAt?: unknown }).enabledAt === 'string'
     ) {
-      return parsed as StoredReminderSubscription;
+      const remoteTripId: unknown = (parsed as { remoteTripId?: unknown }).remoteTripId;
+      return {
+        ...(parsed as StoredReminderSubscription),
+        ...(typeof remoteTripId === 'string' ? { remoteTripId } : {}),
+      };
     }
     return undefined;
   } catch {
@@ -354,6 +368,7 @@ export async function enableTripReminders(
     endpoint: payload.endpoint,
     subscriptionId: data,
     enabledAt: new Date().toISOString(),
+    ...(trip.remoteTripId !== undefined ? { remoteTripId: trip.remoteTripId } : {}),
   });
   return { status: 'enabled' };
 }
@@ -377,7 +392,18 @@ export async function disableTripReminders(
     return true;
   }
 
-  const { error } = await client.rpc('unsubscribe_reminders', { endpoint: stored.endpoint });
+  // Named, because the endpoint is shared. Every trip on this device rides the
+  // one browser subscription, and the server keys its rows on
+  // `(trip_id, endpoint)`: an endpoint-only call deleted every trip's row,
+  // while the other trips' local records went on saying "on" and their cards
+  // never offered the reminders again. A record from before the id was stored
+  // falls back to the trip row; a trip the server does not know has no row to
+  // name, and the endpoint alone is then all there is.
+  const remoteTripId = stored.remoteTripId ?? (await db.trips.get(tripId as TripId))?.remoteTripId;
+  const { error } = await client.rpc('unsubscribe_reminders', {
+    endpoint: stored.endpoint,
+    ...(remoteTripId !== undefined ? { trip: remoteTripId } : {}),
+  });
 
   // Cleared only once the server has actually forgotten the endpoint.
   //
