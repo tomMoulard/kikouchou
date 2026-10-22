@@ -24,6 +24,8 @@ import {
 } from 'react';
 
 import i18n from '@/lib/i18n';
+import { openInBrowserSheet } from '@/lib/native/oauth';
+import { NATIVE_URL_SCHEME, isNativeApp } from '@/lib/platform';
 import posthog, { captureEvent } from '@/lib/posthog';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantEngine, AssistantModelPreset } from '../models';
@@ -34,7 +36,10 @@ import {
   prepareOpenRouterConnect,
   subscribeOpenRouterConnection,
 } from '../openrouter/auth';
-import { OPENROUTER_CALLBACK_SEGMENT } from '../openrouter/callback';
+import {
+  NATIVE_OPENROUTER_CALLBACK_HOST,
+  OPENROUTER_CALLBACK_SEGMENT,
+} from '../openrouter/callback';
 import { OpenRouterError, streamOpenRouterChat } from '../openrouter/client';
 import type {
   HubProgressEvent,
@@ -593,6 +598,11 @@ function describeOpenRouterError(error: OpenRouterError): string {
  * Where OpenRouter sends the user back: the assistant page, absolute.
  */
 function getOpenRouterCallbackUrl(): string {
+  // A store app's page origin is `capacitor://localhost`, which OpenRouter
+  // cannot send anybody to; the app's own scheme comes back to it instead.
+  if (isNativeApp()) {
+    return `${NATIVE_URL_SCHEME}://${NATIVE_OPENROUTER_CALLBACK_HOST}/callback`;
+  }
   return new URL(
     `${import.meta.env.BASE_URL}${OPENROUTER_CALLBACK_SEGMENT}`,
     window.location.origin,
@@ -983,7 +993,12 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
         provider: 'openrouter',
         model_id: preset.modelId,
       });
-      window.location.assign(url);
+      if (isNativeApp()) {
+        // The page stays; the sheet comes back through `onOpenRouterCallback`.
+        await openInBrowserSheet(url);
+      } else {
+        window.location.assign(url);
+      }
     } catch (err) {
       console.error('Failed to start the OpenRouter sign-in:', err);
       setError(

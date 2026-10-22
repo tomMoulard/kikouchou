@@ -90,14 +90,17 @@ import {
   ASSISTANT_MODEL_PRESETS,
   type AssistantModelPreset,
   DEFAULT_ASSISTANT_MODEL_ID,
+  FALLBACK_ASSISTANT_MODEL_ID,
   getAssistantModelPreset,
   isAssistantModelId,
   isCloudPreset,
+  offeredAssistantPresets,
 } from '../models';
-import { completeOpenRouterConnect } from '../openrouter/auth';
-import { consumeOpenRouterCallback } from '../openrouter/callback';
+import { type OpenRouterCallback, completeOpenRouterConnect } from '../openrouter/auth';
+import { consumeOpenRouterCallback, onOpenRouterCallback } from '../openrouter/callback';
 import posthog, { captureEvent, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
+import { isNativeApp } from '@/lib/platform';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelId } from '@/types';
 
@@ -208,11 +211,14 @@ const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
   onModelChange,
   disabled,
   cachedModelIds,
+  presets,
 }: {
   readonly selectedModelId: AssistantModelId;
   readonly onModelChange: (value: string) => void;
   readonly disabled: boolean;
   readonly cachedModelIds: ReadonlySet<AssistantModelId>;
+  /** The models this device can run (`offeredPresets`). */
+  readonly presets: readonly AssistantModelPreset[];
 }): ReactElement {
   const { t } = useTranslation();
 
@@ -231,7 +237,7 @@ const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent align="end">
-        {ASSISTANT_MODEL_PRESETS.map((preset) => (
+        {presets.map((preset) => (
           <SelectItem key={preset.id} value={preset.id}>
             <span className="inline-flex items-center gap-1.5">
               <span>{presetOptionLabel(preset, t)}</span>
@@ -253,12 +259,15 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
   disabled,
   isCached,
   cachedModelIds,
+  presets,
 }: {
   readonly selectedModelId: AssistantModelId;
   readonly onModelChange: (value: string) => void;
   readonly disabled: boolean;
   readonly isCached: boolean | null;
   readonly cachedModelIds: ReadonlySet<AssistantModelId>;
+  /** The models this device can run (`offeredPresets`). */
+  readonly presets: readonly AssistantModelPreset[];
 }): ReactElement {
   const { t } = useTranslation();
   const selectedModel = getAssistantModelPreset(selectedModelId);
@@ -293,7 +302,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ASSISTANT_MODEL_PRESETS.map((preset) => (
+            {presets.map((preset) => (
               <SelectItem key={preset.id} value={preset.id}>
                 <span className="inline-flex items-center gap-1.5">
                   <span>{presetOptionLabel(preset, t)}</span>
@@ -431,7 +440,12 @@ const CloudConnectCard = memo(function CloudConnectCard({
   onConnect,
   error,
 }: {
-  readonly onConnect: () => void;
+  /**
+   * Starts the sign-in. On the website it resolves as the page leaves for
+   * openrouter.ai. In a store app it resolves when the browser sheet closes,
+   * which hands the button back, whether or not the user signed in.
+   */
+  readonly onConnect: () => Promise<void>;
   readonly error: string | null;
 }): ReactElement {
   const { t } = useTranslation();
@@ -452,7 +466,11 @@ const CloudConnectCard = memo(function CloudConnectCard({
 
   const handleConnect = useCallback((): void => {
     setIsStarting(true);
-    onConnect();
+    void onConnect().finally(() => {
+      if (isNativeApp()) {
+        setIsStarting(false);
+      }
+    });
   }, [onConnect]);
 
   return (
@@ -916,6 +934,23 @@ function AssistantPageComponent(): ReactElement {
     webgpuSupport,
   );
 
+  // A device without WebGPU is offered the models it can run: the cloud ones,
+  // and Needle, which runs on the CPU. The page stays, because a cloud model
+  // works anywhere (decided on 2026-10-22). Everything is listed while the
+  // probe runs, so the picker does not flicker on a capable device.
+  const offeredPresets = useMemo(
+    () => offeredAssistantPresets(webgpuSupport),
+    [webgpuSupport],
+  );
+
+  // And it does not open on a model it cannot run. The fallback is shown, not
+  // saved: the stored choice comes back on a device that has WebGPU.
+  useEffect(() => {
+    if (!offeredPresets.some((preset) => preset.id === selectedModelId)) {
+      setSelectedModelId(FALLBACK_ASSISTANT_MODEL_ID);
+    }
+  }, [offeredPresets, selectedModelId]);
+
   const [messages, setMessages] = useState<ChatMessageData[]>(() =>
     loadAssistantChatMessages(),
   );
@@ -1028,30 +1063,36 @@ function AssistantPageComponent(): ReactElement {
   // Back from openrouter.ai: exchange the code for the key. Once per page load,
   // which consumeOpenRouterCallback enforces across StrictMode's remount.
   useEffect(() => {
-    const callback = consumeOpenRouterCallback();
-    if (callback === null) return;
+    const finish = (callback: OpenRouterCallback): void => {
+      void completeOpenRouterConnect(callback).then((result) => {
+        if (result.ok) {
+          captureEvent('assistant_provider_connected', { provider: 'openrouter' });
+          // Deliberately a raw confirmation: the key is a device preference.
+          notify.success(
+            tRef.current('assistant.cloud.connected', 'OpenRouter account connected'),
+          );
+          return;
+        }
 
-    void completeOpenRouterConnect(callback).then((result) => {
-      if (result.ok) {
-        captureEvent('assistant_provider_connected', { provider: 'openrouter' });
-        // Deliberately a raw confirmation: the key is a device preference.
-        notify.success(
-          tRef.current('assistant.cloud.connected', 'OpenRouter account connected'),
+        captureEvent('assistant_provider_connect_failed', {
+          provider: 'openrouter',
+          reason: result.reason,
+        });
+        notify.error(
+          tRef.current(
+            'assistant.cloud.connectFailed',
+            'Could not connect your OpenRouter account. Try again.',
+          ),
         );
-        return;
-      }
-
-      captureEvent('assistant_provider_connect_failed', {
-        provider: 'openrouter',
-        reason: result.reason,
       });
-      notify.error(
-        tRef.current(
-          'assistant.cloud.connectFailed',
-          'Could not connect your OpenRouter account. Try again.',
-        ),
-      );
-    });
+    };
+
+    const callback = consumeOpenRouterCallback();
+    if (callback !== null) {
+      finish(callback);
+    }
+    // A store app's sign-in returns as a link while this page stays mounted.
+    return onOpenRouterCallback(finish);
   }, []);
 
   // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
@@ -1526,6 +1567,7 @@ function AssistantPageComponent(): ReactElement {
                 }}
                 disabled={isModelSelectionLocked}
                 cachedModelIds={cachedModelIds}
+                presets={offeredPresets}
               />
               {isCloud ? (
                 <Button
@@ -1573,15 +1615,11 @@ function AssistantPageComponent(): ReactElement {
             disabled={isModelSelectionLocked}
             isCached={isCached}
             cachedModelIds={cachedModelIds}
+            presets={offeredPresets}
           />
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {isCloud ? (
-              <CloudConnectCard
-                onConnect={() => {
-                  void connect();
-                }}
-                error={error}
-              />
+              <CloudConnectCard onConnect={connect} error={error} />
             ) : (
               <ModelLoadingCard
                 onLoad={loadModel}

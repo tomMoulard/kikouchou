@@ -10,6 +10,8 @@
 
 import type { AssistantModelId } from '@/types';
 
+import type { WebGPUSupport } from './webgpu';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -342,6 +344,29 @@ const REPLACED_ASSISTANT_MODEL_IDS: Readonly<Record<string, AssistantModelId>> =
 /**
  * Whether the preset runs off the device, through the user's OpenRouter key.
  */
+/**
+ * The model a device falls back to when its stored choice needs WebGPU it does
+ * not have: the cloud router, which runs anywhere.
+ */
+export const FALLBACK_ASSISTANT_MODEL_ID: AssistantModelId = 'cloud-auto';
+
+/**
+ * The presets a device can run, given what the WebGPU probe answered.
+ *
+ * Every preset while the probe runs (`null`) and when it succeeds. Otherwise
+ * the ones that need no GPU: the cloud models and Needle's CPU router.
+ *
+ * @param webgpu - The probe's answer, or `null` while it runs
+ */
+export function offeredAssistantPresets(
+  webgpu: WebGPUSupport | null,
+): readonly AssistantModelPreset[] {
+  if (webgpu === null || webgpu === 'supported') {
+    return ASSISTANT_MODEL_PRESETS;
+  }
+  return ASSISTANT_MODEL_PRESETS.filter((preset) => preset.device !== 'webgpu');
+}
+
 export function isCloudPreset(preset: AssistantModelPreset): boolean {
   return preset.engine === 'openrouter';
 }

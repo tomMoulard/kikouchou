@@ -10,6 +10,8 @@ import { formatBytes } from '@/lib/utils/format-bytes';
 import {
   ASSISTANT_MODEL_PRESETS,
   DEFAULT_ASSISTANT_MODEL_ID,
+  FALLBACK_ASSISTANT_MODEL_ID,
+  offeredAssistantPresets,
   getAssistantModelPreset,
   isAssistantModelId,
   isCloudPreset,
@@ -152,5 +154,29 @@ describe('assistant model presets', () => {
     expect(isAssistantModelId('cloud-claude-haiku')).toBe(true);
     expect(isAssistantModelId('cloud-claude-sonnet')).toBe(true);
     expect(isAssistantModelId('cloud-gpt-sol')).toBe(true);
+  });
+});
+
+describe('offeredAssistantPresets', () => {
+  it('offers everything while the probe runs, and on a device with WebGPU', () => {
+    expect(offeredAssistantPresets(null)).toEqual(ASSISTANT_MODEL_PRESETS);
+    expect(offeredAssistantPresets('supported')).toEqual(ASSISTANT_MODEL_PRESETS);
+  });
+
+  it.each(['no-api', 'no-adapter', 'probe-failed'] as const)(
+    'offers only what runs without a GPU when the probe says %s',
+    (answer) => {
+      const offered = offeredAssistantPresets(answer);
+
+      expect(offered.length).toBeGreaterThan(0);
+      expect(offered.every((preset) => preset.device !== 'webgpu')).toBe(true);
+      expect(offered.some((preset) => preset.id === 'needle-v3')).toBe(true);
+    },
+  );
+
+  it('falls back to a model every device can run', () => {
+    expect(
+      offeredAssistantPresets('no-api').some((preset) => preset.id === FALLBACK_ASSISTANT_MODEL_ID),
+    ).toBe(true);
   });
 });

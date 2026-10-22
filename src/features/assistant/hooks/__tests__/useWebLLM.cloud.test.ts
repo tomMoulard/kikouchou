@@ -20,6 +20,18 @@ import { useWebLLM } from '../useWebLLM';
 // Mocks
 // ============================================================================
 
+const shell = vi.hoisted(() => ({
+  native: false,
+  openSheet: vi.fn<(url: string) => Promise<void>>(async () => undefined),
+}));
+
+vi.mock('@/lib/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform')>()),
+  isNativeApp: () => shell.native,
+}));
+
+vi.mock('@/lib/native/oauth', () => ({ openInBrowserSheet: shell.openSheet }));
+
 vi.mock('@/lib/i18n', () => ({
   default: {
     t: (key: string, options?: { readonly defaultValue?: string }) =>
@@ -175,6 +187,23 @@ describe('useWebLLM with a cloud preset', () => {
     });
 
     expect(result.current.status).toBe('ready');
+  });
+
+  it('opens OpenRouter in a browser sheet in a store app, returning on the app scheme', async () => {
+    shell.native = true;
+    try {
+      const { result } = renderHook(() => useWebLLM(preset));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(shell.openSheet).toHaveBeenCalledTimes(1);
+      const url = new URL(shell.openSheet.mock.calls[0]![0]);
+      expect(url.origin).toBe('https://openrouter.ai');
+      expect(url.searchParams.get('callback_url')).toBe('app.kikouchou://openrouter/callback');
+    } finally {
+      shell.native = false;
+    }
   });
 
   it('sends the user to OpenRouter on connect, with the assistant as callback', async () => {

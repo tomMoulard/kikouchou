@@ -15,6 +15,9 @@
  *   straight to the route the redirect would reach.
  * - A link with `?code=` or `?error=` is a sign-in coming back, from the
  *   OAuth browser sheet (`app.kikouchou://auth/callback`) or a magic link.
+ * - `app.kikouchou://openrouter/callback?code=…` is the assistant's OpenRouter
+ *   sign-in coming back. It is not a Supabase code, and must never reach the
+ *   Supabase exchange.
  *
  * Pure: every origin comes in as a parameter, so nothing here reads
  * `window.location`.
@@ -30,6 +33,8 @@
 export type DeepLinkTarget =
   /** A sign-in answer. The caller hands the URL to `deliverAuthCallbackUrl`. */
   | { readonly kind: 'auth'; readonly then: string | null }
+  /** The assistant's OpenRouter sign-in, for `deliverOpenRouterCallbackUrl`. */
+  | { readonly kind: 'openrouter' }
   /** A route inside the app, with its query and fragment. */
   | { readonly kind: 'navigate'; readonly to: string }
   /** Not a Kikouchou link, or one the app has no screen for. */
@@ -121,7 +126,13 @@ export function resolveDeepLink(rawUrl: string, origins: DeepLinkOrigins): DeepL
   if (url.protocol === `${origins.scheme}:`) {
     // `app.kikouchou://auth/callback?code=…`: WHATWG puts `auth` in the host
     // for a non-special scheme, and the path after it.
-    return hasAuthAnswer(url) ? { kind: 'auth', then: null } : { kind: 'ignore' };
+    if (!hasAuthAnswer(url)) {
+      return { kind: 'ignore' };
+    }
+    if (url.host === 'openrouter') {
+      return { kind: 'openrouter' };
+    }
+    return url.host === 'auth' ? { kind: 'auth', then: null } : { kind: 'ignore' };
   }
 
   if (url.protocol !== 'https:') {

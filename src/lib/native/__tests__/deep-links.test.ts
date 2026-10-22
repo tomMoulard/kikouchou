@@ -71,6 +71,16 @@ describe('resolveDeepLink', () => {
     });
   });
 
+  it('tells the assistant\'s OpenRouter sign-in apart from a Supabase one', () => {
+    expect(
+      resolveDeepLink('app.kikouchou://openrouter/callback?code=abc&state=s', ORIGINS),
+    ).toEqual({ kind: 'openrouter' });
+    // An unknown host on the app scheme reaches neither exchange.
+    expect(resolveDeepLink('app.kikouchou://other/callback?code=abc', ORIGINS)).toEqual({
+      kind: 'ignore',
+    });
+  });
+
   it('ignores the app scheme without an answer, and every other host', () => {
     expect(resolveDeepLink('app.kikouchou://somewhere', ORIGINS)).toEqual({ kind: 'ignore' });
     expect(resolveDeepLink('https://evil.example/join/abc', ORIGINS)).toEqual({ kind: 'ignore' });
