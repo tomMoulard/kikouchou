@@ -27,6 +27,7 @@ import {
   type ImportGuestGroupResult,
 } from '@/lib/db/repositories/guest-group-repository';
 import { useGuestGroupSync } from '@/lib/sync/GuestGroupSync';
+import { rememberGuestGroupDeletion } from '@/lib/sync/guest-groups';
 import type {
   GuestGroup,
   GuestGroupFormData,
@@ -105,8 +106,10 @@ export function useGuestGroups(): UseGuestGroupsResult {
   const deleteGroup = useCallback(
     async (id: GuestGroupId): Promise<void> => {
       await deleteGuestGroupRecord(id);
-      // The push is what carries the deletion: the row goes from the server on
-      // the owner's next sync, and other devices prune it from there.
+      // Recorded for the sync to carry: the push is an upsert of what Dexie
+      // holds, so on its own it says nothing about a row that is no longer
+      // there, and the pull would put the server's copy straight back.
+      rememberGuestGroupDeletion(id);
       syncNow();
     },
     [syncNow],

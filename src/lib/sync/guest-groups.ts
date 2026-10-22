@@ -88,6 +88,8 @@ export type GuestGroupSyncResult =
       readonly pushed: number;
       /** Local groups dropped because the server no longer lists them. */
       readonly pruned: number;
+      /** Groups this device deleted, now deleted on the server too. */
+      readonly deleted: number;
     }
   | {
       readonly status: 'error';
@@ -382,6 +384,100 @@ async function pushGuestGroups(
 }
 
 // ============================================================================
+// Deletions
+// ============================================================================
+
+/**
+ * Where the local ids of deleted groups wait until the server has been told.
+ *
+ * A deletion has to be carried, because nothing else can infer it: the push
+ * is an upsert of what Dexie holds, and the pull restores any server row Dexie
+ * does not hold, since a row this device never uploaded is not evidence of a
+ * deletion. Without this record a deleted group came back within a second —
+ * put back by the pull, then uploaded again by the push — and could not be
+ * deleted at all. Device-local, like the reminder records: the list belongs to
+ * this device's sync position, not to the account.
+ */
+const DELETIONS_KEY = 'kikouchou-guest-group-deletions';
+
+function readPendingDeletions(): string[] {
+  try {
+    const raw = window.localStorage.getItem(DELETIONS_KEY);
+    if (raw === null) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingDeletions(ids: readonly string[]): void {
+  try {
+    if (ids.length === 0) {
+      window.localStorage.removeItem(DELETIONS_KEY);
+    } else {
+      window.localStorage.setItem(DELETIONS_KEY, JSON.stringify(ids));
+    }
+  } catch {
+    // Storage refused: the next sync will not know about this deletion, and
+    // the group comes back. Nothing better is available without a backend.
+  }
+}
+
+/**
+ * Records that a group was deleted on this device, for the next sync to carry.
+ *
+ * Call it right after the Dexie delete and before `syncNow`. Signed out, the
+ * id simply waits: the first sync after sign-in deletes the row.
+ *
+ * @param localId - The deleted group's id
+ */
+export function rememberGuestGroupDeletion(localId: GuestGroupId): void {
+  const pending = readPendingDeletions();
+  if (!pending.includes(localId)) {
+    writePendingDeletions([...pending, localId]);
+  }
+}
+
+/**
+ * Deletes on the server every group this device deleted, then forgets them.
+ *
+ * Runs before the pull, so the pull cannot put a deleted group back. Keyed on
+ * `(owner_id, local_id)`, the same pair the upsert uses: a group uploaded under
+ * another account matches nothing here, and nothing is lost by that — that
+ * account's pull never listed it for this one.
+ *
+ * @returns How many deletions were sent
+ */
+async function pushGuestGroupDeletions(
+  client: TypedSupabaseClient,
+  userId: string,
+): Promise<number> {
+  const pending = readPendingDeletions();
+  if (pending.length === 0) {
+    return 0;
+  }
+
+  const { error } = await client.from(TABLE)
+    .delete()
+    .eq('owner_id', userId)
+    .in('local_id', pending);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Re-read rather than overwrite: a deletion recorded while the request was
+  // in flight must survive it.
+  writePendingDeletions(readPendingDeletions().filter((id) => !pending.includes(id)));
+  return pending.length;
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -417,10 +513,11 @@ export async function syncGuestGroups(
   }
 
   try {
-    const { pulled, pruned } = await pullGuestGroups(client, userId),
+    const deleted = await pushGuestGroupDeletions(client, userId),
+      { pulled, pruned } = await pullGuestGroups(client, userId),
       pushed = await pushGuestGroups(client, userId);
 
-    return { status: 'synced', pulled, pushed, pruned };
+    return { status: 'synced', pulled, pushed, pruned, deleted };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
