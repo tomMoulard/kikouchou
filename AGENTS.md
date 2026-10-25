@@ -319,14 +319,20 @@ How the seed behaves, and why:
   that uploads nothing. Do not add a settings read to that live query: it made
   `trip-sharing-sync.spec.ts` fail twice as often under load. For the same reason it has no guest group: a group is synced with the
   account.
-- **It is not the user's own trip.** `TripsEntryRedirect` and `TripCreatePage`
-  do not count it, so a first open still goes to `/trips/new` and gets the
-  first-trip wizard. The "plan your own trip" card does not count it either.
-  Read it from `useTripContext().sampleTripId`.
+- **A first open lands on the trip list, with the pet on.** `/` always
+  redirects to `/trips`, where the sample is the first row. When the seed
+  answers `seeded`, `main.tsx` also turns the pet on (`storePetEnabled`). Only
+  that outcome does it: a returning device keeps its own choice, because a
+  pet turned off with the default animal is stored as nothing at all, and a
+  new default would turn it back on.
+- **It is not the user's own trip.** `TripCreatePage` does not count it, so
+  "New trip" on a first open still gets the first-trip wizard. The "plan your
+  own trip" card does not count it either. Read it from
+  `useTripContext().sampleTripId`.
 - **It starts two weeks from today.** Dates are relative, so the sample does not
   go stale, and no reminder or "leave now" notice fires for it.
 - **Automation does not get it.** `navigator.webdriver` turns the seed off, so
-  every e2e spec opens an empty app, also on the live run.
+  every e2e spec opens an empty app with no pet, also on the live run.
   `e2e/sample-trip.spec.ts` sets `localStorage['kikouchou-sample-trip'] = 'on'`
   to turn it back on.
 

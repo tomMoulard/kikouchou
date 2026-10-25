@@ -26,8 +26,6 @@ export { TripCreatePage } from './pages/TripCreatePage';
 
 export { TripEditPage } from './pages/TripEditPage';
 
-export { TripsEntryRedirect } from './pages/TripsEntryRedirect';
-
 // ============================================================================
 // Components
 // ============================================================================

@@ -49,10 +49,9 @@ export function useRemoteTrips(localTripCount: number): {
    *
    * The section below a trip list does not need this — an empty list renders
    * as nothing, and rows appearing a moment later is the whole point. What
-   * needs it is a caller that must act on "there is nothing anywhere", such as
-   * the root redirect in `pages/TripsEntryRedirect`: for that one, an empty
-   * array before the lookup has answered and an empty array after it are two
-   * different facts.
+   * needs it is a caller that must act on "there is nothing anywhere": for
+   * that one, an empty array before the lookup has answered and an empty array
+   * after it are two different facts.
    *
    * Signed out or offline it is false from the first effect: there is nothing
    * to look up, and that is an answer rather than a wait.

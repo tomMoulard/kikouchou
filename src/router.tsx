@@ -7,6 +7,7 @@
 
 import { type ReactElement, Suspense, lazy, useEffect, useState } from 'react';
 import {
+  Navigate,
   Outlet,
   type RouteObject,
   createBrowserRouter,
@@ -26,7 +27,6 @@ import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/c
 
 // Feature route imports
 import { tripRoutes } from '@/features/trips/routes';
-import { TripsEntryRedirect } from '@/features/trips/pages/TripsEntryRedirect';
 import { calendarRoutes } from '@/features/calendar/routes';
 import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
@@ -294,11 +294,12 @@ export const appRoutes: RouteObject = {
   element: <LayoutWrapper />,
   errorElement: <ErrorPage />,
   children: [
-    // Index redirect: the trip list, or the create form on a first launch with
-    // nothing to open. See `features/trips/pages/TripsEntryRedirect`.
+    // Index redirect: the trip list, always. A first open lands there too, on
+    // the sample trip with the pet turned on (see `main.tsx`), and the
+    // first-trip wizard is one "New trip" away.
     {
       index: true,
-      element: <TripsEntryRedirect />,
+      element: <Navigate to="/trips" replace />,
     },
 
     // Trip management routes
