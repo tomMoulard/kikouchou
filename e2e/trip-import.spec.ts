@@ -198,9 +198,6 @@ test.describe('Trip Import Feature', () => {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
     );
 
-    // `/trips`, not `/`: the root sends a first launch with no trips to the
-    // create form (see `TripsEntryRedirect`), and these tests start on the
-    // trip list.
     await page.goto('/trips');
     // Wait for the app to load
     await page.waitForLoadState('load');

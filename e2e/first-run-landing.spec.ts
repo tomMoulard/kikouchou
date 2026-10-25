@@ -1,11 +1,11 @@
 /**
  * @fileoverview E2E tests for where the app's root sends a visitor.
  *
- * The rule, from `src/features/trips/pages/TripsEntryRedirect`: a first launch
- * with nothing to open lands on the create form, and everything else lands on
- * the trip list. What is worth driving in a real browser rather than in jsdom
- * is the part that spans launches — the form once, the list ever after — and
- * the way out of the form, because a landing page nobody can leave is a trap.
+ * The rule, from the index route in `src/router.tsx`: `/` is the trip list,
+ * on a first launch as on every other. A first launch used to land on the
+ * create form; it now lands on the list, which a real device opens on the
+ * sample trip (see `e2e/sample-trip.spec.ts`). Under automation the seed is
+ * off, so here the first launch is an empty list.
  *
  * @module e2e/first-run-landing
  */
@@ -39,36 +39,9 @@ async function clearEverything(page: import('@playwright/test').Page): Promise<v
 // ============================================================================
 
 test.describe('First-run landing', () => {
-  test('a first launch with no trips lands on the create form', async ({ page }) => {
+  test('a first launch with no trips lands on the trip list', async ({ page }) => {
     await clearEverything(page);
 
-    await page.goto('/');
-
-    await expect(page).toHaveURL(/\/trips\/new$/);
-  });
-
-  test('cancelling the form gives the visitor the trip list', async ({ page }) => {
-    await clearEverything(page);
-
-    await page.goto('/');
-    await expect(page).toHaveURL(/\/trips\/new$/);
-
-    // A first launch gets the first-trip wizard, and Back on its first
-    // question is the way out.
-    await page.getByRole('button', { name: /^(back|retour)$/iu }).click();
-
-    await expect(page).toHaveURL(/\/trips$/);
-    await expect(page.getByText('No trips yet')).toBeVisible();
-  });
-
-  test('the next launch lands on the list, not on the form again', async ({ page }) => {
-    await clearEverything(page);
-
-    await page.goto('/');
-    await expect(page).toHaveURL(/\/trips\/new$/);
-
-    // A second launch, with the database still empty: the form was offered
-    // once and turned down, so the list is what this visitor gets.
     await page.goto('/');
 
     await expect(page).toHaveURL(/\/trips$/);

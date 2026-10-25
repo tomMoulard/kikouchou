@@ -10,8 +10,8 @@
  * between the trip and the flag.
  *
  * The sample is device-local by decision: `settings.sampleTripId` names it, the
- * account sweep and `ensureRemoteTrip` refuse to upload it, and the first-run
- * redirect does not count it as a trip of the user's own.
+ * account sweep and `ensureRemoteTrip` refuse to upload it, and the create
+ * page does not count it as a trip of the user's own.
  *
  * @module features/trips/utils/seed-sample-trip
  */

@@ -65,23 +65,38 @@ async function sampleTripId(page: Page): Promise<string> {
 // ============================================================================
 
 test.describe('Sample trip', () => {
-  test('a first open still lands on the create form, with the sample in the list', async ({
-    page,
-  }) => {
+  test('a first open lands on the trip list, with the sample and the pet', async ({ page }) => {
     await firstOpenIn(page, 'en');
 
     await page.goto('/');
-    await expect(page).toHaveURL(/\/trips\/new$/);
-
-    await page.goto('/trips');
+    await expect(page).toHaveURL(/\/trips$/);
     await waitForRoute(page);
     await expect(page.getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(page.getByTestId('pet')).toBeVisible();
+  });
+
+  test('a returning device keeps the pet off', async ({ page }) => {
+    await firstOpenIn(page, 'en');
+    await page.goto('/trips');
+    await waitForRoute(page);
+    await expect(page.getByTestId('pet')).toBeVisible();
+
+    // Turned off with the default animal, the preference is stored as nothing
+    // at all: only the first open may turn it on, never a later boot.
+    await page.evaluate(() => {
+      localStorage.removeItem('kikouchou-pet');
+    });
+    await page.reload();
+    await waitForRoute(page);
+
+    await expect(page.getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(page.getByTestId('pet')).toHaveCount(0);
   });
 
   test('the sample shows rooms, guests, transports and money', async ({ page }) => {
     await firstOpenIn(page, 'en');
     await page.goto('/');
-    await expect(page).toHaveURL(/\/trips\/new$/);
+    await expect(page).toHaveURL(/\/trips$/);
     const tripId = await sampleTripId(page);
 
     await page.goto(`/trips/${tripId}/rooms`);

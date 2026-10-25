@@ -93,8 +93,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
    *
    * A first trip gets the wizard, one question per screen. Somebody who has
    * made a trip before knows the one-page form and gets it. The sample trip
-   * seeded on first open is not the visitor's own, so it does not count, the
-   * same rule `TripsEntryRedirect` applies.
+   * seeded on first open is not the visitor's own, so it does not count.
    */
   const ownTripCount = useMemo(
     () => trips.filter((trip) => trip.id !== sampleTripId).length,

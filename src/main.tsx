@@ -23,6 +23,7 @@ import { getCurrentLanguage, i18nReady } from '@/lib/i18n';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { storePetEnabled } from '@/features/pet/lib/pet-preferences';
 import {
   seedSampleTripOnce,
   shouldOfferSampleTrip,
@@ -105,12 +106,20 @@ async function initializeApp(): Promise<void> {
     //
     // The sample trip goes first: it tells a first open from a returning one by
     // the settings row that ensureSettings() is about to create. A failed seed
-    // costs the sample and nothing else.
+    // costs the sample and nothing else. The first open also turns the pet on,
+    // so the new visitor meets it beside the sample; a returning device keeps
+    // whatever it chose.
     await Promise.race([
       (shouldOfferSampleTrip()
-        ? seedSampleTripOnce(getCurrentLanguage()).catch((error: unknown) => {
-            console.error('Failed to seed the sample trip:', error);
-          })
+        ? seedSampleTripOnce(getCurrentLanguage())
+            .then((outcome) => {
+              if (outcome === 'seeded') {
+                storePetEnabled(true);
+              }
+            })
+            .catch((error: unknown) => {
+              console.error('Failed to seed the sample trip:', error);
+            })
         : Promise.resolve()
       )
         // iOS Safari can hand the page a dead IndexedDB connection; one reopen
