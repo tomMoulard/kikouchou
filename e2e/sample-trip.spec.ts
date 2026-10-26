@@ -11,6 +11,7 @@
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { waitForCapturedProperties } from './support/analytics';
 import { guestCards, roomCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
 
@@ -101,6 +102,26 @@ test.describe('Sample trip', () => {
 
     await calendar.click();
     await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/calendar$`));
+  
+    expect(await waitForCapturedProperties(page, 'sample_trip_viewed')).toEqual({
+      page: 'calendar',
+      via: 'nav',
+    });
+  });
+
+  test('opening the sample from the list is reported', async ({ page }) => {
+    await firstOpenIn(page, 'en');
+    await page.goto('/trips');
+    await waitForRoute(page);
+    const tripId = await sampleTripId(page);
+
+    await tripList(page).getByRole('button', { name: /^Sample trip: summer in Provence,/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/calendar$`));
+
+    expect(await waitForCapturedProperties(page, 'sample_trip_viewed')).toEqual({
+      page: 'calendar',
+      via: 'list',
+    });
   });
 
   test('a returning device keeps the pet off', async ({ page }) => {

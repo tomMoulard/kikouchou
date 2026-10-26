@@ -330,6 +330,12 @@ How the seed behaves, and why:
   pages in the bottom bar and the sidebar then work from the first tap.
   Without it, every trip-gated item stayed disabled until the user opened
   the sample from the list.
+- **A look at it is reported, not the selection.** `useSampleTripViewReport`
+  in `Layout` fires `sample_trip_viewed` with `page` and `via` for each page
+  of the sample that opens. `via` comes from router state: `OPENED_FROM_LIST`
+  on the trip list, `OPENED_FROM_NAV` on the navigation links. A new link
+  into a trip page sets its own, or it reports `other`. It is not a usage
+  action, because a demo is not a trip being planned.
 - **It is not the user's own trip.** `TripCreatePage` does not count it, so
   "New trip" on a first open still gets the first-trip wizard. The "plan your
   own trip" card does not count it either. Read it from

@@ -21,6 +21,7 @@ import {
   ImportTripQrDialog,
   ShareDialog,
 } from '@/features/sharing';
+import { OPENED_FROM_LIST } from '@/hooks/useSampleTripViewReport';
 import { useTripContext } from '@/contexts/TripContext';
 import { setTripArchived } from '@/lib/db';
 import { ArchivedTripsSection } from '../components/ArchivedTripsSection';
@@ -194,7 +195,7 @@ const TripListPage = memo(function TripListPage() {
       setIsNavigating(true);
       try {
         await setCurrentTrip(trip.id);
-        navigate(`/trips/${trip.id}/calendar`);
+        navigate(`/trips/${trip.id}/calendar`, { state: OPENED_FROM_LIST });
       } catch (err) {
         // Error is already captured in context, just reset navigation state
         console.error('Failed to select trip:', err);
