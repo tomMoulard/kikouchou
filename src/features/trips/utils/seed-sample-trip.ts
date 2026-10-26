@@ -9,6 +9,9 @@
  * opening at once cannot seed twice, and neither can a reload that lands
  * between the trip and the flag.
  *
+ * The sample is also the current trip of a first open, so the trip pages in
+ * the navigation work from the first tap instead of waiting for a pick.
+ *
  * The sample is device-local by decision: `settings.sampleTripId` names it, the
  * account sweep and `ensureRemoteTrip` refuse to upload it, and the create
  * page does not count it as a trip of the user's own.
@@ -135,6 +138,7 @@ export async function seedSampleTripOnce(
         language,
         sampleTripSeeded: true,
         sampleTripId: rows.trip.id,
+        currentTripId: rows.trip.id,
       });
       return 'seeded';
     },

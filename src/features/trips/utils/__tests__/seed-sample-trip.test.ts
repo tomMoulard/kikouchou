@@ -39,7 +39,7 @@ describe('seedSampleTripOnce', () => {
     expect(settings.sampleTripId).toBe(trips[0]?.id);
     expect(settings.sampleTripSeeded).toBe(true);
     expect(settings.language).toBe('fr');
-    expect(settings.currentTripId).toBeUndefined();
+    expect(settings.currentTripId).toBe(trips[0]?.id);
 
     for (const table of [
       db.rooms,

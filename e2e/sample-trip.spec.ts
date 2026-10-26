@@ -9,7 +9,7 @@
  * @module e2e/sample-trip
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { guestCards, roomCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
@@ -60,6 +60,17 @@ async function sampleTripId(page: Page): Promise<string> {
   return id!;
 }
 
+/**
+ * The page's own content. The sample is the current trip of a first open, so
+ * its name also shows in the header and the sidebar.
+ *
+ * @param page - Playwright page object
+ * @returns The main region
+ */
+function tripList(page: Page): Locator {
+  return page.getByRole('main');
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -71,8 +82,25 @@ test.describe('Sample trip', () => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/trips$/);
     await waitForRoute(page);
-    await expect(page.getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Sample trip: summer in Provence')).toBeVisible();
     await expect(page.getByTestId('pet')).toBeVisible();
+  });
+
+  test('a first open selects the sample, so the bottom bar works', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await firstOpenIn(page, 'en');
+
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/trips$/);
+    await waitForRoute(page);
+    const tripId = await sampleTripId(page);
+
+    const nav = page.locator('nav[aria-label="Mobile navigation"]');
+    const calendar = nav.getByRole('link', { name: /^calendar$/i });
+    await expect(calendar).not.toHaveAttribute('aria-disabled', 'true');
+
+    await calendar.click();
+    await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/calendar$`));
   });
 
   test('a returning device keeps the pet off', async ({ page }) => {
@@ -89,7 +117,7 @@ test.describe('Sample trip', () => {
     await page.reload();
     await waitForRoute(page);
 
-    await expect(page.getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Sample trip: summer in Provence')).toBeVisible();
     await expect(page.getByTestId('pet')).toHaveCount(0);
   });
 
@@ -122,14 +150,14 @@ test.describe('Sample trip', () => {
     await page.goto('/trips');
     await waitForRoute(page);
 
-    await expect(page.getByText('Voyage exemple : l’été en Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Voyage exemple : l’été en Provence')).toBeVisible();
   });
 
   test('the sample is seeded once, and stays deleted', async ({ page }) => {
     await firstOpenIn(page, 'en');
     await page.goto('/trips');
     await waitForRoute(page);
-    await expect(page.getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Sample trip: summer in Provence')).toBeVisible();
 
     // Delete it the way the database sees it, then open the app again.
     const tripId = await sampleTripId(page);
