@@ -325,6 +325,11 @@ How the seed behaves, and why:
   that outcome does it: a returning device keeps its own choice, because a
   pet turned off with the default animal is stored as nothing at all, and a
   new default would turn it back on.
+- **It is the current trip of a first open.** The seed writes
+  `currentTripId` beside `sampleTripId`, in the same transaction. The trip
+  pages in the bottom bar and the sidebar then work from the first tap.
+  Without it, every trip-gated item stayed disabled until the user opened
+  the sample from the list.
 - **It is not the user's own trip.** `TripCreatePage` does not count it, so
   "New trip" on a first open still gets the first-trip wizard. The "plan your
   own trip" card does not count it either. Read it from
