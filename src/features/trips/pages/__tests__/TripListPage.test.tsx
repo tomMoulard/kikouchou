@@ -294,7 +294,10 @@ describe('TripListPage', () => {
     await user.click(screen.getByText('Test Trip'));
     await waitFor(() => {
       expect(mockSetCurrentTrip).toHaveBeenCalledWith('trip-1');
-      expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/calendar');
+      // The state tells the sample trip's view report the user came from the list.
+      expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/calendar', {
+        state: { via: 'list' },
+      });
     });
   });
 

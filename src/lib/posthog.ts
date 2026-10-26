@@ -1025,6 +1025,7 @@ export type AnalyticsEvent =
   // Reading what the app worked out
   | 'analytics_viewed'
   | 'calendar_view_changed'
+  | 'sample_trip_viewed'
   | 'summary_printed'
   | 'transports_view_opened'
   // Install and reminders

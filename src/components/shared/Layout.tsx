@@ -53,6 +53,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { useActivePalette } from '@/hooks/useActivePalette';
 import { useToday } from '@/hooks/useToday';
 import { useMobileNavPreferences } from '@/hooks/useMobileNavPreferences';
+import { OPENED_FROM_NAV, useSampleTripViewReport } from '@/hooks/useSampleTripViewReport';
 import {
   useCompactNavViewport,
   useShortLandscapeViewport,
@@ -411,7 +412,7 @@ const MobileNav = memo(function MobileNav({
   const handleMoreItemClick = useCallback((path: string) => {
     setIsMoreOpen(false);
     // Defer navigation to let Sheet exit animation start before route change
-    requestAnimationFrame(() => navigate(path));
+    requestAnimationFrame(() => navigate(path, { state: OPENED_FROM_NAV }));
   }, [navigate, setIsMoreOpen]);
 
   // Check if any "More" item's route is currently active
@@ -453,6 +454,7 @@ const MobileNav = memo(function MobileNav({
                 */}
                 <Link
                   to={path}
+                  state={OPENED_FROM_NAV}
                   onClick={(e) => { if (isDisabled) e.preventDefault(); }}
                   className={cn(
                     'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
@@ -860,6 +862,7 @@ const NavLinkItem = memo(function NavLinkItem({
       <Link
         ref={linkRef}
         to={path}
+        state={OPENED_FROM_NAV}
         onClick={(e) => {
           if (isDisabled) e.preventDefault();
         }}
@@ -1193,6 +1196,10 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
 
   /** Whether the bottom bar is actually on screen below `md`. */
    isBottomBarDrawn = showBottomBar && !hideNavigation;
+
+  // Here because every page renders inside this layout, so one hook sees
+  // every page of the sample a user opens.
+  useSampleTripViewReport();
 
   /*
     The bottom stack in `src/index.css` counts the bar's 4rem under every FAB,
