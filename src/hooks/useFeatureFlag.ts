@@ -11,6 +11,10 @@
  * in `localStorage` (`kikouchou-flag:<key>` = `on` | `off`) wins over both, so
  * a developer or an end-to-end test can force an arm without a PostHog project.
  *
+ * An experiment's flag is multivariate, and `isFeatureEnabled` answers `true`
+ * for its control arm as well as its test arm, so {@link useFeatureFlag} cannot
+ * tell them apart. {@link useFeatureFlagVariant} returns the variant key.
+ *
  * @module hooks/useFeatureFlag
  */
 
@@ -61,17 +65,101 @@ export function readFlagOverride(key: string): boolean | undefined {
   }
 }
 
-function initialValue(key: string): boolean | undefined {
-  const override = readFlagOverride(key);
-  if (override !== undefined) {
-    return override;
+/**
+ * A forced variant for one flag, or `undefined` when none is set.
+ *
+ * `on` forces the `test` arm and `off` the `control` arm, the keys every
+ * experiment here uses; any other stored value is taken as a variant key.
+ *
+ * @param key - The flag key
+ * @returns The forced variant key, or undefined
+ */
+export function readVariantOverride(key: string): string | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
   }
-  // No client: nothing will ever answer, so the answer is no.
-  return posthog ? undefined : false;
+  try {
+    const value = window.localStorage.getItem(`${FLAG_OVERRIDE_PREFIX}${key}`);
+    if (value === 'on') {
+      return 'test';
+    }
+    if (value === 'off') {
+      return 'control';
+    }
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type Client = NonNullable<typeof posthog>;
+
+/**
+ * Waits for PostHog's answer to one flag, read through `read`.
+ *
+ * @param key - The flag key
+ * @param readOverride - Reads the forced answer, if any
+ * @param read - Reads the answer once the flags are loaded
+ * @param off - The answer when nothing will ever come
+ * @returns The answer once known; `undefined` while PostHog is asked
+ */
+function useFlagAnswer<T>(
+  key: string,
+  readOverride: (key: string) => T | undefined,
+  read: (client: Client, key: string) => T,
+  off: T,
+): T | undefined {
+  const [value, setValue] = useState<T | undefined>(() => {
+    const override = readOverride(key);
+    if (override !== undefined) {
+      return override;
+    }
+    // No client: nothing will ever answer, so the answer is no.
+    return posthog ? undefined : off;
+  });
+
+  useEffect(() => {
+    if (value !== undefined || !posthog) {
+      return undefined;
+    }
+    const client = posthog;
+    let settled = false;
+
+    // Called at once when the flags are already loaded, and again whenever
+    // they reload; the first call is the one this hook waits for.
+    const unsubscribe: unknown = client.onFeatureFlags(() => {
+      settled = true;
+      setValue(read(client, key));
+    });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        setValue(off);
+      }
+    }, FLAG_TIMEOUT_MS);
+
+    return () => {
+      clearTimeout(timer);
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [key, value, read, off]);
+
+  return value;
+}
+
+function readEnabled(client: Client, key: string): boolean {
+  return client.isFeatureEnabled(key) === true;
+}
+
+function readVariant(client: Client, key: string): string | false {
+  const variant = client.getFeatureFlag(key);
+  return typeof variant === 'string' ? variant : false;
 }
 
 // ============================================================================
-// Hook
+// Hooks
 // ============================================================================
 
 /**
@@ -88,35 +176,27 @@ function initialValue(key: string): boolean | undefined {
  * ```
  */
 export function useFeatureFlag(key: string): boolean | undefined {
-  const [value, setValue] = useState<boolean | undefined>(() => initialValue(key));
+  return useFlagAnswer(key, readFlagOverride, readEnabled, false);
+}
 
-  useEffect(() => {
-    if (value !== undefined || !posthog) {
-      return undefined;
-    }
-    const client = posthog;
-    let settled = false;
-
-    // Called at once when the flags are already loaded, and again whenever
-    // they reload; the first call is the one this hook waits for.
-    const unsubscribe: unknown = client.onFeatureFlags(() => {
-      settled = true;
-      setValue(client.isFeatureEnabled(key) === true);
-    });
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        setValue(false);
-      }
-    }, FLAG_TIMEOUT_MS);
-
-    return () => {
-      clearTimeout(timer);
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [key, value]);
-
-  return value;
+/**
+ * Which arm of a multivariate flag this person is in.
+ *
+ * Reading the variant is what makes posthog-js send `$feature_flag_called`,
+ * the exposure an experiment counts. Call it only where the person actually
+ * meets the experiment, or the experiment counts people it never showed.
+ *
+ * @param key - The flag key as created in PostHog
+ * @returns The variant key once known, `false` when the person is in no arm
+ *   (or PostHog never answered); `undefined` while PostHog is asked
+ *
+ * @example
+ * ```tsx
+ * const variant = useFeatureFlagVariant('onboarding-planning-view');
+ * if (variant === undefined) return <LoadingState />;
+ * return variant === 'test' ? <PlanningView /> : <TripList />;
+ * ```
+ */
+export function useFeatureFlagVariant(key: string): string | false | undefined {
+  return useFlagAnswer(key, readVariantOverride, readVariant, false);
 }

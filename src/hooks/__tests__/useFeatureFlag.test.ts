@@ -16,6 +16,7 @@ type FlagsCallback = () => void;
 const client = {
   callbacks: [] as FlagsCallback[],
   enabled: false,
+  variant: undefined as string | boolean | undefined,
   present: true,
   onFeatureFlags(callback: FlagsCallback): () => void {
     client.callbacks.push(callback);
@@ -25,6 +26,9 @@ const client = {
   },
   isFeatureEnabled(): boolean {
     return client.enabled;
+  },
+  getFeatureFlag(): string | boolean | undefined {
+    return client.variant;
   },
 };
 
@@ -55,12 +59,14 @@ Object.defineProperty(globalThis, 'localStorage', {
   },
 });
 
-const { useFeatureFlag, readFlagOverride } = await import('@/hooks/useFeatureFlag');
+const { useFeatureFlag, useFeatureFlagVariant, readFlagOverride, readVariantOverride } =
+  await import('@/hooks/useFeatureFlag');
 
 beforeEach(() => {
   stored.clear();
   client.callbacks = [];
   client.enabled = false;
+  client.variant = undefined;
   client.present = true;
   vi.useFakeTimers();
 });
@@ -137,6 +143,100 @@ describe('useFeatureFlag', () => {
 
   it('stops listening when the component goes away', () => {
     const { unmount } = renderHook(() => useFeatureFlag('ent-trip-templates'));
+    expect(client.callbacks).toHaveLength(1);
+
+    unmount();
+
+    expect(client.callbacks).toHaveLength(0);
+  });
+});
+
+describe('useFeatureFlagVariant', () => {
+  const FLAG = 'onboarding-planning-view';
+
+  it('is undecided until PostHog has answered, then names the arm', () => {
+    client.variant = 'test';
+    const { result } = renderHook(() => useFeatureFlagVariant(FLAG));
+
+    expect(result.current).toBeUndefined();
+
+    act(() => {
+      client.callbacks.forEach((callback) => callback());
+    });
+
+    expect(result.current).toBe('test');
+  });
+
+  it('tells the control arm from the test arm, which isFeatureEnabled cannot', () => {
+    // A multivariate flag is "enabled" in every arm.
+    client.enabled = true;
+    client.variant = 'control';
+    const { result } = renderHook(() => useFeatureFlagVariant(FLAG));
+
+    act(() => {
+      client.callbacks.forEach((callback) => callback());
+    });
+
+    expect(result.current).toBe('control');
+  });
+
+  it('is false for a person in no arm', () => {
+    client.variant = false;
+    const { result } = renderHook(() => useFeatureFlagVariant(FLAG));
+
+    act(() => {
+      client.callbacks.forEach((callback) => callback());
+    });
+
+    expect(result.current).toBe(false);
+  });
+
+  it('is false for a boolean flag that is on, since it has no variant', () => {
+    client.variant = true;
+    const { result } = renderHook(() => useFeatureFlagVariant(FLAG));
+
+    act(() => {
+      client.callbacks.forEach((callback) => callback());
+    });
+
+    expect(result.current).toBe(false);
+  });
+
+  it('gives up on PostHog after a while', () => {
+    const { result } = renderHook(() => useFeatureFlagVariant(FLAG));
+
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
+
+    expect(result.current).toBe(false);
+  });
+
+  it('is false at once when there is no analytics client', () => {
+    client.present = false;
+
+    expect(renderHook(() => useFeatureFlagVariant(FLAG)).result.current).toBe(false);
+  });
+
+  it('lets a local override force an arm without PostHog', () => {
+    stored.set(`kikouchou-flag:${FLAG}`, 'on');
+    expect(readVariantOverride(FLAG)).toBe('test');
+    expect(renderHook(() => useFeatureFlagVariant(FLAG)).result.current).toBe('test');
+
+    stored.set(`kikouchou-flag:${FLAG}`, 'off');
+    expect(readVariantOverride(FLAG)).toBe('control');
+
+    stored.set(`kikouchou-flag:${FLAG}`, 'planning');
+    expect(readVariantOverride(FLAG)).toBe('planning');
+
+    stored.set(`kikouchou-flag:${FLAG}`, '');
+    expect(readVariantOverride(FLAG)).toBeUndefined();
+
+    expect(client.callbacks).toHaveLength(0);
+  });
+
+  it('stops listening when the component goes away', () => {
+    const { unmount } = renderHook(() => useFeatureFlagVariant(FLAG));
     expect(client.callbacks).toHaveLength(1);
 
     unmount();
