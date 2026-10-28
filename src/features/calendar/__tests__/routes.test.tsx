@@ -154,6 +154,15 @@ vi.mock('@/features/activities/components/ActivityDialog', () => ({
   ActivityDialog: () => null,
 }));
 
+// Anonymous device: these tests are about which route renders, not who joins.
+vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
+  useActivityParticipation: () => ({
+    myPersonId: undefined,
+    canToggle: false,
+    toggleParticipation: vi.fn(),
+  }),
+}));
+
 // ============================================================================
 // Imports after mocks
 // ============================================================================

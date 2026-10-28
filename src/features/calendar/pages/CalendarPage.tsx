@@ -106,6 +106,7 @@ import {
 
 // Import ActivityDialog + helpers for the shared agenda
 import { ActivityDialog } from '@/features/activities/components/ActivityDialog';
+import { useActivityParticipation } from '@/features/activities/hooks/useActivityParticipation';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import {
   getActivityEndDayKey,
@@ -994,25 +995,53 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     [getPersonById, persons, rideByTransportId],
   );
 
+  const buildActivityEventData = useCallback(
+    (activity: Activity): ActivityEventData => ({
+      type: 'activity',
+      activity,
+      participants: (activity.participantIds ?? [])
+        .map((personId) => getPersonById(personId))
+        .filter((person): person is Person => person !== undefined),
+      organizer: activity.organizerId
+        ? getPersonById(activity.organizerId)
+        : undefined,
+    }),
+    [getPersonById],
+  );
+
   const handleActivityClick = useCallback(
     (activity: Activity) => {
-      const participants = (activity.participantIds ?? [])
-        .map((personId) => getPersonById(personId))
-        .filter((person): person is Person => person !== undefined);
-
-      const eventData: ActivityEventData = {
-        type: 'activity',
-        activity,
-        participants,
-        organizer: activity.organizerId
-          ? getPersonById(activity.organizerId)
-          : undefined,
-      };
-
-      setSelectedEvent(eventData);
+      setSelectedEvent(buildActivityEventData(activity));
       setIsEventDialogOpen(true);
     },
-    [getPersonById],
+    [buildActivityEventData],
+  );
+
+  // The dialog's activity, re-read from the live list. `selectedEvent` is a
+  // snapshot taken at click time, and the join/leave button changes the very
+  // activity it shows: without this the button and the participant badges
+  // would keep saying what they said before the tap.
+  const displayedEvent = useMemo((): CalendarEventData | null => {
+    if (selectedEvent?.type !== 'activity') {
+      return selectedEvent;
+    }
+    const live = activities.find((activity) => activity.id === selectedEvent.activity.id);
+    return live === undefined || live === selectedEvent.activity
+      ? selectedEvent
+      : buildActivityEventData(live);
+  }, [activities, buildActivityEventData, selectedEvent]);
+
+  const {
+    myPersonId,
+    canToggle: canToggleParticipation,
+    toggleParticipation,
+  } = useActivityParticipation();
+
+  const handleToggleParticipation = useCallback(
+    (activityId: ActivityId, joining: boolean) => {
+      void toggleParticipation(activityId, joining);
+    },
+    [toggleParticipation],
   );
 
   const handleEventEdit = useCallback(() => {
@@ -1465,10 +1494,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       <EventDetailDialog
         open={isEventDialogOpen}
         onOpenChange={setIsEventDialogOpen}
-        event={selectedEvent}
+        event={displayedEvent}
         onEdit={handleEventEdit}
         onDelete={handleEventDelete}
         canEdit={canEdit}
+        {...(canToggleParticipation
+          ? { currentPersonId: myPersonId, onToggleParticipation: handleToggleParticipation }
+          : {})}
       />
 
       {/* Transport Edit Dialog */}
