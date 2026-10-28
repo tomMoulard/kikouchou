@@ -264,18 +264,30 @@ describe('RoomOccupancyTimeline', () => {
     expect(screen.getByText('Main Bedroom')).toBeInTheDocument();
   });
 
-  it('calls onEditRoom when the room name is double-clicked', async () => {
+  it('calls onEditRoom when the room name is clicked', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     const onEditRoom = vi.fn();
     render(<RoomOccupancyTimeline {...defaultProps} onEditRoom={onEditRoom} />);
-    await user.dblClick(screen.getByText('Main Bedroom'));
+    // In a browser the button laid over the label cell takes the click on
+    // the name; jsdom does no hit testing, so the test clicks it directly.
+    await user.click(screen.getByTestId(`room-timeline-edit-${mockRoom.id}`));
+    expect(onEditRoom).toHaveBeenCalledWith(mockRoom);
+  });
+
+  it('opens the room editor from the keyboard', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onEditRoom = vi.fn();
+    render(<RoomOccupancyTimeline {...defaultProps} onEditRoom={onEditRoom} />);
+    screen.getByTestId(`room-timeline-edit-${mockRoom.id}`).focus();
+    await user.keyboard('{Enter}');
     expect(onEditRoom).toHaveBeenCalledWith(mockRoom);
   });
 
   // Without the callback the names carry no gesture, so the tooltip must not
-  // advertise one.
-  it('only offers the double-click hint when onEditRoom is wired up', () => {
+  // advertise one, and there is no button to reach.
+  it('only offers the click hint when onEditRoom is wired up', () => {
     // The label cell, reached through the name it renders: the row's
     // off-screen arrows are titled with the room name too, so a title query
     // alone now matches three elements.
@@ -283,11 +295,12 @@ describe('RoomOccupancyTimeline', () => {
       screen.getByText('Main Bedroom').closest('[title]')?.getAttribute('title') ?? '';
 
     const { unmount } = render(<RoomOccupancyTimeline {...defaultProps} />);
-    expect(labelTitleOf()).not.toContain('rooms.doubleClickToEdit');
+    expect(labelTitleOf()).not.toContain('common.clickToEdit');
+    expect(screen.queryByTestId(`room-timeline-edit-${mockRoom.id}`)).not.toBeInTheDocument();
     unmount();
 
     render(<RoomOccupancyTimeline {...defaultProps} onEditRoom={vi.fn()} />);
-    expect(labelTitleOf()).toContain('rooms.doubleClickToEdit');
+    expect(labelTitleOf()).toContain('common.clickToEdit');
   });
 
   it('offers no zoom and no button back to now', () => {

@@ -361,6 +361,43 @@ describe('CalendarTimelineRow', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
+  it('opens the guest editor when the name in the label column is clicked', () => {
+    const model = makeModel();
+    const onPersonClick = vi.fn();
+    render(
+      <CalendarTimelineRow
+        model={model}
+        viewport={defaultViewport}
+        dateLocale={enUS}
+        onAssignmentClick={vi.fn()}
+        onPersonClick={onPersonClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId(`calendar-timeline-edit-person-${model.person.id}`));
+    expect(onPersonClick).toHaveBeenCalledWith(model.person);
+    expect(screen.getByTitle('Alice · common.clickToEdit')).toBeInTheDocument();
+  });
+
+  // Without the callback (a viewer) the name is plain text, and the tooltip
+  // must not promise an editor.
+  it('leaves the name plain text without onPersonClick', () => {
+    const model = makeModel();
+    render(
+      <CalendarTimelineRow
+        model={model}
+        viewport={defaultViewport}
+        dateLocale={enUS}
+        onAssignmentClick={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId(`calendar-timeline-edit-person-${model.person.id}`),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/common\.clickToEdit/)).not.toBeInTheDocument();
+  });
+
   it('renders person color dot', () => {
     const model = makeModel();
     const { container } = render(

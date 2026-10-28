@@ -275,6 +275,11 @@ export interface CalendarTimelineProps {
   readonly onTransportClick?: (transport: CalendarTransport) => void;
   readonly onActivityClick?: (activity: Activity) => void;
   /**
+   * Opens a guest's edit dialog, from a click on their name in the label
+   * column. Omitted — a viewer without edit rights — the names stay plain text.
+   */
+  readonly onPersonClick?: (person: Person) => void;
+  /**
    * Reads the car serving one leg, from the page's `resolveRides` index.
    *
    * The timeline is the view users land on, so leaving this out is how the
