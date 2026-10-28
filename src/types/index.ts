@@ -56,6 +56,9 @@ export type GuestGroupId = Brand<'GuestGroupId'>;
 /** Type-safe GuestGroupMember identifier (nanoid generated) */
 export type GuestGroupMemberId = Brand<'GuestGroupMemberId'>;
 
+/** Type-safe cover photo identifier (nanoid generated) */
+export type PhotoId = Brand<'PhotoId'>;
+
 // ============================================================================
 // Primitive Utility Types
 // ============================================================================
@@ -717,6 +720,15 @@ export interface Trip extends Identifiable, WithTimestamps {
    * device and for every member of the trip.
    */
   archived?: boolean;
+
+  /**
+   * The cover photo, by id.
+   *
+   * Only the id is shared: it rides in the document, and the bytes live in
+   * the `trip-photos` Storage bucket and in this device's `photos` table
+   * (`lib/photos`). Absent means no photo.
+   */
+  photoId?: PhotoId;
 }
 
 /**
@@ -775,6 +787,12 @@ export interface Room extends Identifiable, TripScoped {
    * @example "bed-double"
    */
   icon?: RoomIcon;
+
+  /**
+   * A photo of the room, by id, so a guest can tell "the red room" at a
+   * glance. Same storage as {@link Trip.photoId}. Absent means no photo.
+   */
+  photoId?: PhotoId;
 }
 
 /**

@@ -124,8 +124,8 @@ select is(
 select is(
   (select array_agg(key order by key)
    from jsonb_object_keys(public.read_trip_template('template-token-00001')) as key),
-  array['coordinates', 'currency', 'description', 'location', 'name', 'rooms'],
-  'the payload holds six keys, and no date, guest or document among them'
+  array['coordinates', 'currency', 'description', 'location', 'name', 'photoId', 'rooms'],
+  'the payload holds seven keys, and no date, guest or document among them'
 );
 
 -- The tables themselves stay shut. This is the whole point of a function.
