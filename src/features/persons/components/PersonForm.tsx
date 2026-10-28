@@ -466,12 +466,6 @@ const PersonForm = memo(function PersonForm({
   }, []);
 
   /**
-   * Month the stay-dates picker opens on. The trip dates are indicative, so
-   * they do not bound the picker: a guest may arrive early or leave late.
-   */
-  const tripStartDate = currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined;
-
-  /**
    * Submission handler via useFormSubmission hook.
    */
   const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<PersonFormData>(
@@ -621,8 +615,7 @@ const PersonForm = memo(function PersonForm({
           <DateRangePicker
             value={stayDates}
             onChange={handleStayDatesChange}
-            defaultMonth={tripStartDate}
-            placeholder={t('persons.stayDatesPlaceholder', 'Select arrival and departure dates')}
+            aria-label={t('persons.stayDates', 'Stay dates')}
             disabled={isSubmitting}
           />
           <p className="text-xs text-muted-foreground">

@@ -120,8 +120,8 @@ describe('SelectItem touch target', () => {
     // The obvious form is the trap, and this assertion is what stops someone
     // reintroducing it. `md:min-h-0` survives a call site cancelling the
     // unprefixed base — tailwind-merge groups them separately — so the desktop
-    // half re-applies on its own. `ui/calendar.tsx` passing `size-auto` to a
-    // button is the case that proved it; the same hazard applies here.
+    // half re-applies on its own. A calendar passing `size-auto` to a button
+    // is the case that proved it; the same hazard applies here.
     expect(option.className).not.toMatch(/md:min-h-0/);
   });
 

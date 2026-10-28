@@ -29,7 +29,7 @@
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
-import { render, screen, waitFor } from '@/test/utils';
+import { render, screen, waitFor, within } from '@/test/utils';
 import userEvent from '@testing-library/user-event';
 import {
   isDateInStayRange,
@@ -531,11 +531,12 @@ describe('BUG-1: the quick-assign dialog stores its suggested dates verbatim', (
       { withProviders: false },
     );
 
-    // "Jul 2, 2026 → Jul 8, 2026" — the day numbers, not the day before.
-    const picker = screen.getByRole('button', { name: 'assignments.period' });
+    // The day numbers, not the day before.
+    const picker = within(screen.getByRole('group', { name: 'assignments.period' }));
     await waitFor(() => {
-      expect(picker).toHaveTextContent(/Jul 2, 2026\s*→\s*Jul 8, 2026/);
+      expect(picker.getByLabelText('dateRangePicker.start')).toHaveValue('2026-07-02');
     });
+    expect(picker.getByLabelText('dateRangePicker.end')).toHaveValue('2026-07-08');
   });
 });
 

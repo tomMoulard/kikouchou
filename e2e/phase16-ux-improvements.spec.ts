@@ -119,35 +119,15 @@ async function readMonthGrid(page: Page): Promise<{ day: number; pills: string[]
 }
 
 /**
- * Picks a check-in / check-out range in the open assignment dialog's picker.
+ * Fills a check-in / check-out range into the open assignment dialog's picker.
  *
- * Days are addressed by `data-day`, the picker's own per-date attribute, and
- * not by their number: the month grid also renders the neighbouring months'
- * days, so "2" matches up to three buttons.
+ * The picker is two native date inputs, which Playwright fills with the ISO
+ * value directly.
  */
 async function pickStayDates(page: Page, startDate: string, endDate: string): Promise<void> {
-  const toDataDay = (iso: string): Promise<string> =>
-    page.evaluate((value) => {
-      const [year, month, day] = value.split('-').map(Number);
-      return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1).toLocaleDateString();
-    }, iso);
-
-  await page.getByRole('button', { name: /check-in|arriv/i }).first().click();
-
-  // By the picker's own name, not by the popover wrapper: on a phone the
-  // picker opens as a dialog, which Radix does not wrap in a popper.
-  const calendar = page
-    .getByRole('dialog', { name: /select date range|sélectionner une période/i })
-    .locator('[data-slot="calendar"]');
-  await expect(calendar).toBeVisible();
-
-  await calendar.locator(`button[data-day="${await toDataDay(startDate)}"]`).click();
-  await calendar.locator(`button[data-day="${await toDataDay(endDate)}"]`).click();
-
-  // The picker closes itself once both ends are set. Waiting for that is not
-  // cosmetic: the popover is itself a `role="dialog"`, so anything that reads
-  // `getByRole('dialog')` afterwards would match two elements.
-  await expect(calendar).toBeHidden();
+  const picker = page.getByRole('group', { name: /check-in|arriv/i }).first();
+  await picker.getByLabel(/^(from|du)$/i).fill(startDate);
+  await picker.getByLabel(/^(to|au)$/i).fill(endDate);
 }
 
 /** The fixture month as the transport list groups it, e.g. /March|2027/. */
@@ -1158,9 +1138,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // The date and time control: a calendar button next to a time input. The
-    // bare `datetime-local` this replaces rendered in the browser's locale,
-    // not the app's.
+    // The date and time control: a native date input next to a time input.
     const timeInput = dialog.locator('input[type="time"]');
     await expect(timeInput).toBeVisible();
 
@@ -1168,8 +1146,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     expect(await timeInput.inputValue()).toBe('14:30');
 
     // The day comes from the trip itself, so the field is never empty
-    const dateButton = dialog.locator('#transport-datetime');
-    await expect(dateButton).not.toHaveText(/pick a date|choisir une date/i);
+    await expect(dialog.locator('#transport-datetime')).not.toHaveValue('');
 
     // Close dialog
     const cancelBtn = dialog.getByRole('button', { name: /cancel|annuler/i });

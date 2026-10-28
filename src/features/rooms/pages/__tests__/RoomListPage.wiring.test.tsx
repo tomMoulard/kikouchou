@@ -798,16 +798,12 @@ describe('RoomListPage — occupancy on the cards', () => {
     expect(card(BARN.id).occupants).toEqual([BOB]);
   });
 
-  it('opens the filter on the trip without bounding it, and names it', () => {
+  it('leaves the filter unbounded by the trip, and names it', () => {
     renderPage();
 
     expect(picker()['aria-label']).toBe('rooms.filterDates');
-    expect(picker().defaultMonth).toEqual(day(tripDay(1)));
     expect(picker()).not.toHaveProperty('minDate');
     expect(picker()).not.toHaveProperty('maxDate');
-
-    change({ trip: { ...TRIP, startDate: tripDay(-2), endDate: tripDay(12) } });
-    expect(picker().defaultMonth).toEqual(day(tripDay(-2)));
   });
 
   it('expands one room at a time, and folds it again', () => {

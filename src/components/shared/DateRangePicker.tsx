@@ -1,14 +1,21 @@
 /**
  * DateRangePicker Component
  *
- * A date range picker that allows users to select a start and end date.
- * Uses shadcn/ui Calendar inside a Popover with locale-aware formatting. On a
- * phone the same calendar opens in a centred Dialog instead (see below).
+ * A start and an end date, each a native `<input type="date">`, so a phone
+ * opens its own date wheel or calendar sheet rather than a calendar drawn by
+ * the app. A drawn calendar had to fit a popover or a dialog on a 360px screen,
+ * and the system picker already fits every screen it ships on, with the
+ * platform's own gestures and accessibility. The cost is that it is styled by
+ * the browser, and that it shows dates in the browser's locale rather than the
+ * app's.
  *
  * Selection behavior:
- * 1. First click selects the start date
- * 2. Second click selects the end date (auto-closes popover)
- * 3. Third click resets and starts new selection
+ * 1. The start input sets `from`; an end now before it is dropped
+ * 2. The end input sets `to`, and cannot go before the start
+ * 3. Clearing both reports `undefined`
+ *
+ * Neither input is bounded by the trip: its dates are indicative, and a guest
+ * may arrive before it starts or leave after it ends.
  *
  * @example
  * ```tsx
@@ -21,36 +28,21 @@
  *     <DateRangePicker
  *       value={dateRange}
  *       onChange={setDateRange}
- *       defaultMonth={tripStartDate}
  *     />
  *   );
  * }
  * ```
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { type ChangeEvent, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { eachDayOfInterval, format, isValid } from 'date-fns';
-import type { DateRange as RdpDateRange } from 'react-day-picker';
-import { CalendarIcon, X } from 'lucide-react';
+import { format, isBefore, isValid, parseISO } from 'date-fns';
+import { X } from 'lucide-react';
 
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { usePhoneViewport } from '@/hooks/usePhoneViewport';
+import { Input } from '@/components/ui/input';
 
 /**
  * Represents a date range with optional start and end dates.
@@ -61,7 +53,7 @@ interface DateRange {
 }
 
 /**
- * Represents an already booked date range to display in the calendar.
+ * Represents an already booked date range, listed under the inputs.
  */
 interface BookedRange {
   /** Start date of the booked period */
@@ -80,29 +72,22 @@ interface DateRangePickerProps {
   readonly value: DateRange | undefined;
   /** Callback fired when the date range changes */
   readonly onChange: (range: DateRange | undefined) => void;
-  /**
-   * Month the calendar opens on when nothing is selected yet. Only a starting
-   * point: every day stays selectable, so a guest can arrive before the trip
-   * starts or leave after it ends (the trip dates are indicative).
-   */
-  readonly defaultMonth?: Date;
-  /** Placeholder text when no date is selected */
-  readonly placeholder?: string;
   /** Whether the picker is disabled */
   readonly disabled?: boolean;
-  /** Additional CSS classes for the trigger button */
+  /** Additional CSS classes for both inputs */
   readonly className?: string;
-  /** Number of months to display (1 or 2) */
-  readonly numberOfMonths?: 1 | 2;
-  /** Accessible label for the picker */
+  /** Accessible label for the pair of inputs */
   readonly 'aria-label'?: string;
   /** ID of element that describes this picker */
   readonly 'aria-describedby'?: string;
-  /** Unique identifier for the component */
+  /** Id of the start input. The end input gets `${id}-end`. */
   readonly id?: string;
-  /** Date ranges that are already booked (shown with visual indicator) */
+  /** Date ranges that are already booked (listed under the inputs) */
   readonly bookedRanges?: readonly BookedRange[];
 }
+
+/** The value format of `<input type="date">`. */
+const INPUT_DATE_FORMAT = 'yyyy-MM-dd';
 
 /**
  * Type guard to check if a date is valid.
@@ -112,298 +97,163 @@ function isValidDate(date: Date | undefined): date is Date {
 }
 
 /**
+ * Writes a date as an `<input type="date">` value, `''` when absent.
+ */
+function toInputValue(date: Date | undefined): string {
+  return isValidDate(date) ? format(date, INPUT_DATE_FORMAT) : '';
+}
+
+/**
+ * Reads an `<input type="date">` value as a local midnight, the same day a
+ * calendar click produced.
+ */
+function fromInputValue(value: string): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = parseISO(value);
+  return isValid(parsed) ? parsed : undefined;
+}
+
+/**
  * DateRangePicker component for selecting a range of dates.
  *
  * Features:
- * - Uses shadcn/ui Calendar and Popover
- * - Locale-aware date formatting
- * - Opens on a caller-chosen month without restricting any day
- * - Accessible with proper ARIA attributes
- * - Auto-closes when range selection is complete
+ * - Native date inputs, so each device shows its own picker
+ * - An end never before the start
+ * - Lists the ranges already booked, which a native picker cannot mark
+ * - Accessible: the two inputs are a named group
  */
 const DateRangePicker = memo(({
   value,
   onChange,
-  defaultMonth: defaultMonthProp,
-  placeholder,
   disabled = false,
   className,
-  numberOfMonths = 1,
   'aria-label': ariaLabel,
   'aria-describedby': ariaDescribedBy,
   id,
   bookedRanges,
 }: DateRangePickerProps): React.ReactElement => {
   const { t, i18n } = useTranslation(),
-   isPhone = usePhoneViewport(),
-   [open, setOpen] = useState(false);
 
-  // Get the appropriate date-fns locale
-  const locale = useMemo(
+   locale = useMemo(
     () => getDateLocale(i18n.language),
     [i18n.language]
   ),
 
-  // Build array of booked dates for visual indicator
-   bookedDates = useMemo((): Date[] => {
-    if (!bookedRanges || bookedRanges.length === 0) {
+   fromValue = toInputValue(value?.from),
+   toValue = toInputValue(value?.to),
+
+  // Ranges with a valid start and end, in the app's language: the native
+  // picker has no way to mark a day, so the clashes are spelled out instead.
+   bookedLabels = useMemo((): string[] => {
+    if (!bookedRanges) {
       return [];
     }
+    return bookedRanges
+      .filter((range) => isValidDate(range.from) && isValidDate(range.to))
+      .map((range) => {
+        const dates = `${format(range.from, 'PP', { locale })} → ${format(range.to, 'PP', { locale })}`;
+        return range.label ? `${range.label} (${dates})` : dates;
+      });
+  }, [bookedRanges, locale]),
 
-    const dates: Date[] = [];
-    for (const range of bookedRanges) {
-      if (isValidDate(range.from) && isValidDate(range.to)) {
-        // For room assignments: start date is check-in, end date is check-out
-        // Only the nights (start date up to but NOT including end date) are "booked"
-        // Example: Jan 15-16 = staying night of Jan 15, checking out morning of Jan 16
-        // So only Jan 15 should show as booked, not Jan 16
-        const daysInRange = eachDayOfInterval({ start: range.from, end: range.to });
-        // Exclude the last day (checkout day)
-        dates.push(...daysInRange.slice(0, -1));
-      }
-    }
-    return dates;
-  }, [bookedRanges]),
+   hasSelection = fromValue !== '' || toValue !== '',
 
-  // Modifiers for react-day-picker to style booked dates
-   modifiers = useMemo(() => {
-    if (bookedDates.length === 0) {
-      return undefined;
-    }
-    return {
-      booked: bookedDates,
-    };
-  }, [bookedDates]),
-
-  // Custom class names for modifiers
-   modifiersClassNames = useMemo(() => {
-    if (bookedDates.length === 0) {
-      return undefined;
-    }
-    return {
-      booked: 'rdp-day-booked',
-    };
-  }, [bookedDates]),
-
-  // Format the display text based on selected range
-   displayText = useMemo((): string => {
-    const defaultPlaceholder =
-      placeholder ?? t('dateRangePicker.placeholder', 'Select date range');
-
-    if (!value?.from || !isValidDate(value.from)) {
-      return defaultPlaceholder;
-    }
-
-    const dateFormat = 'PP', // Localized date format (e.g., "Jan 1, 2024" or "1 janv. 2024")
-     fromStr = format(value.from, dateFormat, { locale });
-
-    if (!value.to || !isValidDate(value.to)) {
-      // Only start date selected - show that we're waiting for end date
-      return t('dateRangePicker.selectEndDate', '{{date}} → select end date', { date: fromStr });
-    }
-
-    const toStr = format(value.to, dateFormat, { locale });
-
-    // Same day selection
-    if (value.from.getTime() === value.to.getTime()) {
-      return fromStr;
-    }
-
-    return `${fromStr} → ${toStr}`;
-  }, [value, placeholder, locale, t]),
-
-  // Determine if a value is currently selected (for styling)
-  // Simple computation - no need for useMemo overhead
-   hasSelection = value?.from !== undefined && isValidDate(value.from),
-
-  // Pass value directly to Calendar - no memoization needed as value changes are the intended re-render trigger
-   selected = value ? { from: value.from, to: value.to } : undefined,
-
-  // Handle date selection from the calendar
-  // react-day-picker v9 passes the updated range directly to onSelect
-   handleSelect = useCallback(
-    (range: RdpDateRange | undefined) => {
-      // Pass the range through to parent
-      // Note: range.from and range.to may both be set (complete range)
-      // or only range.from may be set (start of selection)
-      if (!range) {
-        onChange(undefined);
-        return;
-      }
-
-      // Pass the new range to parent
-      onChange({ from: range.from, to: range.to });
-
-      // Auto-close popover when range is complete (two different dates selected)
-      // IMPORTANT: react-day-picker v9 sets BOTH from AND to on the FIRST click
-      // (when min=0), both pointing to the same date. We must NOT close in this case
-      // because the user is just starting their selection, not completing it.
-      // We only close when from !== to, indicating the user has selected two different dates.
-      if (range.from && range.to && range.from.getTime() !== range.to.getTime()) {
-        requestAnimationFrame(() => {
-          setOpen(false);
-        });
-      }
-    },
-    [onChange]
-  ),
-
-  // Determine the default month to show in the calendar
-   defaultMonth = useMemo((): Date | undefined => {
-    if (value?.from && isValidDate(value.from)) {
-      return value.from;
-    }
-    if (defaultMonthProp && isValidDate(defaultMonthProp)) {
-      return defaultMonthProp;
-    }
-    return undefined;
-  }, [value, defaultMonthProp]),
-
-  // Accessible label for the trigger button
-  // Simple computation - no need for useMemo overhead
    accessibleLabel = ariaLabel ?? t('dateRangePicker.ariaLabel', 'Date range picker'),
 
-  // Handle clear button click - resets selection
+   emit = useCallback(
+    (from: Date | undefined, to: Date | undefined) => {
+      onChange(from || to ? { from, to } : undefined);
+    },
+    [onChange],
+  ),
+
+   handleFromChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const from = fromInputValue(e.target.value);
+      // An end the new start has overtaken is a range the end input itself
+      // cannot produce, so it goes rather than standing there invalid.
+      const to = from && value?.to && isBefore(value.to, from) ? undefined : value?.to;
+      emit(from, to);
+    },
+    [emit, value?.to],
+  ),
+
+   handleToChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      emit(value?.from, fromInputValue(e.target.value));
+    },
+    [emit, value?.from],
+  ),
+
    handleClear = useCallback(() => {
     onChange(undefined);
   }, [onChange]);
 
-  const triggerButton = (
-    <Button
-      id={id}
-      variant="outline"
-      disabled={disabled}
-      aria-label={accessibleLabel}
-      aria-describedby={ariaDescribedBy}
-      aria-expanded={open}
-      aria-haspopup="dialog"
-      className={cn(
-        'w-full justify-start text-left font-normal',
-        !hasSelection && 'text-muted-foreground',
-        className
-      )}
-    >
-      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="truncate">{displayText}</span>
-    </Button>
-  ),
-
-  // The calendar and its footer, shared by the popover and the phone dialog.
-  // `calendarClassName` lets the dialog resize the day cells to its width.
-   renderCalendarBody = (calendarClassName?: string): React.ReactElement => (
-    <>
-      <Calendar
-        mode="range"
-        selected={selected}
-        onSelect={handleSelect}
-        numberOfMonths={numberOfMonths}
-        defaultMonth={defaultMonth}
-        locale={locale}
-        modifiers={modifiers}
-        modifiersClassNames={modifiersClassNames}
-        initialFocus
-        className={calendarClassName}
-      />
-      {/* Footer with booked indicator and clear button */}
-      <div className="flex items-center justify-between px-3 pb-3">
-        {bookedDates.length > 0 ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="relative flex h-4 w-4 items-center justify-center">
-              <span className="absolute h-1 w-1 rounded-full bg-destructive opacity-70" />
-            </span>
-            <span>{t('dateRangePicker.alreadyBooked', 'Already assigned')}</span>
-          </div>
-        ) : (
-          <div />
-        )}
-        {hasSelection && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClear}
-            className="h-9 px-2 text-xs md:h-7"
-            aria-label={t('dateRangePicker.clear', 'Clear selection')}
-          >
-            <X className="h-3 w-3 mr-1" aria-hidden="true" />
-            {t('dateRangePicker.clear', 'Clear')}
-          </Button>
-        )}
-      </div>
-    </>
-  );
-
-  if (isPhone) {
-    /*
-      On a phone the calendar is a centred dialog, not a popover. A popover
-      anchors to its trigger, and the trigger sits wherever the form put it:
-      on a 384px screen the popover opened against one edge, leaned out of
-      true while Radix shifted it to fit, and left most of the screen empty
-      beside a calendar the size of a stamp. The dialog uses the gutters the
-      rest of the app's dialogs use, and the day cells grow to fill its width.
-
-      The cell width is the viewport less the dialog's inset (2rem), its
-      border (2px) and its padding (2rem), over the seven columns, capped at
-      56px so a large phone does not get a calendar taller than the screen;
-      `mx-auto` centres it once the cap stops it filling the row. The
-      calendar pads itself by `p-3` everywhere else, and here the dialog's
-      padding replaces it. `max-md:` because the calendar's own phone size is `max-md:` too, and
-      a bare utility would lose to it.
-    */
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>{triggerButton}</DialogTrigger>
-        <DialogContent className="gap-2 p-4" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>
-              {t('dateRangePicker.calendarDialog', 'Select date range')}
-            </DialogTitle>
-          </DialogHeader>
-          {renderCalendarBody(
-            'mx-auto p-0 max-md:[--cell-size:min(--spacing(14),calc((100vw-4rem-2px)/7))]',
-          )}
-        </DialogContent>
-      </Dialog>
-    );
-  }
+  const endId = id ? `${id}-end` : undefined;
 
   return (
-    /*
-      `modal` is load-bearing, not a preference.
+    <div
+      role="group"
+      aria-label={accessibleLabel}
+      aria-describedby={ariaDescribedBy}
+      className="space-y-2"
+    >
+      <div className="grid grid-cols-2 gap-2">
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          {t('dateRangePicker.start', 'From')}
+          <Input
+            id={id}
+            type="date"
+            value={fromValue}
+            onChange={handleFromChange}
+            disabled={disabled}
+            className={cn('text-foreground', className)}
+          />
+        </label>
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          {t('dateRangePicker.end', 'To')}
+          <Input
+            id={endId}
+            type="date"
+            value={toValue}
+            onChange={handleToChange}
+            min={fromValue || undefined}
+            disabled={disabled}
+            className={cn('text-foreground', className)}
+          />
+        </label>
+      </div>
 
-      Three of this picker's four call sites sit inside a dialog
-      (`PersonForm`, `QuickAssignmentDialog`, `RoomAssignmentSection`), and a
-      Radix dialog puts `pointer-events: none` on `<body>` and hands
-      `pointer-events: auto` to exactly one layer. A non-modal popover claims
-      nothing: it only stays clickable if its own dismissable layer happens to
-      sort above the dialog's, and when it loses that race it renders with no
-      `pointer-events` of its own and inherits `none` from the body.
-
-      The failure is invisible. The calendar is `z-50` and later in the DOM, so
-      it paints over the dialog, highlights on hover and looks entirely normal —
-      every tap falls straight through to the overlay behind it, and the only
-      way out is to close the dialog and open it again. It cost this repo three
-      intermittently failing browser tests that named the overlay as the thing
-      swallowing the click.
-
-      Being modal ends the race rather than shortening it: the popover then
-      disables outside pointer events itself, which makes it the topmost such
-      layer by construction and always emits `pointer-events: auto` for its own
-      content. The scroll lock it brings with it costs nothing here — the app's
-      stylesheet already zeroes `--removed-body-scroll-bar-size`, so there is no
-      scrollbar-width jump — and holding the page still while a popover is
-      anchored to a trigger on it is the behaviour you want anyway.
-    */
-    <Popover open={open} onOpenChange={setOpen} modal>
-      <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
-      <PopoverContent
-        className="w-auto p-0"
-        align="start"
-        role="dialog"
-        aria-label={t('dateRangePicker.calendarDialog', 'Select date range')}
-      >
-        {renderCalendarBody()}
-      </PopoverContent>
-    </Popover>
+      {(bookedLabels.length > 0 || hasSelection) && (
+        <div className="flex items-start justify-between gap-2">
+          {bookedLabels.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {t('dateRangePicker.alreadyBooked', 'Already assigned: {{ranges}}', {
+                ranges: bookedLabels.join(', '),
+              })}
+            </p>
+          ) : (
+            <div />
+          )}
+          {hasSelection && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClear}
+              disabled={disabled}
+              className="h-9 shrink-0 px-2 text-xs md:h-7"
+              aria-label={t('dateRangePicker.clear', 'Clear selection')}
+            >
+              <X className="h-3 w-3 mr-1" aria-hidden="true" />
+              {t('dateRangePicker.clear', 'Clear')}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
   );
 });
 

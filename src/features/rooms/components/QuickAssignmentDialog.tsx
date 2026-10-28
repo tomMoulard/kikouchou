@@ -44,7 +44,6 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { type DateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
-import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import {
   calculatePeakOccupancy,
@@ -129,7 +128,6 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
 
   const { t } = useTranslation();
   const { notifySuccess } = useOfflineAwareNotify();
-  const { currentTrip } = useTripContext();
   const { rooms } = useRoomContext();
   const { persons } = usePersonContext();
   const { createAssignment, checkConflict, getAssignmentsByRoom } = useAssignmentContext();
@@ -148,13 +146,6 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   const room = useMemo(
     () => (roomId ? rooms.find((r) => r.id === roomId) : undefined),
     [rooms, roomId],
-  );
-
-  // Month the picker opens on; the trip dates do not bound the selection
-  const tripStartDateStr = currentTrip?.startDate;
-  const tripStartDate = useMemo(
-    () => (tripStartDateStr ? parseISO(tripStartDateStr) : undefined),
-    [tripStartDateStr],
   );
 
   // Get existing assignments for this room (for booked ranges display)
@@ -480,7 +471,6 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
               <DateRangePicker
                 value={dateRange}
                 onChange={setDateRange}
-                defaultMonth={tripStartDate}
                 disabled={isSubmitting}
                 aria-label={t('assignments.period')}
                 bookedRanges={bookedRanges}

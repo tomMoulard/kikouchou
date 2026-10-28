@@ -24,14 +24,8 @@ import { addTripGuests, fillTripOrganiser, ORGANISER_NAME } from './support/trip
 /**
  * Test data for creating trips.
  *
- * Every date is derived from today. These were pinned to July 2024, which was
- * not merely stale — it was unreachable. `navigateToMonth` walks the picker one
- * month at a time from today under a 24-click ceiling, and July 2024 was 26
- * months behind: the walk ran out of clicks, returned without a word, and
- * `selectDate` then clicked the 15th of whatever month was on screen. Every
- * test below that calls `createTrip` was creating a trip with dates it never
- * asked for, and none of them looked, so the suite stayed green while getting
- * one month more wrong every month. See `support/fixture-dates`.
+ * Every date is derived from today, so a trip is never in the past by the
+ * time the suite runs. See `support/fixture-dates`.
  */
 const TEST_TRIP = {
   name: 'Summer Vacation',
@@ -68,151 +62,6 @@ function getTripCard(page: Page, tripName: string) {
 }
 
 /**
- * Selects a date in the shadcn/ui Calendar popover.
- * The calendar uses react-day-picker with custom day buttons that have data-day attributes.
- * Scoped to the visible popover to handle cases where multiple calendars exist in DOM.
- *
- * @param page - Playwright page object
- * @param dateString - ISO date string (YYYY-MM-DD)
- */
-async function selectDate(page: Page, dateString: string): Promise<void> {
-  const targetDate = new Date(dateString + 'T12:00:00'); // Avoid timezone issues
-
-  // Wait for popover content to be visible (this contains the calendar)
-  const popover = page.locator('[data-radix-popper-content-wrapper]:visible');
-  await popover.waitFor({ state: 'visible' });
-
-  // Get the calendar within the visible popover
-  const calendar = popover.locator('[data-slot="calendar"]');
-
-  // First, navigate to the correct month if needed
-  await navigateToMonth(page, targetDate, calendar);
-
-  // Address the cell by the date it *is*, not by the digits it prints.
-  //
-  // react-day-picker stamps every gridcell with `data-day="yyyy-MM-dd"` and
-  // marks the ones borrowed from the neighbouring months `data-outside`. The
-  // old `button` + `/^15$/` + `.first()` matched on text alone, so it could not
-  // tell the 25th of the month it wanted from the 25th that leads the grid as a
-  // greyed-out day of the previous month — and, worse, it happily clicked a day
-  // of the wrong month entirely when `navigateToMonth` had not arrived. Matching
-  // the ISO date means a failed walk fails here, loudly, on a cell that is not
-  // in the DOM.
-  const dayButton = calendar
-    .locator(`td[data-day="${dateString}"]:not([data-outside])`)
-    .locator('button');
-
-  await dayButton.click();
-
-  // Wait for popover to close after selection
-  await popover.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {
-    // Popover may already be hidden, that's okay
-  });
-}
-
-/**
- * Navigates the calendar to a specific month/year if needed.
- * Uses the calendar's navigation buttons to reach the target month.
- *
- * @param page - Playwright page object
- * @param targetDate - Target date to navigate to
- * @param calendar - Locator for the calendar element
- * @throws Error if the target month is not reached within `maxAttempts` clicks
- */
-async function navigateToMonth(
-  page: Page,
-  targetDate: Date,
-  calendar: ReturnType<Page['locator']>,
-): Promise<void> {
-  // Get the currently displayed month from the calendar caption
-  // The caption shows the month name and year
-  const maxAttempts = 24; // Safety limit (2 years of navigation)
-
-  // Remembered for the failure message: the point of throwing is to say which
-  // month the walk actually reached, which is the one fact that identifies a
-  // fixture the picker can no longer get to.
-  let captionText: string | null = null;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Check if we're on the right month by looking at the caption
-    captionText = await calendar.locator('.rdp-month_caption').textContent();
-
-    if (captionText) {
-      const targetMonth = targetDate.toLocaleString('default', { month: 'long' });
-      const targetYear = targetDate.getFullYear().toString();
-
-      // Check if caption contains both the target month and year
-      if (captionText.includes(targetMonth) && captionText.includes(targetYear)) {
-        return; // We're on the correct month
-      }
-
-      // Determine direction: check if we need to go forward or backward
-      // Parse the current month/year from caption
-      const currentMonthMatch = captionText.match(/(\w+)\s*(\d{4})/);
-
-      if (currentMonthMatch) {
-        const [, monthName, yearStr] = currentMonthMatch;
-        // Both groups are mandatory in the pattern that just matched, so this
-        // cannot fire. It throws rather than defaulting because the quiet
-        // alternative is worse than the loud one: an empty `yearStr` makes
-        // `currentYear` NaN, every comparison below false, and the helper
-        // returns as though the calendar were already on the target month —
-        // after which the test clicks a day in the wrong month and fails
-        // somewhere with nothing to do with the cause.
-        if (monthName === undefined || yearStr === undefined) {
-          throw new Error(
-            `Calendar caption matched but yielded no month/year: ${captionText}`,
-          );
-        }
-        const currentYear = parseInt(yearStr, 10);
-
-        // Convert month name to index (0-11)
-        const monthNames = [
-          'January', 'February', 'March', 'April', 'May', 'June',
-          'July', 'August', 'September', 'October', 'November', 'December',
-        ];
-        const currentMonth = monthNames.findIndex((m) =>
-          monthName.toLowerCase().startsWith(m.toLowerCase().slice(0, 3)),
-        );
-
-        if (currentMonth >= 0) {
-          const currentDateValue = currentYear * 12 + currentMonth;
-          const targetDateValue = targetDate.getFullYear() * 12 + targetDate.getMonth();
-
-          if (targetDateValue > currentDateValue) {
-            // Go forward - find the next button within this calendar
-            await calendar.locator('button.rdp-button_next').click();
-          } else if (targetDateValue < currentDateValue) {
-            // Go backward
-            await calendar.locator('button.rdp-button_previous').click();
-          } else {
-            // Same month, we're done
-            return;
-          }
-          await page.waitForTimeout(50); // Brief wait for animation
-          continue;
-        }
-      }
-    }
-
-    // Fallback: just try clicking next
-    await calendar.locator('button.rdp-button_next').click();
-    await page.waitForTimeout(50);
-  }
-
-  // Running out of clicks used to be a silent `return`, and that is the whole
-  // bug this file was carrying: the caller then clicked a day of the month the
-  // walk happened to stop on and asserted nothing about the result. Say so.
-  const wanted = `${targetDate.toLocaleString('en', { month: 'long' })} ${targetDate.getFullYear()}`;
-  throw new Error(
-    `navigateToMonth: gave up after ${maxAttempts} clicks — wanted ${wanted}, ` +
-      `calendar is showing ${captionText?.trim() ?? '(no caption)'}. ` +
-      'The picker opens on the current month, so a fixture more than two years ' +
-      'away cannot be reached: derive it from today with support/fixture-dates.',
-  );
-}
-
-/**
  * Creates a trip using the trip form.
  * Handles date picker interactions and form submission.
  *
@@ -238,15 +87,9 @@ async function createTrip(
     await page.locator('#trip-location').fill(tripData.location);
   }
 
-  // Open start date picker and select date
-  // The start date button has id="trip-start-date"
-  await page.locator('#trip-start-date').click();
-  await selectDate(page, tripData.startDate);
-
-  // Open end date picker and select date
-  // The end date button has id="trip-end-date"
-  await page.locator('#trip-end-date').click();
-  await selectDate(page, tripData.endDate);
+  // The dates are native date inputs, filled with their ISO value
+  await page.locator('#trip-start-date').fill(tripData.startDate);
+  await page.locator('#trip-end-date').fill(tripData.endDate);
 
   // Both opt-in: the guest list is optional in full, so the tests that are not
   // about it leave it alone and create a trip with nobody on it.
@@ -262,51 +105,22 @@ async function createTrip(
 }
 
 /**
- * Asserts which date one of the trip form's pickers is holding.
+ * Asserts which date one of the trip form's date inputs is holding.
  *
- * This is the assertion whose absence hid the broken date picker. Every test
- * here fed `createTrip` a start and an end date and then checked only that the
- * URL had changed — so a picker that selected a day of the wrong month, or of
- * the wrong year, produced a trip that passed. Read the date back.
- *
- * Read through the calendar rather than the trigger button: the button prints
- * the date with date-fns `PPP` in the active locale, which would make this
- * assertion a statement about i18n. react-day-picker marks the chosen gridcell
- * `data-selected="true"` and stamps every cell with `data-day="yyyy-MM-dd"`.
- *
- * The walk to the month is not optional. `getInitialMonth` is
- * `month || defaultMonth || today` and `TripForm` passes neither, so the picker
- * opens on the *current* month however far away its own selection is — the
- * selected cell is simply not in the DOM until you navigate to it. Asserting
- * that this particular cell is the selected one is the stronger statement
- * anyway: `mode="single"` has exactly one, so if this is it, that is the date.
+ * Every test here once fed `createTrip` a start and an end date and then
+ * checked only that the URL had changed, so a date of the wrong month passed.
+ * Read the date back.
  *
  * @param page - Playwright page object
- * @param triggerId - `#trip-start-date` or `#trip-end-date`
+ * @param inputId - `#trip-start-date` or `#trip-end-date`
  * @param isoDate - The date the form is expected to hold (YYYY-MM-DD)
  */
 async function expectSelectedDate(
   page: Page,
-  triggerId: string,
+  inputId: string,
   isoDate: string,
 ): Promise<void> {
-  await page.locator(triggerId).click();
-
-  const popover = page.locator('[data-radix-popper-content-wrapper]:visible');
-  await popover.waitFor({ state: 'visible' });
-  const calendar = popover.locator('[data-slot="calendar"]');
-
-  await navigateToMonth(page, new Date(isoDate + 'T12:00:00'), calendar);
-
-  await expect(
-    calendar.locator(`td[data-day="${isoDate}"]:not([data-outside])`),
-  ).toHaveAttribute('data-selected', 'true');
-
-  // Leave the form as it was found — the next picker has to open over nothing.
-  await page.keyboard.press('Escape');
-  await popover.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {
-    // Already closed, which is the same outcome.
-  });
+  await expect(page.locator(inputId)).toHaveValue(isoDate);
 }
 
 /**
@@ -627,13 +441,9 @@ test.describe('Trip Lifecycle', () => {
     await page.getByLabel(/trip name/i).clear();
     await page.getByLabel(/trip name/i).fill(UPDATED_TRIP.name);
 
-    // Update the start date
-    await page.locator('#trip-start-date').click();
-    await selectDate(page, UPDATED_TRIP.startDate);
-
-    // Update the end date
-    await page.locator('#trip-end-date').click();
-    await selectDate(page, UPDATED_TRIP.endDate);
+    // Update the dates
+    await page.locator('#trip-start-date').fill(UPDATED_TRIP.startDate);
+    await page.locator('#trip-end-date').fill(UPDATED_TRIP.endDate);
 
     // Save the changes
     await page.getByRole('button', { name: /save/i }).click();

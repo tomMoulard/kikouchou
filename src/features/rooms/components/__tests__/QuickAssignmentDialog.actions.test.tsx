@@ -207,7 +207,7 @@ beforeEach(() => {
 // ============================================================================
 
 describe('QuickAssignmentDialog — what it opens on', () => {
-  it('names the dragged guest, the room and the window, opening on the trip', async () => {
+  it('names the dragged guest, the room and the window', async () => {
     roomStays = [stay('a1', BOB.id, tripDay(1), tripDay(3))];
     renderPlain(<QuickAssignmentDialog {...DRAGGED} />);
 
@@ -218,8 +218,7 @@ describe('QuickAssignmentDialog — what it opens on', () => {
     expect(screen.getByText('Attic')).toHaveClass('rounded-md', 'border');
     expect(screen.queryByRole('combobox', { name: 'assignments.person' })).not.toBeInTheDocument();
     expect(pickedDays()).toEqual({ from: tripDay(2), to: tripDay(5) });
-    expect(dayKey(picker.props?.defaultMonth)).toBe(tripDay(1));
-    // The trip dates are indicative: the picker opens on them but bounds nothing.
+    // The trip dates are indicative: the picker is not bounded by them.
     expect(picker.props).not.toHaveProperty('minDate');
     expect(picker.props).not.toHaveProperty('maxDate');
     expect(picker.props?.['aria-label']).toBe('assignments.period');
@@ -230,12 +229,11 @@ describe('QuickAssignmentDialog — what it opens on', () => {
     await settle();
   });
 
-  it('has nothing to grey out in an empty room, and no opening month without a trip', async () => {
+  it('has nothing to list as booked in an empty room', async () => {
     currentTrip = undefined;
     renderPlain(<QuickAssignmentDialog {...DRAGGED} />);
 
     expect(picker.props?.bookedRanges).toBeUndefined();
-    expect(picker.props?.defaultMonth).toBeUndefined();
     await settle();
   });
 
@@ -747,7 +745,6 @@ describe('QuickAssignmentDialog — following its inputs', () => {
     rerender(<QuickAssignmentDialog {...DRAGGED} onOpenChange={vi.fn()} />);
 
     expect(screen.getByText('Loft')).toBeInTheDocument();
-    expect(dayKey(picker.props?.defaultMonth)).toBe(tripDay(-2));
     expect(picker.props?.bookedRanges?.map((range) => dayKey(range.from))).toEqual([tripDay(6)]);
     await settle();
   });

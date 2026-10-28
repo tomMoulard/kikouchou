@@ -943,14 +943,13 @@ describe('RoomAssignmentSection — the form dialog', () => {
     });
   });
 
-  it('opens the calendar on the trip, bounds nothing, and greys the nights already taken', async () => {
+  it('bounds nothing, and lists the nights already taken', async () => {
     tripAssignments = [mockAssignment, bobsStay];
     const user = userEvent.setup();
     renderSection();
 
     await openTheAddDialog(user);
 
-    expect(dayKey(picker.props?.defaultMonth)).toBe(tripDay(1));
     expect(picker.props).not.toHaveProperty('minDate');
     expect(picker.props).not.toHaveProperty('maxDate');
     expect(picker.props?.['aria-label']).toBe('assignments.period');
@@ -978,26 +977,6 @@ describe('RoomAssignmentSection — the form dialog', () => {
     await openTheAddDialog(user);
 
     expect(picker.props?.bookedRanges).toBeUndefined();
-  });
-
-  it('has no opening month without a trip', async () => {
-    currentTrip = undefined;
-    const user = userEvent.setup();
-    renderSection();
-
-    await openTheAddDialog(user);
-
-    expect(picker.props?.defaultMonth).toBeUndefined();
-  });
-
-  it('follows a trip whose dates change after the section rendered', async () => {
-    const { rerender } = renderSection();
-    currentTrip = { ...mockTrip, startDate: tripDay(-2) };
-    rerender(<RoomAssignmentSection roomId={'room-1' as RoomId} className="again" />);
-
-    await openTheAddDialog(userEvent.setup());
-
-    expect(dayKey(picker.props?.defaultMonth)).toBe(tripDay(-2));
   });
 
   it('opens the edit form with its own words and the stored values', async () => {

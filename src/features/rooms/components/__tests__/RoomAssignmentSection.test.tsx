@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RoomAssignmentSection } from '../RoomAssignmentSection';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
@@ -565,9 +565,9 @@ describe('RoomAssignmentSection', () => {
     // Choosing the guest is what pulls the transport window into the picker.
     expect(await screen.findByText('assignments.autofilledFromTransport')).toBeInTheDocument();
     expect(screen.queryByText('assignments.periodHint')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'assignments.period' })).toHaveTextContent(
-      /Jul 2, 2026\s*→\s*Jul 8, 2026/,
-    );
+    const period = within(screen.getByRole('group', { name: 'assignments.period' }));
+    expect(period.getByLabelText('dateRangePicker.start')).toHaveValue('2026-07-02');
+    expect(period.getByLabelText('dateRangePicker.end')).toHaveValue('2026-07-08');
   });
 
   it('renders the stored date range on the assignment row', () => {

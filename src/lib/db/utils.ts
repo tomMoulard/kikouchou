@@ -243,8 +243,8 @@ export const toISODateString = (date: Date): ISODateString => {
  * that reads it must use the same converter.
  *
  * Use it for Dates that carry local calendar components — `new Date()`,
- * `useToday()`, `startOfDay`, `eachDayOfInterval`, `DateRangePicker` /
- * react-day-picker selections, and the day columns from `lib/utils/trip-days`.
+ * `useToday()`, `startOfDay`, `eachDayOfInterval`, `DateRangePicker`
+ * selections, and the day columns from `lib/utils/trip-days`.
  * Read a key back with `parseLocalDayKey` from that module.
  *
  * @param date - The Date to format (must be a valid Date)

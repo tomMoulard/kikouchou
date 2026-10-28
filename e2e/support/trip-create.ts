@@ -56,17 +56,15 @@ export async function seedEarlierTrip(page: Page): Promise<string> {
 }
 
 /**
- * Picks the 15th and the 22nd of the month the wizard's range picker opens on.
- *
- * The picker opens on the current month, so there is no fixture date to go
- * stale.
+ * Fills the 15th and the 22nd of the current month into the wizard's two
+ * native date inputs.
  *
  * @param page - Playwright page on the wizard's dates step
  */
 export async function pickWizardDates(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /trip dates/i }).click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
+  const dates = page.getByRole('group', { name: /trip dates/i });
+  await dates.getByLabel(/^from$/i).fill(fixtureDate(15, 0));
+  await dates.getByLabel(/^to$/i).fill(fixtureDate(22, 0));
 }
 
 /**
@@ -117,8 +115,8 @@ export async function createTripThroughWizard(
  * Creates a trip with a name and dates on whichever screen `/trips/new` shows,
  * and lands on its calendar.
  *
- * The form's dates are the 15th and the 22nd of the month its pickers open on,
- * the same days the wizard gets.
+ * The form's dates are the 15th and the 22nd of the current month, the same
+ * days the wizard gets.
  *
  * @param page - Playwright page sitting on `/trips/new`
  * @param name - The trip's name
@@ -139,10 +137,8 @@ export async function fillNewTrip(
   }
 
   await page.locator('#trip-name').fill(name);
-  await page.locator('#trip-start-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.locator('#trip-end-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
+  await page.locator('#trip-start-date').fill(fixtureDate(15, 0));
+  await page.locator('#trip-end-date').fill(fixtureDate(22, 0));
   if (options.dropOrganiser === true) {
     await clearTripOrganiser(page);
   }

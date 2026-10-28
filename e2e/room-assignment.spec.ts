@@ -368,35 +368,15 @@ async function clickAddButton(page: Page, name: RegExp): Promise<void> {
 }
 
 /**
- * Picks a check-in / check-out range in the open assignment dialog's picker.
+ * Fills a check-in / check-out range into the open assignment dialog's picker.
  *
- * Days are addressed by `data-day`, the picker's own per-date attribute, and
- * not by their number: the month grid also renders the neighbouring months'
- * days, so "2" matches up to three buttons.
+ * The picker is two native date inputs, which Playwright fills with the ISO
+ * value directly.
  */
 async function pickStayDates(page: Page, startDate: string, endDate: string): Promise<void> {
-  const toDataDay = (iso: string): Promise<string> =>
-    page.evaluate((value) => {
-      const [year, month, day] = value.split('-').map(Number);
-      return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1).toLocaleDateString();
-    }, iso);
-
-  await page.getByRole('button', { name: /check-in|arriv/i }).first().click();
-
-  // By the picker's own name, not by the popover wrapper: on a phone the
-  // picker opens as a dialog, which Radix does not wrap in a popper.
-  const calendar = page
-    .getByRole('dialog', { name: /select date range|sélectionner une période/i })
-    .locator('[data-slot="calendar"]');
-  await expect(calendar).toBeVisible();
-
-  await calendar.locator(`button[data-day="${await toDataDay(startDate)}"]`).click();
-  await calendar.locator(`button[data-day="${await toDataDay(endDate)}"]`).click();
-
-  // The picker closes itself once both ends are set. Waiting for that is not
-  // cosmetic: the popover is itself a `role="dialog"`, so anything reading
-  // `getByRole('dialog')` afterwards would match two elements.
-  await expect(calendar).toBeHidden();
+  const picker = page.getByRole('group', { name: /check-in|arriv/i }).first();
+  await picker.getByLabel(/^(from|du)$/i).fill(startDate);
+  await picker.getByLabel(/^(to|au)$/i).fill(endDate);
 }
 
 /**

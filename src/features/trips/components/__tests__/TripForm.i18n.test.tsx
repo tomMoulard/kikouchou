@@ -11,8 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { act, renderWithRealI18n, screen, within } from '@/test/utils';
-import type { Trip } from '@/types';
+import { renderWithRealI18n, screen, within } from '@/test/utils';
 
 import { TripForm } from '../TripForm';
 
@@ -39,34 +38,6 @@ async function renderInFrench() {
 }
 
 describe('TripForm in French', () => {
-  it('writes the chosen dates in the language the app is read in, also after a switch', async () => {
-    const trip = {
-      id: 'trip-1',
-      shareId: 'share-1',
-      name: 'Lac',
-      startDate: '2024-07-15',
-      endDate: '2024-07-22',
-      createdAt: 1,
-      updatedAt: 1,
-    } as unknown as Trip;
-    const { i18n, container } = await renderWithRealI18n(
-      <TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />,
-      { language: 'fr', withProviders: false },
-    );
-    const start = () => container.querySelector('#trip-start-date');
-    expect(start()).toHaveTextContent('15 juillet 2024');
-    expect(container.querySelector('#trip-end-date')).toHaveTextContent('22 juillet 2024');
-
-    try {
-      await act(async () => {
-        await i18n.changeLanguage('en');
-      });
-      expect(start()).toHaveTextContent('July 15th, 2024');
-    } finally {
-      await i18n.changeLanguage('fr');
-    }
-  });
-
   it('names each room row by its number', async () => {
     const { user } = await renderInFrench();
     const rooms = screen.getByRole('group', { name: /Chambres/ });
