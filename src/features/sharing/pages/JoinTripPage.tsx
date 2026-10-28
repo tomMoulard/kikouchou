@@ -15,10 +15,15 @@
  *
  * Each step is visible because any of them can take a moment or fail.
  *
+ * Somebody the organiser never added is not stuck as "nobody in particular":
+ * a member types their name, a guest is created in the trip, and that guest is
+ * claimed in the same tap. A viewer has no write access, so the same button
+ * asks them to sign in first — which turns the page into the member flow.
+ *
  * @module features/sharing/pages/JoinTripPage
  */
 
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
@@ -30,11 +35,13 @@ import {
   MapPin,
   Palmtree,
   Smartphone,
+  UserPlus,
   UserRound,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
@@ -43,6 +50,8 @@ import { captureEvent } from '@/lib/posthog';
 import { reportFailure } from '@/lib/errors/report-failure';
 import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
+import { SignInDialog } from '@/features/auth/components/SignInDialog';
+import { createPersonWithAutoColor } from '@/lib/db';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
@@ -81,6 +90,89 @@ function JoinShell({ children }: { readonly children: ReactElement }): ReactElem
         <CardContent className="pt-6">{children}</CardContent>
       </Card>
     </div>
+  );
+}
+
+// ============================================================================
+// Add yourself
+// ============================================================================
+
+interface AddSelfFormProps {
+  /** Called with the trimmed name; the form stays busy until it settles. */
+  readonly onSubmit: (name: string) => Promise<void>;
+  readonly disabled: boolean;
+}
+
+/**
+ * "Not on the list? Add your name."
+ *
+ * Only the name is asked: the colour is picked from the palette, and anything
+ * else can be filled in from the guest list once inside the trip.
+ */
+function AddSelfForm({ onSubmit, disabled }: AddSelfFormProps): ReactElement {
+  const { t } = useTranslation();
+  const [name, setName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+      event.preventDefault();
+      const trimmed = name.trim();
+      if (!trimmed) {
+        setNameError(t('sharing.identityNameRequired', 'Please enter your name'));
+        return;
+      }
+      setNameError(null);
+      setAdding(true);
+      try {
+        await onSubmit(trimmed);
+      } finally {
+        setAdding(false);
+      }
+    },
+    [name, onSubmit, t],
+  );
+
+  return (
+    <form
+      className="flex flex-col gap-2 rounded-md border p-3"
+      onSubmit={(event) => void handleSubmit(event)}
+      data-testid="join-add-self"
+    >
+      <label htmlFor="join-add-self-name" className="text-sm font-medium">
+        {t('sharing.join.addSelfLabel', 'Not on the list? Add your name')}
+      </label>
+      <Input
+        id="join-add-self-name"
+        value={name}
+        onChange={(event) => {
+          setName(event.target.value);
+          if (nameError !== null) {
+            setNameError(null);
+          }
+        }}
+        placeholder={t('sharing.identityAddName', 'Your name')}
+        aria-invalid={nameError !== null ? 'true' : 'false'}
+        aria-describedby={nameError !== null ? 'join-add-self-error' : undefined}
+        autoComplete="given-name"
+        maxLength={100}
+        disabled={disabled || adding}
+      />
+      {nameError !== null ? (
+        <p id="join-add-self-error" role="alert" className="text-xs text-destructive">
+          {nameError}
+        </p>
+      ) : null}
+      <Button type="submit" disabled={disabled || adding}>
+        {adding ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <UserPlus className="size-4" aria-hidden="true" />
+        )}
+        {t('sharing.join.addSelf', 'Add me and join')}
+      </Button>
+    </form>
   );
 }
 
@@ -131,6 +223,8 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
   const [claimed, setClaimed] = useState<Set<string>>(new Set());
   const [claiming, setClaiming] = useState<PersonId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [addingSelf, setAddingSelf] = useState(false);
+  const [showAddSelf, setShowAddSelf] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -234,6 +328,50 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
     [navigate, remoteTripId, t, tripId, user],
   );
 
+  /**
+   * Creates the invitee as a guest of this trip, then claims that guest.
+   *
+   * A plain Dexie write, like the guest list's own: the trip is the selected
+   * one by now, so the sync bridge publishes the new row to the document and
+   * the other members see it. A name that matches a guest still free is
+   * claimed instead of duplicated — "Bob" typed by Bob, who did not spot
+   * himself in the list, should not make two of him.
+   */
+  const handleAddSelf = useCallback(
+    async (name: string): Promise<void> => {
+      setError(null);
+      const existing = available.find(
+        (person) => person.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+      );
+      if (existing) {
+        await handleClaim(existing.id);
+        return;
+      }
+
+      setAddingSelf(true);
+      let personId: PersonId;
+      try {
+        personId = (await createPersonWithAutoColor(tripId, name)).id;
+      } catch (error) {
+        reportFailure(
+          'JoinTripPage.handleAddSelf',
+          error,
+          t('errors.saveFailed', 'Failed to save'),
+        );
+        setError(t('errors.saveFailed', 'Failed to save'));
+        return;
+      } finally {
+        setAddingSelf(false);
+      }
+
+      captureEvent('trip_identity_added', { scope: 'account' });
+      // A claim that fails from here leaves the new guest in the list, where
+      // the error above it says why and a tap on the name tries again.
+      await handleClaim(personId);
+    },
+    [available, handleClaim, t, tripId],
+  );
+
   const skip = useCallback(() => {
     // Distinguished from claiming, because somebody entering a trip as nobody in
     // particular will not see their own room or travel — a quiet drop-off worth
@@ -307,7 +445,17 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
             "Either nobody has been added to this trip yet, or their details haven't reached this device. You can open the trip and carry on.",
           )}
         </CardDescription>
-        <Button onClick={skip}>{t('sharing.join.openTrip', 'Open the trip')}</Button>
+        {error !== null ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="w-full text-left">
+          <AddSelfForm onSubmit={handleAddSelf} disabled={claiming !== null || addingSelf} />
+        </div>
+        <Button variant="ghost" onClick={skip}>
+          {t('sharing.join.openTrip', 'Open the trip')}
+        </Button>
       </div>
     );
   }
@@ -343,7 +491,7 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
               variant="outline"
               className="h-auto w-full justify-start py-3"
               onClick={() => void handleClaim(person.id)}
-              disabled={claiming !== null}
+              disabled={claiming !== null || addingSelf}
             >
               {claiming === person.id ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -365,9 +513,23 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
         </p>
       ) : null}
 
-      <Button variant="ghost" onClick={skip}>
-        {t('sharing.join.notListed', "I'm not on the list")}
-      </Button>
+      {showAddSelf || available.length === 0 ? (
+        <>
+          <AddSelfForm onSubmit={handleAddSelf} disabled={claiming !== null || addingSelf} />
+          <Button variant="ghost" onClick={skip}>
+            {t('sharing.join.continueWithoutName', 'Carry on without a name')}
+          </Button>
+        </>
+      ) : (
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setShowAddSelf(true);
+          }}
+        >
+          {t('sharing.join.notListed', "I'm not on the list")}
+        </Button>
+      )}
     </div>
   );
 }
@@ -421,6 +583,15 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
   }, [navigate, trip.id]);
 
   const alreadyIdentified = getTripGuestPersonId(trip) !== undefined;
+
+  // Adding a guest is a write, and a viewer has none. Signing in from here
+  // redeems the same link as a member, and the page swaps to the member step,
+  // where the name can be added.
+  const [signInOpen, setSignInOpen] = useState(false);
+  const openSignIn = useCallback((): void => {
+    captureEvent('trip_identity_add_requested', { scope: 'device' });
+    setSignInOpen(true);
+  }, []);
 
   // A returning viewer already said who they are; the wizard would ask again
   // and the calendar is what they came back for. Unless they came back to
@@ -582,6 +753,25 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
                   ))}
                 </ul>
               )}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full border-warning-border"
+                onClick={openSignIn}
+                data-testid="join-viewer-add-self"
+              >
+                <UserPlus className="size-4" aria-hidden="true" />
+                {t('sharing.join.viewerAddSelf', 'Add my name')}
+              </Button>
+              <SignInDialog
+                open={signInOpen}
+                onOpenChange={setSignInOpen}
+                reason={t(
+                  'sharing.join.viewerAddSelfReason',
+                  'Sign in to add your name to this trip. The others will see you in the guest list.',
+                )}
+              />
 
               <Button
                 type="button"

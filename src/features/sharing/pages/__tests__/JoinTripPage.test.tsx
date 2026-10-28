@@ -95,7 +95,8 @@ vi.mock('@/features/auth/AuthContext', () => {
 });
 
 vi.mock('@/features/auth/components/SignInDialog', () => ({
-  SignInDialog: () => null,
+  SignInDialog: ({ open, reason }: { readonly open: boolean; readonly reason?: string }) =>
+    open ? <div role="dialog">{reason}</div> : null,
 }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -361,6 +362,21 @@ describe('JoinTripPage for a viewer', () => {
     expect(screen.getByRole('button', { name: /bob/i })).toBeInTheDocument();
     // No account is asked for anywhere on this screen.
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+  });
+
+  it('asks a viewer to sign in before adding their name', async () => {
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+
+    screen.getByRole('button', { name: 'Add my name' }).click();
+
+    // Adding a guest is a write: a viewer has none until the link is redeemed
+    // with an account, which swaps this page for the member step.
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'Sign in to add your name to this trip.',
+    );
+    expect(await db.persons.where('tripId').equals(TRIP_ID).count()).toBe(1);
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('introduces the app when it is not running as an installed app', () => {

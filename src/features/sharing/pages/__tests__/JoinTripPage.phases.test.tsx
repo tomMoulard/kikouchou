@@ -332,14 +332,99 @@ describe('JoinTripPage claiming a name', () => {
     consoleError.mockRestore();
   });
 
-  it('lets somebody who is not on the list carry on', async () => {
+  it('lets somebody who is not on the list carry on without a name', async () => {
     const user = userEvent.setup();
     await seedPersons(TRIP_ID, ['Alice']);
 
     render(<JoinTripPage />);
     await user.click(await screen.findByRole('button', { name: "I'm not on the list" }));
+    await user.click(screen.getByRole('button', { name: 'Carry on without a name' }));
 
     expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
     expect(mockedClaim).not.toHaveBeenCalled();
   });
+});
+
+describe('JoinTripPage adding yourself', () => {
+  it('creates the invitee as a guest of the trip and claims them', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: "I'm not on the list" }));
+    await user.type(screen.getByLabelText('Not on the list? Add your name'), '  Bob ');
+    await user.click(screen.getByRole('button', { name: 'Add me and join' }));
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+    });
+    const bob = (await db.persons.where('tripId').equals(TRIP_ID).toArray()).find(
+      (person) => person.name === 'Bob',
+    );
+    expect(bob).toBeDefined();
+    expect(mockedClaim).toHaveBeenCalledWith({}, 'remote-1', 'user-1', bob?.id);
+  });
+
+  it('claims a free guest with the same name instead of adding a second one', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice', 'Bob']);
+
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: "I'm not on the list" }));
+    await user.type(screen.getByLabelText('Not on the list? Add your name'), 'bob');
+    await user.click(screen.getByRole('button', { name: 'Add me and join' }));
+
+    await waitFor(() => {
+      expect(mockedClaim).toHaveBeenCalledWith({}, 'remote-1', 'user-1', 'person-bob');
+    });
+    expect(await db.persons.where('tripId').equals(TRIP_ID).count()).toBe(2);
+  });
+
+  it('asks for a name before adding anybody', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: "I'm not on the list" }));
+    await user.click(screen.getByRole('button', { name: 'Add me and join' }));
+
+    expect(await screen.findByText('Please enter your name')).toBeInTheDocument();
+    expect(await db.persons.where('tripId').equals(TRIP_ID).count()).toBe(1);
+    expect(mockedClaim).not.toHaveBeenCalled();
+  });
+
+  it('offers to add yourself when the trip has nobody to pick', async () => {
+    const user = userEvent.setup();
+
+    render(<JoinTripPage />);
+    expect(await screen.findByText('No participants to choose from')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Not on the list? Add your name'), 'Bob');
+    await user.click(screen.getByRole('button', { name: 'Add me and join' }));
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+    });
+    expect(await db.persons.where('tripId').equals(TRIP_ID).count()).toBe(1);
+    expect(mockedClaim).toHaveBeenCalled();
+  });
+
+  it('keeps the new guest on the list when the claim is refused', async () => {
+    const user = userEvent.setup();
+    mockedClaim.mockResolvedValue({ status: 'not-a-member' } as never);
+    await seedPersons(TRIP_ID, ['Alice']);
+
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: "I'm not on the list" }));
+    await user.type(screen.getByLabelText('Not on the list? Add your name'), 'Bob');
+    await user.click(screen.getByRole('button', { name: 'Add me and join' }));
+
+    expect(
+      await screen.findByText(
+        'Your invitation has not been accepted yet. Open the invite link again.',
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /bob/i })).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
 });

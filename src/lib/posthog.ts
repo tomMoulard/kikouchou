@@ -1060,6 +1060,8 @@ export type AnalyticsEvent =
   | 'own_trip_prompt_dismissed'
   | 'own_trip_prompt_shown'
   | 'share_wizard_step'
+  | 'trip_identity_add_requested'
+  | 'trip_identity_added'
   | 'trip_identity_claim_failed'
   | 'trip_identity_claimed'
   | 'trip_identity_skipped'
