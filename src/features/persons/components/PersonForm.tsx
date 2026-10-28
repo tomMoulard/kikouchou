@@ -17,7 +17,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookUser, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
@@ -33,10 +33,11 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
+import { ContactNameInput } from '@/features/persons/components/ContactNameInput';
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
-import { isContactPickerSupported, pickContact } from '@/lib/contacts';
+import type { ContactSuggestion } from '@/lib/contacts';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
@@ -172,9 +173,6 @@ const PersonForm = memo(function PersonForm({
   });
   const [notes, setNotes] = useState(person?.notes ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
-  // Set when an import fails for a reason worth naming. A dismissed picker is
-  // not one of them, so the common outcome stays silent.
-  const [contactError, setContactError] = useState<string | undefined>(undefined);
   // Headcount is kept as a string so the field can be cleared while typing;
   // it is normalized on blur and on submit.
   const [headcount, setHeadcount] = useState(() =>
@@ -193,12 +191,6 @@ const PersonForm = memo(function PersonForm({
       getPersonHeadcount(person ?? {}) > MIN_PERSON_HEADCOUNT ||
       person?.childSeat !== undefined,
   );
-
-  // Whether this browser can open the OS contact picker at all. Read once on
-  // mount rather than per render: it cannot change while the form is open, and
-  // on the browsers that lack it (every one on iOS, and every desktop) the
-  // button below is simply never rendered.
-  const [canImportContacts] = useState(isContactPickerSupported);
 
   const [initialSnapshot, setInitialSnapshot] = useState<{
     readonly name: string;
@@ -281,7 +273,6 @@ const PersonForm = memo(function PersonForm({
 
     const nextPhone = person?.phone ?? '';
     setPhone(nextPhone);
-    setContactError(undefined);
 
     const nextHeadcount = getPersonHeadcount(person ?? {});
     setHeadcount(String(nextHeadcount));
@@ -350,15 +341,11 @@ const PersonForm = memo(function PersonForm({
    * Handles name input change.
    * Uses functional update to avoid dependency on error state.
    */
-  const handleNameChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const {value} = e.target;
-      setName(value);
-      // Clear error when user starts typing (functional update avoids stale closure)
-      setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
-    },
-    [],
-  );
+  const handleNameChange = useCallback((value: string) => {
+    setName(value);
+    // Clear error when user starts typing (functional update avoids stale closure)
+    setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
+  }, []);
 
   /**
    * Handles name input blur for validation.
@@ -393,47 +380,18 @@ const PersonForm = memo(function PersonForm({
   }, []);
 
   /**
-   * Opens the device address book and fills in whatever the chosen contact has.
+   * Fills the form from a contact picked in the name field's suggestions.
    *
-   * Only the fields the contact actually carries are written, so importing a
-   * number-less contact does not wipe a name the user already typed. A
-   * dismissed picker leaves the form exactly as it was.
+   * The phone is written only when the picked line carries one, so a contact
+   * with no number does not wipe a number the user already typed.
    */
-  const handleImportFromContacts = useCallback(async () => {
-    setContactError(undefined);
-
-    const outcome = await pickContact();
-
-    switch (outcome.status) {
-      case 'picked': {
-        const { contact } = outcome;
-        if (contact.name !== undefined) {
-          setName(contact.name);
-          setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
-        }
-        if (contact.phone !== undefined) {
-          setPhone(contact.phone);
-        }
-        if (contact.name === undefined && contact.phone === undefined) {
-          setContactError(
-            t('persons.contactEmpty', 'That contact has no name or phone number.'),
-          );
-        }
-        return;
-      }
-      case 'cancelled':
-        return;
-      case 'unsupported':
-        setContactError(
-          t('persons.contactUnsupported', 'This browser cannot open your contacts.'),
-        );
-        return;
-      default:
-        setContactError(
-          t('persons.contactFailed', 'Could not read your contacts. Enter the details by hand.'),
-        );
+  const handlePickContact = useCallback((contact: ContactSuggestion) => {
+    setName(contact.name);
+    setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
+    if (contact.phone !== undefined) {
+      setPhone(contact.phone);
     }
-  }, [t]);
+  }, []);
 
   /**
    * Handles headcount input change. Keeps the raw string so the field can be
@@ -512,46 +470,19 @@ const PersonForm = memo(function PersonForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-      {/* Import from the device address book. Rendered only where the browser
-          has the Contact Picker API — Chromium on Android, in practice. */}
-      {canImportContacts && (
-        <div className="space-y-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleImportFromContacts}
-            disabled={isSubmitting}
-            className="w-full sm:w-auto"
-          >
-            <BookUser className="size-4" aria-hidden="true" />
-            {t('persons.importFromContacts', 'Fill in from contacts')}
-          </Button>
-          {contactError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {contactError}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'persons.importFromContactsHint',
-                'Your browser picks the contact. The app only sees the one you choose.',
-              )}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Name Field */}
       <div className="space-y-2">
         <Label htmlFor="person-name">
           {t('persons.name')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
         </Label>
-        <Input
+        {/* In a store app, typing here lists matching contacts from the
+            phone's address book. On the web it is a plain text field. */}
+        <ContactNameInput
           id="person-name"
-          type="text"
           value={name}
           onChange={handleNameChange}
+          onPickContact={handlePickContact}
           onBlur={handleNameBlur}
           placeholder={t('persons.namePlaceholder')}
           aria-invalid={Boolean(errors.name)}

@@ -1184,6 +1184,16 @@ what the website did before.
   `push_subscriptions` with `transport` saying which. A token is a capability
   exactly as an endpoint is: bounded on the way in, never returned to a client,
   never in an event.
+- **The address book is the apps' alone.** Typing a guest's name lists the
+  matching contacts, through `ContactSearch`, a read-only plugin that lives in
+  this repository (`android/.../ContactSearchPlugin.java`,
+  `ios/App/App/ContactSearchPlugin.swift`, registered in `MainActivity` and
+  `AppViewController`). The web has no equivalent: the Contact Picker API
+  never lets a page read a list, so the website's name field is plain text.
+  The permission is asked for on the first letter typed, once per device
+  (`kikouchou-contacts-asked`), and a refusal is never asked again. Android
+  declares `READ_CONTACTS` and never `WRITE_CONTACTS`; the community contacts
+  plugin needs both, which is why it is not used.
 - **A plugin can be missing.** The F-Droid build leaves the push plugin, and
   with it Firebase, out. Ask `hasNativePlugin(name)`, never assume.
 - **No ad tracker in an app.** The Meta pixel and the Google tags return before

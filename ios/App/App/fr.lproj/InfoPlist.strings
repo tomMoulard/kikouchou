@@ -1,2 +1,3 @@
 /* Les demandes d'autorisation iOS, en français. Affichées par le système. */
 "NSCameraUsageDescription" = "Kikouchou utilise l'appareil photo pour scanner le code QR d'un voyage.";
+"NSContactsUsageDescription" = "Kikouchou propose les contacts correspondants pendant que vous tapez le nom d'un invité, pour remplir son nom et son numéro.";

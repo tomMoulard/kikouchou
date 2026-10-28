@@ -41,6 +41,8 @@
 	<!-- Translated in en.lproj and fr.lproj/InfoPlist.strings. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Kikouchou uses the camera to scan a trip's QR code.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Kikouchou suggests matching contacts while you type a guest's name, to fill in their name and phone number.</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
