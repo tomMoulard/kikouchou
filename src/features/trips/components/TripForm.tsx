@@ -20,8 +20,8 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormSubmission } from '@/hooks';
-import { format, isBefore, isValid, parseISO, startOfDay } from 'date-fns';
-import { CalendarIcon, Plus, X } from 'lucide-react';
+import { isBefore, isValid, parseISO, startOfDay } from 'date-fns';
+import { Plus, X } from 'lucide-react';
 import { nanoid } from 'nanoid';
 
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
   PopoverContent,
@@ -49,7 +48,6 @@ import { MarkdownEditor } from '@/components/shared/MarkdownEditor';
 import { cn } from '@/lib/utils';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toISODateStringFromString } from '@/lib/db/utils';
-import { getDateLocale } from '@/lib/i18n/date-locale';
 import {
   formatTripSizeSummary,
   summarizeTripSize,
@@ -300,20 +298,6 @@ interface FormErrors {
 }
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Date format for ISO string output (YYYY-MM-DD).
- */
-const DISPLAY_DATE_FORMAT = 'PPP';
-
-/**
- * Date format for display (localized).
- */
-const ISO_DATE_FORMAT = 'yyyy-MM-dd';
-
-// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -325,14 +309,6 @@ function parseDate(dateString: string | undefined): Date | undefined {
   if (!dateString) {return undefined;}
   const date = parseISO(dateString);
   return isValid(date) ? date : undefined;
-}
-
-/**
- * Formats a Date object to ISO date string (YYYY-MM-DD).
- */
-function formatToISO(date: Date | undefined): string {
-  if (!date) {return '';}
-  return format(date, ISO_DATE_FORMAT);
 }
 
 /**
@@ -368,7 +344,7 @@ function buildInitialGuests(): readonly GuestRow[] {
  *
  * Features:
  * - Controlled form inputs for name, location, start date, end date
- * - Date pickers using shadcn/ui Calendar + Popover
+ * - Native date inputs, so a phone opens its own date picker
  * - Validation on blur and submit
  * - Edit mode pre-fills existing trip data
  * - Loading state during submission
@@ -405,8 +381,7 @@ const TripForm = memo(function TripForm({
   ref,
   children,
 }: TripFormProps) {
-  const { t, i18n } = useTranslation();
-  const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+  const { t } = useTranslation();
 
   /**
    * Guests belong to trip *creation* only. An existing trip's guests are owned
@@ -631,10 +606,6 @@ const TripForm = memo(function TripForm({
     setErrors({});
   }
 
-  // Date picker popover state
-  const [isStartDateOpen, setIsStartDateOpen] = useState(false);
-  const [isEndDateOpen, setIsEndDateOpen] = useState(false);
-
   // ============================================================================
   // Guest List Focus
   // ============================================================================
@@ -678,10 +649,6 @@ const TripForm = memo(function TripForm({
     }
     roomInputsRef.current.get(pendingId)?.focus();
   });
-
-  // Parse dates for Calendar component
-  const startDateValue = useMemo(() => parseDate(startDate), [startDate]);
-  const endDateValue = useMemo(() => parseDate(endDate), [endDate]);
 
   // ============================================================================
   // Validation
@@ -990,20 +957,19 @@ const TripForm = memo(function TripForm({
    * Handles start date selection.
    * Uses functional update to avoid dependency on error state.
    */
-  const handleStartDateSelect = useCallback(
-    (date: Date | undefined) => {
-      const isoDate = formatToISO(date);
+  const handleStartDateChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const isoDate = e.target.value;
       setStartDate(isoDate);
-      setIsStartDateOpen(false);
 
       /*
         A start date that has moved past the end date leaves the form holding a
-        range the end picker itself cannot produce — it disables every day
-        before the start — and the only thing the form did about it was report
+        range the end input itself cannot produce — its `min` is the start —
+        and the only thing the form did about it was report
         an error and refuse to submit.
 
         Drop the stale end date instead. The end picker now opens on the new
-        start's month (below), so a valid range is one tap away, and the invalid
+        start (below), so a valid range is one pick away, and the invalid
         one stops being reachable at all rather than being reachable and
         rejected. `validateEndDate` stays as the backstop for the orders this
         cannot cover: a trip that arrived already inverted, from an import or a
@@ -1033,18 +999,17 @@ const TripForm = memo(function TripForm({
    * Handles end date selection.
    * Uses functional update to avoid dependency on error state.
    */
-  const handleEndDateSelect = useCallback(
-    (date: Date | undefined) => {
-      const isoDate = formatToISO(date);
+  const handleEndDateChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const isoDate = e.target.value;
       setEndDate(isoDate);
-      setIsEndDateOpen(false);
 
       // Validate or clear end date error
       setErrors((prev) => {
-        if (date && startDate) {
+        if (isoDate && startDate) {
           const error = validateEndDate(startDate, isoDate);
           return { ...prev, endDate: error };
-        } else if (prev.endDate && date) {
+        } else if (prev.endDate && isoDate) {
           return { ...prev, endDate: undefined };
         }
         return prev;
@@ -1207,46 +1172,15 @@ const TripForm = memo(function TripForm({
             {t('trips.startDate')}
             <span className="text-destructive ml-1" aria-hidden="true">*</span>
           </Label>
-          <Popover open={isStartDateOpen} onOpenChange={setIsStartDateOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                id="trip-start-date"
-                type="button"
-                variant="outline"
-                disabled={isSubmitting}
-                aria-invalid={Boolean(errors.startDate)}
-                aria-describedby={errors.startDate ? 'trip-start-date-error' : undefined}
-                aria-expanded={isStartDateOpen}
-                aria-haspopup="dialog"
-                className={cn(
-                  'w-full justify-start text-left font-normal',
-                  !startDateValue && 'text-muted-foreground',
-                  errors.startDate && 'border-destructive',
-                )}
-              >
-                <CalendarIcon className="mr-2 size-4" aria-hidden="true" />
-                {startDateValue ? (
-                  format(startDateValue, DISPLAY_DATE_FORMAT, { locale })
-                ) : (
-                  <span>{t('trips.startDate')}</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={startDateValue}
-                onSelect={handleStartDateSelect}
-                // A selected date does not move react-day-picker's month on its
-                // own; without this the picker opens on today, so re-opening
-                // the dates of any trip not in the current month starts with
-                // paging back to it.
-                defaultMonth={startDateValue}
-                locale={locale}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <Input
+            id="trip-start-date"
+            type="date"
+            value={startDate}
+            onChange={handleStartDateChange}
+            disabled={isSubmitting}
+            aria-invalid={Boolean(errors.startDate)}
+            aria-describedby={errors.startDate ? 'trip-start-date-error' : undefined}
+          />
           {errors.startDate && (
             <p
               id="trip-start-date-error"
@@ -1264,47 +1198,16 @@ const TripForm = memo(function TripForm({
             {t('trips.endDate')}
             <span className="text-destructive ml-1" aria-hidden="true">*</span>
           </Label>
-          <Popover open={isEndDateOpen} onOpenChange={setIsEndDateOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                id="trip-end-date"
-                type="button"
-                variant="outline"
-                disabled={isSubmitting}
-                aria-invalid={Boolean(errors.endDate)}
-                aria-describedby={errors.endDate ? 'trip-end-date-error' : undefined}
-                aria-expanded={isEndDateOpen}
-                aria-haspopup="dialog"
-                className={cn(
-                  'w-full justify-start text-left font-normal',
-                  !endDateValue && 'text-muted-foreground',
-                  errors.endDate && 'border-destructive',
-                )}
-              >
-                <CalendarIcon className="mr-2 size-4" aria-hidden="true" />
-                {endDateValue ? (
-                  format(endDateValue, DISPLAY_DATE_FORMAT, { locale })
-                ) : (
-                  <span>{t('trips.endDate')}</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={endDateValue}
-                onSelect={handleEndDateSelect}
-                disabled={startDateValue ? { before: startDateValue } : undefined}
-                // Falling back to the start date is the half that matters: with
-                // that `disabled` above and a trip a few months out, opening on
-                // today put the user in front of a month where every day was
-                // greyed out and the only live control was the month arrow.
-                defaultMonth={endDateValue ?? startDateValue}
-                locale={locale}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <Input
+            id="trip-end-date"
+            type="date"
+            value={endDate}
+            onChange={handleEndDateChange}
+            min={startDate || undefined}
+            disabled={isSubmitting}
+            aria-invalid={Boolean(errors.endDate)}
+            aria-describedby={errors.endDate ? 'trip-end-date-error' : undefined}
+          />
           {errors.endDate && (
             <p
               id="trip-end-date-error"

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuickAssignmentDialog } from '../QuickAssignmentDialog';
 import type { Person, PersonId, Room, RoomId, Trip } from '@/types';
@@ -299,9 +299,9 @@ describe('QuickAssignmentDialog', () => {
 
     // Dropping a guest on a room is meant to save the date entry entirely; an
     // empty picker (or one shifted a day) is the whole feature failing.
-    expect(screen.getByRole('button', { name: 'assignments.period' })).toHaveTextContent(
-      /Jul 2, 2026\s*→\s*Jul 8, 2026/,
-    );
+    const period = within(screen.getByRole('group', { name: 'assignments.period' }));
+    expect(period.getByLabelText('dateRangePicker.start')).toHaveValue('2026-07-02');
+    expect(period.getByLabelText('dateRangePicker.end')).toHaveValue('2026-07-08');
   });
 
   it('leaves the picker empty and the form unsubmittable without suggested dates', () => {
@@ -314,9 +314,9 @@ describe('QuickAssignmentDialog', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'assignments.period' })).toHaveTextContent(
-      'dateRangePicker.placeholder',
-    );
+    const period = within(screen.getByRole('group', { name: 'assignments.period' }));
+    expect(period.getByLabelText('dateRangePicker.start')).toHaveValue('');
+    expect(period.getByLabelText('dateRangePicker.end')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'common.add' })).toBeDisabled();
   });
 

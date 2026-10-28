@@ -48,10 +48,8 @@ async function seedFutureTrip(page: Page): Promise<string> {
  * pickers open on — never a literal month.
  */
 async function fillTripDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/u }).first().click();
-  await page.locator('#trip-end-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/u }).first().click();
+  await page.locator('#trip-start-date').fill(fixtureDate(15, 0));
+  await page.locator('#trip-end-date').fill(fixtureDate(22, 0));
 }
 
 /**

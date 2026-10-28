@@ -43,15 +43,11 @@ export const buttonVariants = cva(
           which is loud enough to be noticed in review.
 
           `size-11 md:size-9` was the other candidate and is worse: an
-          unprefixed override such as `components/ui/calendar.tsx`'s `size-auto`
-          cancels the `size-11` but not the `md:size-9`, which then re-applies
+          unprefixed override such as a call site's `size-auto` cancels the `size-11` but not the `md:size-9`, which then re-applies
           at desktop and breaks a layout the author thought they controlled.
 
-          Two known consequences, both intended. The date picker's day buttons
-          (`ui/calendar.tsx`, `size-auto w-full`) become 44px squares below
-          `md`, which grows a six-week month to about 332px wide — right for a
-          touch target, tight below a 340px viewport. And `PersonListPage`'s
-          delete button reaches 44px on a phone despite its own `size-8`.
+          One known consequence, intended: `PersonListPage`'s delete button
+          reaches 44px on a phone despite its own `size-8`.
         */
         icon: "size-9 max-md:size-11",
         // The deliberate opt-out: an inline chip inside dense text, never a

@@ -134,8 +134,6 @@ interface AssignmentFormDialogProps {
   readonly roomId: RoomId;
   readonly existingAssignment?: RoomAssignment;
   readonly persons: readonly Person[];
-  /** Month the date picker opens on; it does not bound the selection. */
-  readonly tripStartDate?: Date;
   readonly onSubmit: (data: RoomAssignmentFormData) => Promise<void>;
   readonly checkConflict: (
     personId: PersonId,
@@ -296,7 +294,6 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   roomId,
   existingAssignment,
   persons,
-  tripStartDate,
   onSubmit,
   checkConflict,
   getPersonTransportDates,
@@ -656,7 +653,6 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
                   // Clear autofill indicator when user manually changes dates
                   if (wasAutoFilled) {setWasAutoFilled(false);}
                 }}
-                defaultMonth={tripStartDate}
                 disabled={isSubmitting}
                 aria-label={t('assignments.period')}
                 bookedRanges={bookedRanges}
@@ -785,7 +781,6 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 }: RoomAssignmentSectionProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { notifySuccess } = useOfflineAwareNotify();
-  const { currentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext();
   const { rooms } = useRoomContext();
   const {
@@ -857,12 +852,6 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
     }
     return ids;
   }, [assignments, tripAssignments]);
-
-  // Month the assignment picker opens on (the trip dates are indicative only)
-  const tripStartDate = useMemo(
-    () => (currentTrip ? parseISO(currentTrip.startDate) : undefined),
-    [currentTrip],
-  );
 
   // Get transport dates for a person (for autofill in assignment dialog)
   const getPersonTransportDates = useCallback(
@@ -1130,7 +1119,6 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         roomId={roomId}
         existingAssignment={editingAssignment}
         persons={persons}
-        tripStartDate={tripStartDate}
         onSubmit={handleFormSubmit}
         checkConflict={checkConflict}
         getPersonTransportDates={getPersonTransportDates}

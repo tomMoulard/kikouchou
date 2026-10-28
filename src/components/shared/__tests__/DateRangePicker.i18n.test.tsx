@@ -1,10 +1,10 @@
 /**
- * @fileoverview The date range picker's trigger text, through the shipped
- * catalogues and the reader's own date format.
+ * @fileoverview The date range picker's labels and booked ranges, through the
+ * shipped catalogues and the reader's own date format.
  *
  * The suite-wide i18n mock pins the language to English and echoes keys, so
- * it can show neither that the dates are written in the reader's locale nor
- * that the start date reaches the "select end date" sentence.
+ * it can show neither the shipped labels nor that the booked ranges are
+ * written in the reader's locale.
  *
  * @module components/shared/__tests__/DateRangePicker.i18n.test
  */
@@ -19,39 +19,45 @@ import { DateRangePicker } from '../DateRangePicker';
 vi.unmock('i18next');
 vi.unmock('react-i18next');
 
+const BOOKED = [{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 18), label: 'Alice' }];
+
 describe('DateRangePicker in French', () => {
-  it('writes a range in the French date format', async () => {
+  it('labels the two inputs in French', async () => {
     await renderWithRealI18n(
-      <DateRangePicker
-        value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 18) }}
-        onChange={vi.fn()}
-      />,
+      <DateRangePicker value={undefined} onChange={vi.fn()} />,
       { language: 'fr', withProviders: false },
     );
 
-    expect(screen.getByText('15 juil. 2024 → 18 juil. 2024')).toBeInTheDocument();
+    expect(screen.getByLabelText('Du')).toHaveAttribute('type', 'date');
+    expect(screen.getByLabelText('Au')).toHaveAttribute('type', 'date');
   });
 
-  it('puts the French start date into the "select end date" sentence', async () => {
+  it('writes a booked range in the French date format', async () => {
     await renderWithRealI18n(
-      <DateRangePicker value={{ from: new Date(2024, 6, 15), to: undefined }} onChange={vi.fn()} />,
+      <DateRangePicker value={undefined} onChange={vi.fn()} bookedRanges={BOOKED} />,
       { language: 'fr', withProviders: false },
     );
 
-    expect(screen.getByText('15 juil. 2024 → sélectionner la fin')).toBeInTheDocument();
+    expect(
+      screen.getByText('Déjà assigné : Alice (15 juil. 2024 → 18 juil. 2024)'),
+    ).toBeInTheDocument();
   });
 });
 
 describe('DateRangePicker across a language switch', () => {
-  it('rewrites the range in the new language without being remounted', async () => {
+  it('rewrites the booked ranges in the new language without being remounted', async () => {
     const { switchTo } = await renderSwitchingLanguage(
-      <DateRangePicker value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 18) }} onChange={vi.fn()} />,
+      <DateRangePicker value={undefined} onChange={vi.fn()} bookedRanges={BOOKED} />,
       { withProviders: false },
     );
-    expect(screen.getByText('Jul 15, 2024 → Jul 18, 2024')).toBeInTheDocument();
+    expect(
+      screen.getByText('Already assigned: Alice (Jul 15, 2024 → Jul 18, 2024)'),
+    ).toBeInTheDocument();
 
     await switchTo('fr');
 
-    expect(screen.getByText('15 juil. 2024 → 18 juil. 2024')).toBeInTheDocument();
+    expect(
+      screen.getByText('Déjà assigné : Alice (15 juil. 2024 → 18 juil. 2024)'),
+    ).toBeInTheDocument();
   });
 });

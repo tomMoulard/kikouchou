@@ -33,7 +33,6 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
-import { parseISO } from 'date-fns';
 import { BedDouble, DoorOpen, GripHorizontal, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
@@ -274,21 +273,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     [setSearchParams],
   ),
 
-  // Month the DateRangePicker opens on; the trip dates do not bound it
-   tripStartDate = useMemo(
-    () => (currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined),
-    [currentTrip?.startDate],
-  ),
-
   // Effective date range for capacity calculation (defaults to full trip range).
   //
   // Two guards keep the cards from disagreeing with the timeline:
   //  - the picker only applies in the cards view, which is the only view that
   //    renders it; the timeline measures the whole trip, so a filter left behind
   //    from an earlier visit must not silently change the numbers there.
-  //  - a half-made selection is ignored. react-day-picker v9 reports
-  //    `{from: D, to: D}` on the *first* click (see DateRangePicker), and a
-  //    zero-night window makes every room read as empty and claimable.
+  //  - a half-made selection is ignored: a start with no end yet, or the same
+  //    day twice. A zero-night window makes every room read as empty and
+  //    claimable.
    effectiveDateRange = useMemo(() => {
     const from = selectedDateRange?.from;
     const to = selectedDateRange?.to;
@@ -1155,7 +1148,6 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           <DateRangePicker
             value={selectedDateRange}
             onChange={setSelectedDateRange}
-            defaultMonth={tripStartDate}
             aria-label={t('rooms.filterDates')}
           />
         </div>

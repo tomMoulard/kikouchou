@@ -29,7 +29,6 @@
     "comingSoon": "Bientôt disponible",
     "date": "Date",
     "time": "Heure",
-    "pickDate": "Choisir une date",
     "scrollTimeline": "Faire défiler la frise",
     "currentTime": "Heure actuelle"
   },
@@ -454,7 +453,6 @@
     "namePlaceholder": "Ex : Marie",
     "color": "Couleur",
     "stayDates": "Dates de séjour",
-    "stayDatesPlaceholder": "Sélectionner les dates d'arrivée et de départ",
     "stayDatesHint": "Quand ce participant sera-t-il présent ?",
     "notes": "Notes",
     "notesPlaceholder": "ex. : allergique aux chats, végétalien…",
@@ -1787,12 +1785,11 @@
     "turnOff": "Désactiver"
   },
   "dateRangePicker": {
-    "placeholder": "Sélectionner une période",
     "ariaLabel": "Sélecteur de période",
-    "calendarDialog": "Sélectionner une période",
-    "selectEndDate": "{{date}} → sélectionner la fin",
+    "start": "Du",
+    "end": "Au",
     "clear": "Effacer",
-    "alreadyBooked": "Déjà assigné"
+    "alreadyBooked": "Déjà assigné : {{ranges}}"
   },
   "locationPicker": {
     "placeholder": "Rechercher un lieu...",
