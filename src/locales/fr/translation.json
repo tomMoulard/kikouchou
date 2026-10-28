@@ -8,6 +8,8 @@
     "cancel": "Annuler",
     "delete": "Supprimer",
     "edit": "Modifier",
+    "editNamed": "Modifier {{name}}",
+    "clickToEdit": "Cliquez pour modifier",
     "add": "Ajouter",
     "close": "Fermer",
     "dialogClose": "Fermer la boîte de dialogue",
