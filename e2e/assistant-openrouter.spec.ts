@@ -164,3 +164,49 @@ test.describe('Assistant on a cloud model', () => {
     ).toBeNull();
   });
 });
+
+test.describe('Assistant on a cloud model, on a small phone', () => {
+  // An iPhone SE's screen. The model card fills most of it, so the connect
+  // button starts below the fold and the user has to scroll to it.
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  test.beforeEach(async ({ page }) => {
+    await stubExternalMapServices(page);
+    await page.goto('/');
+    await clearIndexedDB(page);
+  });
+
+  test('a scroll over the model card brings the connect button on screen', async ({ page }) => {
+    await page.goto('/assistant');
+    await waitForRoute(page);
+
+    const picker = page.getByRole('combobox', { name: /assistant model|modèle de l'assistant/i });
+    await picker.click();
+    await page.getByRole('option', { name: /^Claude Haiku/ }).click();
+
+    // The user scrolls where their thumb is, which is on the model card. Only
+    // the strip under it used to scroll, so the button never came up, and
+    // Playwright's own click would have scrolled that strip for us.
+    const box = await picker.boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.wheel(0, 2000);
+
+    const connect = page.getByRole('button', {
+      name: /connect with openrouter|se connecter avec openrouter/i,
+    });
+    await expect(connect).toBeInViewport({ ratio: 1 });
+    // And nothing anchored to the bottom edge, the nav bar first, covers it.
+    await expect
+      .poll(() =>
+        connect.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
+          );
+          return hit !== null && element.contains(hit);
+        }),
+      )
+      .toBe(true);
+  });
+});
