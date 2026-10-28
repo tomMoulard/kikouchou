@@ -921,7 +921,7 @@ export interface RoomAssignment extends Identifiable, TripScoped {
 
   /**
    * Check-in day in ISO format (YYYY-MM-DD): the first night slept.
-   * Must be within the trip's date range and before endDate.
+   * Must be before endDate; it may fall outside the trip's (indicative) dates.
    * @example "2024-07-15"
    */
   startDate: ISODateString;

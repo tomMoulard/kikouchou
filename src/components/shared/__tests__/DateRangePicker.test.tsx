@@ -165,14 +165,13 @@ describe('DateRangePicker', () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
 
-      // Pin the visible month via minDate so the day being clicked is a known
-      // calendar date rather than "whichever cell happened to be enabled".
+      // Pin the visible month via defaultMonth so the day being clicked is a known
+      // calendar date rather than "whatever month today falls in".
       render(
         <DateRangePicker
           value={undefined}
           onChange={onChange}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
       { withProviders: false }
       );
@@ -197,8 +196,7 @@ describe('DateRangePicker', () => {
         <DateRangePicker
           value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 15) }}
           onChange={onChange}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
       { withProviders: false }
       );
@@ -225,8 +223,7 @@ describe('DateRangePicker', () => {
         <DateRangePicker
           value={undefined}
           onChange={vi.fn()}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
       { withProviders: false }
       );
@@ -245,82 +242,68 @@ describe('DateRangePicker', () => {
   // Date Constraint Tests
   // ============================================================================
 
-  describe('Date Constraints', () => {
-    it('disables every day before minDate', async () => {
-      const user = userEvent.setup();
-
-      render(
-        <DateRangePicker
-          value={undefined}
-          onChange={vi.fn()}
-          minDate={new Date(2024, 6, 15)}
-        />,
-      { withProviders: false }
-      );
-
-      await openCalendar(user);
-
-      // "The calendar opened" is true whether or not minDate reached
-      // react-day-picker at all; the boundary is what the prop is for.
-      expect(dayButton('2024-07-14')).toBeDisabled();
-      expect(dayButton('2024-07-15')).toBeEnabled();
-    });
-
-    it('disables every day after maxDate', async () => {
-      const user = userEvent.setup();
-
-      render(
-        <DateRangePicker
-          value={undefined}
-          onChange={vi.fn()}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 20)}
-        />,
-      { withProviders: false }
-      );
-
-      await openCalendar(user);
-
-      expect(dayButton('2024-07-20')).toBeEnabled();
-      expect(dayButton('2024-07-21')).toBeDisabled();
-    });
-
-    it('does not report a click on a day outside the allowed range', async () => {
+  describe('Opening month and selectable days', () => {
+    it('keeps days before and after the opening month selectable', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
 
+      // A trip's dates only say where the calendar opens: a guest who
+      // arrives a day early must still be able to pick that day.
       render(
         <DateRangePicker
           value={undefined}
           onChange={onChange}
-          minDate={new Date(2024, 6, 15)}
-          maxDate={new Date(2024, 6, 20)}
+          defaultMonth={new Date(2024, 6, 15)}
         />,
       { withProviders: false }
       );
 
       await openCalendar(user);
-      await user.click(dayButton('2024-07-10'));
 
-      expect(onChange).not.toHaveBeenCalled();
+      expect(dayButton('2024-07-01')).toBeEnabled();
+      expect(dayButton('2024-07-31')).toBeEnabled();
+      await user.click(dayButton('2024-07-02'));
+      expect(onChange).toHaveBeenCalledWith({
+        from: new Date(2024, 6, 2),
+        to: new Date(2024, 6, 2),
+      });
     });
 
-    it('sets default month to minDate when no value', async () => {
+    it('opens on defaultMonth when no value', async () => {
       const user = userEvent.setup();
-      const minDate = new Date(2024, 11, 1); // December 2024
-      
+
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} minDate={minDate} />,
+        <DateRangePicker
+          value={undefined}
+          onChange={vi.fn()}
+          defaultMonth={new Date(2024, 11, 1)}
+        />,
       { withProviders: false }
       );
-      
+
       await user.click(screen.getByRole('button'));
       await waitFor(() => {
         expect(screen.getByRole('dialog')).toBeInTheDocument();
       });
-      
-      // Should show December 2024 (the minDate month)
+
       expect(screen.getByText(/December 2024|décembre 2024/i)).toBeInTheDocument();
+    });
+
+    it('opens on the selection rather than defaultMonth', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DateRangePicker
+          value={{ from: new Date(2023, 1, 10), to: undefined }}
+          onChange={vi.fn()}
+          defaultMonth={new Date(2024, 11, 1)}
+        />,
+      { withProviders: false }
+      );
+
+      await openCalendar(user);
+
+      expect(dayCell('2023-02-10')).toBeInTheDocument();
     });
   });
 
@@ -443,8 +426,7 @@ describe('DateRangePicker', () => {
           value={undefined}
           onChange={vi.fn()}
           bookedRanges={bookedRanges}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
       { withProviders: false }
       );
@@ -468,8 +450,7 @@ describe('DateRangePicker', () => {
           // Jul 10 check-in, Jul 15 check-out: five nights slept, and the bed
           // is free again on the 15th.
           bookedRanges={[{ from: new Date(2024, 6, 10), to: new Date(2024, 6, 15) }]}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
       { withProviders: false }
       );
@@ -499,8 +480,7 @@ describe('DateRangePicker', () => {
         <DateRangePicker
           value={undefined}
           onChange={vi.fn()}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
       { withProviders: false }
       );
@@ -804,8 +784,7 @@ describe('DateRangePicker', () => {
         <DateRangePicker
           value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 15) }}
           onChange={onChange}
-          minDate={new Date(2024, 6, 1)}
-          maxDate={new Date(2024, 6, 31)}
+          defaultMonth={new Date(2024, 6, 1)}
         />,
         { withProviders: false },
       );
@@ -821,66 +800,6 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 18),
       });
     });
-  });
-});
-
-describe('DateRangePicker misuse', () => {
-  it('warns in development when the earliest date is after the latest', () => {
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    render(
-      <DateRangePicker
-        value={undefined}
-        onChange={vi.fn()}
-        minDate={new Date(2024, 6, 31)}
-        maxDate={new Date(2024, 6, 1)}
-      />,
-      { withProviders: false },
-    );
-
-    expect(consoleWarn).toHaveBeenCalledWith(
-      'DateRangePicker: minDate is after maxDate, all dates will be disabled',
-    );
-    consoleWarn.mockRestore();
-  });
-
-  it('stays quiet about backwards limits in a production build', () => {
-    // The warning is for whoever wires the picker up, not for a visitor.
-    vi.stubEnv('DEV', false);
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      render(
-        <DateRangePicker
-          value={undefined}
-          onChange={vi.fn()}
-          minDate={new Date(2024, 6, 31)}
-          maxDate={new Date(2024, 6, 1)}
-        />,
-        { withProviders: false },
-      );
-
-      expect(consoleWarn).not.toHaveBeenCalled();
-    } finally {
-      consoleWarn.mockRestore();
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it('does not warn about a range that is the right way round', () => {
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    render(
-      <DateRangePicker
-        value={undefined}
-        onChange={vi.fn()}
-        minDate={new Date(2024, 6, 1)}
-        maxDate={new Date(2024, 6, 31)}
-      />,
-      { withProviders: false },
-    );
-
-    expect(consoleWarn).not.toHaveBeenCalled();
-    consoleWarn.mockRestore();
   });
 });
 
@@ -918,30 +837,12 @@ describe('DateRangePicker, more of it', () => {
     );
   });
 
-  it('ignores limits it cannot read, and leaves every day open without any', async () => {
-    const user = userEvent.setup();
-    render(
-      <DateRangePicker
-        value={{ from: july(15), to: july(16) }}
-        onChange={vi.fn()}
-        minDate={invalid()}
-        maxDate={invalid()}
-      />,
-      { withProviders: false },
-    );
-
-    await openCalendar(user);
-
-    expect(dayButton('2024-07-01')).not.toBeDisabled();
-    expect(dayButton('2024-07-31')).not.toBeDisabled();
-  });
-
-  it('opens on this month when neither the selection nor the earliest date can be read', async () => {
+  it('opens on this month when neither the selection nor defaultMonth can be read', async () => {
     // Only Date is faked: the user events still run on real timers.
     vi.useFakeTimers({ toFake: ['Date'], now: new Date(2025, 10, 20, 12, 0) });
     try {
       const user = userEvent.setup();
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} minDate={invalid()} />, {
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} defaultMonth={invalid()} />, {
         withProviders: false,
       });
 
@@ -1004,47 +905,6 @@ describe('DateRangePicker, more of it', () => {
     expect(dayCell('2023-02-10')).toBeInTheDocument();
   });
 
-  it('warns only about two readable limits the wrong way round', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    for (const [minDate, maxDate] of [
-      [july(31), undefined],
-      [undefined, july(1)],
-      [invalid(), july(1)],
-      [july(31), invalid()],
-      [july(1), july(1)],
-    ] as const) {
-      const { unmount } = render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} minDate={minDate} maxDate={maxDate} />,
-        { withProviders: false },
-      );
-      unmount();
-    }
-
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  it('follows new limits', async () => {
-    const user = userEvent.setup();
-    const { rerender } = render(
-      <DateRangePicker value={{ from: july(15), to: july(16) }} onChange={vi.fn()} />,
-      { withProviders: false },
-    );
-    rerender(
-      <DateRangePicker
-        value={{ from: july(15), to: july(16) }}
-        onChange={vi.fn()}
-        minDate={july(10)}
-        maxDate={july(20)}
-      />,
-    );
-
-    await openCalendar(user);
-
-    expect(dayButton('2024-07-05')).toBeDisabled();
-    expect(dayButton('2024-07-25')).toBeDisabled();
-  });
-
   it('marks no booking for a booked range it cannot read', async () => {
     const user = userEvent.setup();
     render(
@@ -1089,10 +949,10 @@ describe('DateRangePicker, more of it', () => {
     const first = vi.fn();
     const second = vi.fn();
     const { rerender } = render(
-      <DateRangePicker value={undefined} onChange={first} minDate={july(1)} maxDate={july(31)} />,
+      <DateRangePicker value={undefined} onChange={first} defaultMonth={july(1)} />,
       { withProviders: false },
     );
-    rerender(<DateRangePicker value={undefined} onChange={second} minDate={july(1)} maxDate={july(31)} />);
+    rerender(<DateRangePicker value={undefined} onChange={second} defaultMonth={july(1)} />);
 
     await openCalendar(user);
     await user.click(dayButton('2024-07-15'));
@@ -1131,8 +991,7 @@ describe('DateRangePicker taking a range back', () => {
       <DateRangePicker
         value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 15) }}
         onChange={onChange}
-        minDate={new Date(2024, 6, 1)}
-        maxDate={new Date(2024, 6, 31)}
+        defaultMonth={new Date(2024, 6, 1)}
       />,
       { withProviders: false },
     );
