@@ -264,7 +264,7 @@ export interface CalendarTimelineProps {
   readonly assignments: readonly RoomAssignment[];
   readonly arrivals: readonly Transport[];
   readonly departures: readonly Transport[];
-  /** Shared agenda, drawn as category bands under the guest rows */
+  /** Shared agenda, listed day by day under the guest rows */
   readonly activities: readonly Activity[];
   readonly dateLocale: Locale;
   readonly today: Date;

@@ -112,8 +112,11 @@ describe('CalendarTimeline in French', () => {
     expect(screen.getByRole('region', { name: 'Calendrier en chronologie' })).toBeInTheDocument();
     expect(screen.getByText('Invités')).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Lignes de chronologie' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Lignes de la frise' })).toBeInTheDocument();
-    expect(screen.getByText('Activités')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Planning' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 3, name: /mercredi 7 janvier 2026\s*Aujourd'hui/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Jardins & plantes')).toBeInTheDocument();
     expect(screen.getAllByTitle(/Hors des dates du voyage/).length).toBeGreaterThan(0);
     expect(screen.getByTestId('timeline-now-marker')).toHaveAttribute('title', 'Heure actuelle');
     expect(screen.getAllByTitle('2 personnes sur place').length).toBeGreaterThan(0);

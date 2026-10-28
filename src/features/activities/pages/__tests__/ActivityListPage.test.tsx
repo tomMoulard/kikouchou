@@ -212,21 +212,45 @@ describe('ActivityListPage', () => {
     expect(screen.getByText('Test Trip')).toBeInTheDocument();
   });
 
-  it('renders the timeline / list view toggle', () => {
+  it('renders the planning / list view toggle', () => {
     renderPage();
 
     expect(
-      screen.getByRole('radio', { name: 'activities.view.timeline' }),
+      screen.getByRole('radio', { name: 'activities.view.planning' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'activities.view.list' })).toBeInTheDocument();
   });
 
-  it('defaults to the timeline view', () => {
+  it('defaults to the day-by-day planning', () => {
     renderPage();
 
-    expect(
-      screen.getByRole('region', { name: 'activities.timeline.ariaLabel' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'activities.view.planning' })).toBeChecked();
+    expect(screen.getByRole('button', { name: /Plant fair/ })).toBeInTheDocument();
+    expect(screen.getByText('Saint-Jean')).toBeInTheDocument();
+  });
+
+  it('still opens the planning from an old timeline link', () => {
+    renderPage('/trips/trip-1/activities?view=timeline');
+
+    expect(screen.getByRole('radio', { name: 'activities.view.planning' })).toBeChecked();
+  });
+
+  it('opens the activity clicked in the planning', async () => {
+    const { user } = renderPage();
+
+    await user.click(screen.getByRole('button', { name: /Plant fair/ }));
+
+    expect(screen.getByTestId('activity-dialog')).toBeInTheDocument();
+  });
+
+  it('switches to the list and back', async () => {
+    const { user } = renderPage();
+
+    await user.click(screen.getByRole('radio', { name: 'activities.view.list' }));
+    expect(screen.getByRole('radio', { name: 'activities.view.list' })).toBeChecked();
+
+    await user.click(screen.getByRole('radio', { name: 'activities.view.planning' }));
+    expect(screen.getByRole('radio', { name: 'activities.view.planning' })).toBeChecked();
   });
 
   it('shows the agenda as cards in list view', () => {
@@ -271,11 +295,11 @@ describe('ActivityListPage', () => {
     ).toBeInTheDocument();
     unmount();
 
-    renderPage('/trips/trip-1/activities?view=timeline');
-    const timelineEmptyState = screen.getByRole('status');
-    expect(within(timelineEmptyState).getByText('activities.empty')).toBeInTheDocument();
+    renderPage('/trips/trip-1/activities?view=planning');
+    const planningEmptyState = screen.getByRole('status');
+    expect(within(planningEmptyState).getByText('activities.empty')).toBeInTheDocument();
     expect(
-      within(timelineEmptyState).getByRole('button', { name: 'activities.new' }),
+      within(planningEmptyState).getByRole('button', { name: 'activities.new' }),
     ).toBeInTheDocument();
   });
 
