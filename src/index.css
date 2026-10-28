@@ -805,6 +805,31 @@
 }
 
 /*
+ * Do not shrink the page for a scrollbar a phone does not have.
+ *
+ * Every Radix overlay, the trip card's "..." menu included, locks the page
+ * through react-remove-scroll-bar. It measures the scrollbar as
+ * `window.innerWidth - documentElement.clientWidth` and gives `body` that much
+ * `margin-right`, so the content keeps its width when a desktop scrollbar
+ * disappears. A phone draws its scrollbar over the content, but the two widths
+ * still differ as soon as anything on the page overflows sideways: the browser
+ * widens the layout viewport to fit it, `innerWidth` follows, and
+ * `clientWidth` does not. The lock then reads the overflow as a scrollbar.
+ * Measured on a 393px phone with 63px of overflow: the menu opened, `body`
+ * took a 63px margin, and every trip card on `/trips` shrank from 361px to
+ * 298px until it closed.
+ *
+ * A touch screen with no hover has no scrollbar that takes up space, so there
+ * is nothing to make up for. `html` in front of the library's selector wins on
+ * specificity, whichever of the two style sheets comes last.
+ */
+@media (hover: none) and (pointer: coarse) {
+  html body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
+}
+
+/*
  * Hide a PostHog survey while a modal is open, and give it back afterwards.
  *
  * Creating a room and being asked for feedback at the same time deadlocked the
