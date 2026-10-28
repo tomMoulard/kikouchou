@@ -1471,7 +1471,6 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           existingAssignment={editingAssignment}
           persons={persons}
           tripStartDate={currentTrip ? parseISO(currentTrip.startDate) : undefined}
-          tripEndDate={currentTrip ? parseISO(currentTrip.endDate) : undefined}
           onSubmit={handleAssignmentSubmit}
           checkConflict={checkConflict}
           existingAssignments={getAssignmentsByRoom(editingAssignment.roomId)}
