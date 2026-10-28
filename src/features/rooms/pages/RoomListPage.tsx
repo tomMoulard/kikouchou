@@ -274,14 +274,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     [setSearchParams],
   ),
 
-  // Trip date constraints for DateRangePicker
+  // Month the DateRangePicker opens on; the trip dates do not bound it
    tripStartDate = useMemo(
     () => (currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined),
     [currentTrip?.startDate],
-  ),
-   tripEndDate = useMemo(
-    () => (currentTrip?.endDate ? parseISO(currentTrip.endDate) : undefined),
-    [currentTrip?.endDate],
   ),
 
   // Effective date range for capacity calculation (defaults to full trip range).
@@ -1159,8 +1155,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           <DateRangePicker
             value={selectedDateRange}
             onChange={setSelectedDateRange}
-            minDate={tripStartDate}
-            maxDate={tripEndDate}
+            defaultMonth={tripStartDate}
             aria-label={t('rooms.filterDates')}
           />
         </div>

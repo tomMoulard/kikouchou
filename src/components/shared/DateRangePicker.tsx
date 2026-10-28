@@ -21,8 +21,7 @@
  *     <DateRangePicker
  *       value={dateRange}
  *       onChange={setDateRange}
- *       minDate={tripStartDate}
- *       maxDate={tripEndDate}
+ *       defaultMonth={tripStartDate}
  *     />
  *   );
  * }
@@ -31,8 +30,8 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { eachDayOfInterval, format, isAfter, isValid } from 'date-fns';
-import type { Matcher, DateRange as RdpDateRange } from 'react-day-picker';
+import { eachDayOfInterval, format, isValid } from 'date-fns';
+import type { DateRange as RdpDateRange } from 'react-day-picker';
 import { CalendarIcon, X } from 'lucide-react';
 
 import { getDateLocale } from '@/lib/i18n/date-locale';
@@ -81,10 +80,12 @@ interface DateRangePickerProps {
   readonly value: DateRange | undefined;
   /** Callback fired when the date range changes */
   readonly onChange: (range: DateRange | undefined) => void;
-  /** Minimum selectable date (dates before this are disabled) */
-  readonly minDate?: Date;
-  /** Maximum selectable date (dates after this are disabled) */
-  readonly maxDate?: Date;
+  /**
+   * Month the calendar opens on when nothing is selected yet. Only a starting
+   * point: every day stays selectable, so a guest can arrive before the trip
+   * starts or leave after it ends (the trip dates are indicative).
+   */
+  readonly defaultMonth?: Date;
   /** Placeholder text when no date is selected */
   readonly placeholder?: string;
   /** Whether the picker is disabled */
@@ -116,15 +117,14 @@ function isValidDate(date: Date | undefined): date is Date {
  * Features:
  * - Uses shadcn/ui Calendar and Popover
  * - Locale-aware date formatting
- * - Supports min/max date constraints
+ * - Opens on a caller-chosen month without restricting any day
  * - Accessible with proper ARIA attributes
  * - Auto-closes when range selection is complete
  */
 const DateRangePicker = memo(({
   value,
   onChange,
-  minDate,
-  maxDate,
+  defaultMonth: defaultMonthProp,
   placeholder,
   disabled = false,
   className,
@@ -143,35 +143,6 @@ const DateRangePicker = memo(({
     () => getDateLocale(i18n.language),
     [i18n.language]
   ),
-
-  // Build disabled date matchers for react-day-picker
-   disabledDays = useMemo((): Matcher[] => {
-    const matchers: Matcher[] = [];
-
-    if (minDate && isValidDate(minDate)) {
-      matchers.push({ before: minDate });
-    }
-
-    if (maxDate && isValidDate(maxDate)) {
-      matchers.push({ after: maxDate });
-    }
-
-    // Warn if minDate is after maxDate (development only)
-    if (
-      import.meta.env.DEV &&
-      minDate &&
-      maxDate &&
-      isValidDate(minDate) &&
-      isValidDate(maxDate) &&
-      isAfter(minDate, maxDate)
-    ) {
-      console.warn(
-        'DateRangePicker: minDate is after maxDate, all dates will be disabled'
-      );
-    }
-
-    return matchers;
-  }, [minDate, maxDate]),
 
   // Build array of booked dates for visual indicator
    bookedDates = useMemo((): Date[] => {
@@ -282,11 +253,11 @@ const DateRangePicker = memo(({
     if (value?.from && isValidDate(value.from)) {
       return value.from;
     }
-    if (minDate && isValidDate(minDate)) {
-      return minDate;
+    if (defaultMonthProp && isValidDate(defaultMonthProp)) {
+      return defaultMonthProp;
     }
     return undefined;
-  }, [value, minDate]),
+  }, [value, defaultMonthProp]),
 
   // Accessible label for the trigger button
   // Simple computation - no need for useMemo overhead
@@ -326,7 +297,6 @@ const DateRangePicker = memo(({
         selected={selected}
         onSelect={handleSelect}
         numberOfMonths={numberOfMonths}
-        disabled={disabledDays}
         defaultMonth={defaultMonth}
         locale={locale}
         modifiers={modifiers}

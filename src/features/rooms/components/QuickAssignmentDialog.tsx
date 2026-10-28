@@ -150,17 +150,11 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     [rooms, roomId],
   );
 
-  // Get trip date constraints
+  // Month the picker opens on; the trip dates do not bound the selection
   const tripStartDateStr = currentTrip?.startDate;
   const tripStartDate = useMemo(
     () => (tripStartDateStr ? parseISO(tripStartDateStr) : undefined),
     [tripStartDateStr],
-  );
-
-  const tripEndDateStr = currentTrip?.endDate;
-  const tripEndDate = useMemo(
-    () => (tripEndDateStr ? parseISO(tripEndDateStr) : undefined),
-    [tripEndDateStr],
   );
 
   // Get existing assignments for this room (for booked ranges display)
@@ -486,8 +480,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
               <DateRangePicker
                 value={dateRange}
                 onChange={setDateRange}
-                minDate={tripStartDate}
-                maxDate={tripEndDate}
+                defaultMonth={tripStartDate}
                 disabled={isSubmitting}
                 aria-label={t('assignments.period')}
                 bookedRanges={bookedRanges}
