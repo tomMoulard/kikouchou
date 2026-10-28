@@ -23,7 +23,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 11;
+export const DB_VERSION = 13;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -145,6 +145,37 @@ export interface RideNoticeRow {
   seenDatetime?: string;
   /** When this device last announced this notice, epoch ms. */
   firedAtMs?: number;
+}
+
+/**
+ * The bytes of one cover photo, cached on this device.
+ *
+ * A trip and a room name their photo with `photoId`, and that id travels in the
+ * shared document. The bytes do not: a document update is replayed by every
+ * member on every start, and a photo in it would be downloaded again forever.
+ * They live in the `trip-photos` Storage bucket at `<remoteTripId>/<photoId>`,
+ * and this row is the copy that lets the card show the photo offline.
+ *
+ * The key is `[tripId+id]`, with `tripId` resolved on this device. A photo id
+ * read from the document is remote input, so it is never a key on its own:
+ * a member who named another trip's photo id would otherwise overwrite that
+ * trip's photo here.
+ */
+export interface PhotoRow {
+  /** Local trip id, half of the primary key and the delete cascade. */
+  tripId: string;
+  /** The photo id the trip or room names. */
+  id: string;
+  /** The image itself: WebP or JPEG from the picker, SVG for the sample trip. */
+  blob: Blob;
+  /**
+   * 1 while the bytes exist on this device only. A number rather than a
+   * boolean because IndexedDB cannot index a boolean, and the upload sweep
+   * reads this index.
+   */
+  pending: 0 | 1;
+  /** When the row was written, epoch ms. */
+  createdAt: number;
 }
 
 /**
@@ -293,6 +324,16 @@ export class KikouchouDatabase extends Dexie {
    * must not delete the group its guests came from.
    */
   guestGroups!: Table<GuestGroup, string>;
+
+  /**
+   * Cover photos of trips and rooms, cached on this device.
+   * Primary key: [tripId+id]
+   * Indexes: tripId (cascade), pending (the upload sweep)
+   *
+   * See {@link PhotoRow}. Never a document collection: the bytes travel
+   * through Storage, and the document carries only the id.
+   */
+  photos!: Table<PhotoRow, [string, string]>;
 
   /**
    * @param name - Database name. Defaults to the real one; a test passes its own
@@ -707,6 +748,18 @@ export class KikouchouDatabase extends Dexie {
       yjsOutbox: '++id, tripId',
       syncCursors: 'tripId',
       tripMembers: '[tripId+userId], tripId, userId',
+    });
+
+    /**
+     * Schema Version 13 - Cover photos
+     *
+     * Adds `photos`, the device cache of trip and room cover photos. The
+     * `photoId` fields on trips and rooms are not indexed, so they need no
+     * schema change. (`DB_VERSION` had stayed at 11 through version 12; it
+     * names the latest version again.)
+     */
+    this.version(13).stores({
+      photos: '[tripId+id], tripId, pending',
     });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade

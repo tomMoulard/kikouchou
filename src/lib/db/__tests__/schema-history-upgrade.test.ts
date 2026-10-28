@@ -209,7 +209,7 @@ describe('upgrading from every historical schema', () => {
     try {
       await upgraded.open();
 
-      expect(upgraded.verno).toBe(12);
+      expect(upgraded.verno).toBe(13);
       for (const table of Object.keys(schema)) {
         if (table === 'yjsUpdates') {
           const rows = await upgraded.yjsUpdates.where('tripId').equals(TRIP_ID).toArray();
