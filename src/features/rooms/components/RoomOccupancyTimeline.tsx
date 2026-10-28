@@ -408,13 +408,13 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     ? `${row.room.name}. ${t('rooms.spotsOpen', { count: spotsOpen })}`
                     : row.room.name;
                 const RoomGlyph = getRoomIconComponent(row.room.icon);
-                // The hint only belongs in the tooltip when the gesture is
+                // The hint only belongs in the tooltip when the click is
                 // actually wired up — the timeline renders without `onEditRoom`
                 // in a few places, and promising an editor there is a lie.
                 const labelTitle = [
                   row.room.name,
                   t('rooms.beds', { count: row.room.capacity }),
-                  ...(onEditRoom ? [t('rooms.doubleClickToEdit')] : []),
+                  ...(onEditRoom ? [t('common.clickToEdit')] : []),
                 ].join(' · ');
 
                 return (
@@ -425,22 +425,16 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     aria-label={rowAriaLabel}
                   >
                     {/*
-                      Double click on the label opens the room's edit dialog —
-                      the timeline carries no menu of its own, so this saves the
+                      A click on the label opens the room's edit dialog — the
+                      timeline carries no menu of its own, so this saves the
                       trip through the cards view, where the same action sits in
-                      each card's menu and stays keyboard-reachable.
+                      each card's menu.
 
-                      The handler is on the whole label cell rather than the
-                      name span so a row with a "spots open" second line has one
-                      target and not two. `select-none` keeps the second click
-                      from leaving the name highlighted behind the dialog it
-                      just opened.
-
-                      No keyboard pair goes with it, and none is owed: a double
-                      click has no keyboard equivalent, and `dblclick` is not a
-                      handler `jsx-a11y/no-static-element-interactions` counts
-                      as making an element interactive — precisely because it
-                      cannot be the only way to reach an action. Here it is not.
+                      The target is a real button laid over the whole label
+                      cell, as on the cards: one target for a row with a "spots
+                      open" second line rather than two, a focus ring framing
+                      the cell, and Enter/Space for free. The cell's `title`
+                      still shows on hover, since the button carries none.
                     */}
                     <div
                       className={cn(
@@ -450,12 +444,19 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           : hasSpotsNote
                             ? 'flex-col items-stretch justify-center gap-0.5 px-3 py-1'
                             : 'items-center px-3',
-                        onEditRoom && 'cursor-pointer select-none',
                       )}
                       style={{ ...TIMELINE_LABEL_CELL_STYLE, height: rowHeight }}
                       title={labelTitle}
-                      onDoubleClick={onEditRoom ? () => onEditRoom(row.room) : undefined}
                     >
+                      {onEditRoom && (
+                        <button
+                          type="button"
+                          aria-label={t('common.editNamed', { name: row.room.name })}
+                          className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                          onClick={() => onEditRoom(row.room)}
+                          data-testid={`room-timeline-edit-${row.room.id}`}
+                        />
+                      )}
                       <div className="flex min-w-0 items-center gap-1.5">
                         <RoomGlyph
                           className="size-3.5 shrink-0 text-muted-foreground"

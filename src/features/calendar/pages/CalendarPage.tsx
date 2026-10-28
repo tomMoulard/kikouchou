@@ -106,6 +106,7 @@ import {
 
 // Import ActivityDialog + helpers for the shared agenda
 import { ActivityDialog } from '@/features/activities/components/ActivityDialog';
+import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import {
   getActivityEndDayKey,
   getActivityStartDayKey,
@@ -312,6 +313,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Activity edit dialog state
   const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<ActivityId | undefined>();
+
+  // Guest edit dialog state, opened from a name in the timeline's label column
+  const [isPersonDialogOpen, setIsPersonDialogOpen] = useState(false);
+  const [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>();
 
   const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
@@ -1093,6 +1098,18 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
   }, []);
 
+  const handlePersonClick = useCallback((person: Person) => {
+    setEditingPersonId(person.id);
+    setIsPersonDialogOpen(true);
+  }, []);
+
+  const handlePersonDialogClose = useCallback((open: boolean) => {
+    setIsPersonDialogOpen(open);
+    if (!open) {
+      setEditingPersonId(undefined);
+    }
+  }, []);
+
   const handleAssignmentDialogClose = useCallback((open: boolean) => {
     setIsAssignmentDialogOpen(open);
     if (!open) {
@@ -1397,7 +1414,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           onTransportClick={handleTransportClick}
           onActivityClick={handleActivityClick}
           rideForTransport={rideForTransport}
-          {...(canEdit ? { onAddGuests: handleAddGuests, onAddRooms: handleAddRooms } : {})}
+          {...(canEdit
+            ? {
+                onAddGuests: handleAddGuests,
+                onAddRooms: handleAddRooms,
+                onPersonClick: handlePersonClick,
+              }
+            : {})}
           hideEmptyState={showSetupChecklist}
         />
       )}
@@ -1461,6 +1484,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         onOpenChange={handleActivityDialogClose}
         activityId={selectedActivityId}
       />
+
+      {/* Guest Edit Dialog — mounted only while a guest is picked, since
+          without an id the dialog would be in create mode */}
+      {editingPersonId !== undefined && (
+        <PersonDialog
+          personId={editingPersonId}
+          open={isPersonDialogOpen}
+          onOpenChange={handlePersonDialogClose}
+        />
+      )}
 
       {/* Assignment Edit Dialog */}
       {editingAssignment ? (

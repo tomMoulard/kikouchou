@@ -1176,7 +1176,7 @@ test.describe('Room Assignment Flow', () => {
     }
   });
 
-  test('double-clicking a room name in the timeline opens its edit dialog', async ({ page }) => {
+  test('clicking a room name in the timeline opens its edit dialog', async ({ page }) => {
     tripId = await createTestTrip(page);
     await createRoomViaDB(page, tripId, {
       name: TEST_DATA.room.name,
@@ -1192,7 +1192,7 @@ test.describe('Room Assignment Flow', () => {
       .getByText(TEST_DATA.room.name, { exact: true })
       .locator('xpath=ancestor::*[@title][1]');
     await expect(roomLabel).toBeVisible();
-    await roomLabel.dblclick();
+    await roomLabel.click();
 
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#room-name')).toHaveValue(TEST_DATA.room.name);

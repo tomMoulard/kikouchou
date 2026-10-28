@@ -13,7 +13,7 @@ import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-ce
 import { TimelineOffscreenArrows } from '@/components/shared/TimelineOffscreenArrows';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import { getPersonHeadcount } from '@/types';
-import type { HexColor, RoomAssignment, Transport, TransportId } from '@/types';
+import type { HexColor, Person, RoomAssignment, Transport, TransportId } from '@/types';
 import { guestInitial } from '@/features/persons/utils/guest-initial';
 import type { ResolvedRide } from '@/features/transports/utils/ride-model';
 import { cn } from '@/lib/utils';
@@ -76,6 +76,8 @@ interface CalendarTimelineRowProps {
   readonly dateLocale: Locale;
   readonly onAssignmentClick: (assignment: RoomAssignment, relatedTransports?: readonly Transport[]) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
+  /** Opens the guest's edit dialog from their label cell; omitted, it is plain text */
+  readonly onPersonClick?: (person: Person) => void;
   /** Reads the car serving one leg, from the page's `resolveRides` index */
   readonly rideForTransport?: (transportId: TransportId) => ResolvedRide | undefined;
 }
@@ -86,6 +88,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   dateLocale,
   onAssignmentClick,
   onTransportClick,
+  onPersonClick,
   rideForTransport,
 }: CalendarTimelineRowProps): ReactElement {
   const { t } = useTranslation();
@@ -458,8 +461,21 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           viewport.labelsCollapsed ? 'justify-center px-1' : 'px-3',
         )}
         style={{ ...TIMELINE_LABEL_CELL_STYLE, height: rowHeight }}
-        title={personLabel}
+        title={onPersonClick ? `${personLabel} · ${t('common.clickToEdit')}` : personLabel}
       >
+        {/* A click on the name opens the guest's edit dialog. A real button
+            laid over the whole cell, as on the room timeline: the focus ring
+            frames the cell, Enter/Space come with it, and the cell's `title`
+            still shows on hover since the button carries none. */}
+        {onPersonClick && (
+          <button
+            type="button"
+            aria-label={t('common.editNamed', { name: personLabel })}
+            className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            onClick={() => onPersonClick(model.person)}
+            data-testid={`calendar-timeline-edit-person-${model.person.id}`}
+          />
+        )}
         {/* Folded, the column is 40px — one letter's worth of space. The dot
             and the name give way to the guest's initial in their own colour,
             which carries both the identity and the colour in the room the

@@ -17,7 +17,7 @@ import { format } from 'date-fns';
 
 import { tripDate, tripDay } from '@/features/rooms/__tests__/fixture-days';
 import { renderPlain } from '@/features/rooms/__tests__/harness';
-import { act, screen, within } from '@/test/utils';
+import { act, fireEvent, screen, within } from '@/test/utils';
 
 import type { TripTimelineFrameProps, TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import type { TimelineOffscreenArrowsProps } from '@/components/shared/TimelineOffscreenArrows';
@@ -445,13 +445,16 @@ describe('RoomOccupancyTimeline — a room row', () => {
     expect(labelCell(roomRow('Attic'))).toHaveClass('items-center', 'justify-center', 'px-1');
   });
 
-  it('offers the double click only when there is an editor to open', () => {
+  it('offers the click only when there is an editor to open', () => {
     const onEditRoom = vi.fn();
     const { rerender } = renderPlain(<RoomOccupancyTimeline {...baseProps({ rooms: [BARN] })} />);
-    expect(labelCell(roomRow('Barn'))).not.toHaveClass('cursor-pointer');
+    expect(within(labelCell(roomRow('Barn'))).queryByRole('button')).not.toBeInTheDocument();
 
     rerender(<RoomOccupancyTimeline {...baseProps({ rooms: [BARN], onEditRoom })} />);
-    expect(labelCell(roomRow('Barn'))).toHaveClass('cursor-pointer', 'select-none');
+    const editButton = within(labelCell(roomRow('Barn'))).getByRole('button');
+    expect(editButton).toHaveClass('absolute', 'inset-0', 'cursor-pointer');
+    fireEvent.click(editButton);
+    expect(onEditRoom).toHaveBeenCalledWith(BARN);
   });
 
   it('shades the same columns in a room row', () => {
