@@ -395,8 +395,29 @@ jobs:
           name: generated-icons
           path: public/icons/
 
+      # The browser download took about three minutes in every shard, so it
+      # is cached, keyed on the Playwright version actually installed: a bump
+      # in bun.lock changes the key and fetches the matching browser. The
+      # cache holds only the browser binaries, not the system libraries apt
+      # installs, so a hit still runs `install-deps`.
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(bun -e 'console.log(require("@playwright/test/package.json").version)')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}-chromium
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
 
       # `blob` writes the shard's results for `e2e-report` to merge; `list`
       # keeps the results readable in this job's own log.
