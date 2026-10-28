@@ -1607,17 +1607,20 @@ function AssistantPageComponent(): ReactElement {
 
       {!isReady ? (
         <>
-          <AssistantModelPanel
-            selectedModelId={selectedModelId}
-            onModelChange={(value) => {
-              void handleModelChange(value);
-            }}
-            disabled={isModelSelectionLocked}
-            isCached={isCached}
-            cachedModelIds={cachedModelIds}
-            presets={offeredPresets}
-          />
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* The picker scrolls with the card under it. On a phone the picker
+              fills most of the screen, and a strip of its own under it hid the
+              connect button: a scroll over the picker moved nothing. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+            <AssistantModelPanel
+              selectedModelId={selectedModelId}
+              onModelChange={(value) => {
+                void handleModelChange(value);
+              }}
+              disabled={isModelSelectionLocked}
+              isCached={isCached}
+              cachedModelIds={cachedModelIds}
+              presets={offeredPresets}
+            />
             {isCloud ? (
               <CloudConnectCard onConnect={connect} error={error} />
             ) : (
