@@ -10,11 +10,7 @@ import { Calendar as CalendarIcon, Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/EmptyState';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
-import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
-import {
-  buildActivityTimelineModel,
-  collectActivityDayKeys,
-} from '@/features/activities/utils/activity-timeline-utils';
+import { ActivityAgenda } from '@/features/activities/components/ActivityAgenda';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { columnsFromDays } from '@/lib/utils/timeline-scale';
 import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
@@ -47,21 +43,12 @@ export const CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX = 200;
 const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineProps): ReactElement {
   const { t } = useTranslation();
 
-  // Both halves of the timeline are drawn on one day axis, so each model is
-  // built over the union of both sets of events — otherwise widening the guest
-  // half for an early flight would slide the activity bands off the days they
-  // belong to.
   const guestDayKeys = useMemo(
     () => [
       ...collectTransportDayKeys([...props.arrivals, ...props.departures]),
       ...collectAssignmentDayKeys(props.assignments),
     ],
     [props.arrivals, props.assignments, props.departures],
-  );
-
-  const activityDayKeys = useMemo(
-    () => collectActivityDayKeys(props.activities),
-    [props.activities],
   );
 
   // The trip's own days, widened to reach every event drawn on them: a guest
@@ -72,16 +59,13 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       buildDayColumnsCovering({
         startKey: props.trip.startDate,
         endKey: props.trip.endDate,
-        mustInclude: [...guestDayKeys, ...activityDayKeys],
+        mustInclude: guestDayKeys,
       }),
-    [props.trip.startDate, props.trip.endDate, guestDayKeys, activityDayKeys],
+    [props.trip.startDate, props.trip.endDate, guestDayKeys],
   );
 
   const tripDayKeys = useMemo(() => toDayKeys(tripDays), [tripDays]);
 
-  // One axis for both halves of the timeline. Building it here rather than
-  // inside each model is what guarantees the guest rows and the activity bands
-  // line up: they are not two axes that agree, they are the same axis.
   const columns = useMemo(
     () => columnsFromDays(tripDays, tripDayKeys, props.dateLocale),
     [tripDays, tripDayKeys, props.dateLocale],
@@ -109,18 +93,6 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       columns,
       t,
     ],
-  );
-
-  // The shared agenda gets its own bands under the guest rows, on that same
-  // axis.
-  const activityModel = useMemo(
-    () =>
-      buildActivityTimelineModel({
-        trip: props.trip,
-        activities: props.activities,
-        columns,
-      }),
-    [props.trip, props.activities, columns],
   );
 
   const todayKey = toLocalISODateString(props.today) as ISODateString;
@@ -185,7 +157,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
     props.assignments.length === 0 &&
     props.arrivals.length === 0 &&
     props.departures.length === 0 &&
-    activityModel.rows.length === 0 &&
+    props.activities.length === 0 &&
     model.rows.every((r) => r.staySpan === undefined);
 
   const handleActivityClick = props.onActivityClick;
@@ -224,39 +196,44 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
               </div>
             ))}
           </div>
-
-          {activityModel.rows.length > 0 && handleActivityClick && (
-            <>
-              <div
-                className="sticky left-0 border-t-2 border-muted bg-muted/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                style={{ width: viewport.labelColumnWidth + viewport.canvasWidth }}
-              >
-                {t('activities.title')}
-              </div>
-              <div role="list" aria-label={t('activities.timeline.rows', 'Timeline rows')}>
-                {activityModel.rows.map((row) => (
-                  <div key={`activity-${row.category}`} role="listitem">
-                    <ActivityTimelineRow
-                      model={row}
-                      viewport={viewport}
-                      dateLocale={props.dateLocale}
-                      onActivityClick={handleActivityClick}
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
         </>
       )}
     </TripTimelineFrame>
   );
 
+  // The activities are a day-by-day planning under the guest grid, not bands
+  // on its axis: a row per kind of activity ("Meals", "Sport") did not answer
+  // "what are we doing on Saturday?". Off the axis, it scrolls with the page
+  // rather than sideways with the days.
+  const planning =
+    props.activities.length > 0 && handleActivityClick ? (
+      <section className="mt-6" aria-labelledby="calendar-planning-heading">
+        <h2
+          id="calendar-planning-heading"
+          className="mb-3 px-1 font-display text-lg font-semibold"
+        >
+          {t('calendar.planning', 'Schedule')}
+        </h2>
+        <ActivityAgenda
+          activities={props.activities}
+          dateLocale={props.dateLocale}
+          today={props.today}
+          onActivityClick={handleActivityClick}
+          headingLevel={3}
+        />
+      </section>
+    ) : null;
+
   if (!showEmptyState) {
-    return frame;
+    return (
+      <>
+        {frame}
+        {planning}
+      </>
+    );
   }
 
+  // An empty timeline has no activity either, so there is no planning to draw.
   return (
     <>
       {frame}

@@ -746,21 +746,11 @@
     "participationUpdated": "Sign-ups updated",
     "view": {
       "ariaLabel": "Agenda view",
-      "list": "List",
-      "timeline": "Timeline"
+      "planning": "Schedule",
+      "list": "List"
     },
-    "timeline": {
-      "ariaLabel": "Activity timeline",
-      "categories": "Categories",
-      "rows": "Timeline rows",
-      "categoryRow": "{{category}} timeline",
-      "barAria": "{{title}}. {{when}}. {{participants}} participants.",
-      "hiddenCount_one": "{{count}} activity falls outside the trip dates and is not shown.",
-      "hiddenCount_other": "{{count}} activities fall outside the trip dates and are not shown.",
-      "allOutsideTrip_one": "The only activity recorded falls outside the trip dates.",
-      "allOutsideTrip_other": "All {{count}} activities fall outside the trip dates.",
-      "noneInRange": "Nothing on the trip dates",
-      "showAsList": "Show as list"
+    "agenda": {
+      "dayOfSpan": "Day {{day}} of {{count}}"
     },
     "errors": {
       "endBeforeStart": "The end must be after the start",
@@ -804,6 +794,7 @@
   "calendar": {
     "title": "Calendar",
     "today": "Today",
+    "planning": "Schedule",
     "month": "Month",
     "week": "Week",
     "noAssignments": "Nothing scheduled for this period. Rooms and transports will appear here",

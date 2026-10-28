@@ -1,7 +1,7 @@
 /**
  * @fileoverview Activity List Page — the shared agenda of a trip.
- * Shows every planned outing, event and meal, as a chronological list or a
- * horizontal timeline, and lets guests sign up.
+ * Shows every planned outing, event and meal, as a day-by-day planning or a
+ * list of cards, and lets guests sign up.
  *
  * Route: /trips/:tripId/activities
  *
@@ -9,7 +9,7 @@
  * - List view grouped by day, with a collapsible "past activities" section.
  *   The upcoming/past split is read from `ActivityContext`, never recomputed
  *   here — the page and the context used to answer "is this over?" differently.
- * - Timeline view: one band per category across the trip days
+ * - Planning view: each day, its activities in the order they happen
  * - Create / edit / delete via the activity dialog
  * - One-tap join & leave for the guest using this browser
  * - Empty and error states, responsive layout, FAB on mobile
@@ -52,7 +52,7 @@ import { captureDeletion } from '@/lib/posthog';
 
 import { ActivityCard } from '../components/ActivityCard';
 import { ActivityDialog } from '../components/ActivityDialog';
-import { ActivityTimeline } from '../components/ActivityTimeline';
+import { ActivityAgenda } from '../components/ActivityAgenda';
 import { useActivityParticipation } from '../hooks/useActivityParticipation';
 import {
   type ActivityDateGroup,
@@ -67,7 +67,7 @@ import { reportFailure } from '@/lib/errors/report-failure';
 /**
  * Which representation of the agenda is on screen.
  */
-type ActivityView = 'list' | 'timeline';
+type ActivityView = 'list' | 'planning';
 
 /**
  * Props for the ActivityDateGroupSection component.
@@ -179,13 +179,15 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   const currentView: ActivityView = useMemo(
-    () => (searchParams.get('view') === 'list' ? 'list' : 'timeline'),
+    // Anything but `list` is the planning, so an old `?view=timeline` link
+    // still lands on the default view.
+    () => (searchParams.get('view') === 'list' ? 'list' : 'planning'),
     [searchParams],
   );
 
   const handleViewChange = useCallback(
     (nextValue: string) => {
-      const nextView: ActivityView = nextValue === 'list' ? 'list' : 'timeline';
+      const nextView: ActivityView = nextValue === 'list' ? 'list' : 'planning';
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set('view', nextView);
@@ -319,14 +321,6 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
     setIsPastExpanded((prev) => !prev);
   }, []);
 
-  /**
-   * Escape hatch from the timeline when every activity sits outside the trip
-   * dates: the list view has no day axis and can still show them all.
-   */
-  const handleShowAsList = useCallback(() => {
-    handleViewChange('list');
-  }, [handleViewChange]);
-
   const headerAction = useMemo(
     () => (
       <div className="hidden sm:flex items-center gap-2">
@@ -421,7 +415,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
         onValueChange={handleViewChange}
         ariaLabel={t('activities.view.ariaLabel', 'Agenda view')}
         options={[
-          { value: 'timeline', label: t('activities.view.timeline') },
+          { value: 'planning', label: t('activities.view.planning', 'Schedule') },
           { value: 'list', label: t('activities.view.list') },
         ]}
       />
@@ -446,14 +440,12 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
               : {})}
           />
         </div>
-      ) : currentView === 'timeline' ? (
-        <ActivityTimeline
-          trip={currentTrip}
+      ) : currentView === 'planning' ? (
+        <ActivityAgenda
           activities={activities}
           dateLocale={dateLocale}
           today={today}
           onActivityClick={handleActivityClick}
-          onShowAsList={handleShowAsList}
         />
       ) : (
         <div

@@ -746,21 +746,11 @@
     "participationUpdated": "Inscriptions mises à jour",
     "view": {
       "ariaLabel": "Vue de l'agenda",
-      "list": "Liste",
-      "timeline": "Frise"
+      "planning": "Planning",
+      "list": "Liste"
     },
-    "timeline": {
-      "ariaLabel": "Frise des activités",
-      "categories": "Types",
-      "rows": "Lignes de la frise",
-      "categoryRow": "Frise {{category}}",
-      "barAria": "{{title}}. {{when}}. {{participants}} participants.",
-      "hiddenCount_one": "{{count}} activité en dehors des dates du voyage n'est pas affichée.",
-      "hiddenCount_other": "{{count}} activités en dehors des dates du voyage ne sont pas affichées.",
-      "allOutsideTrip_one": "La seule activité enregistrée est en dehors des dates du voyage.",
-      "allOutsideTrip_other": "Les {{count}} activités enregistrées sont en dehors des dates du voyage.",
-      "noneInRange": "Rien sur les dates du voyage",
-      "showAsList": "Afficher en liste"
+    "agenda": {
+      "dayOfSpan": "Jour {{day}} sur {{count}}"
     },
     "errors": {
       "endBeforeStart": "La fin doit être après le début",
@@ -804,6 +794,7 @@
   "calendar": {
     "title": "Calendrier",
     "today": "Aujourd'hui",
+    "planning": "Planning",
     "month": "Mois",
     "week": "Semaine",
     "noAssignments": "Rien de prévu pour cette période. Les chambres et transports apparaîtront ici",

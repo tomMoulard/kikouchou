@@ -314,6 +314,68 @@ export async function seedRoom(
 }
 
 /**
+ * The fields a seeded activity is given.
+ */
+export interface SeedActivityOptions {
+  readonly tripId: string;
+  readonly title: string;
+  /** An `ActivityCategory`; defaults to `other`. */
+  readonly category?: string;
+  /** ISO datetime of the start. */
+  readonly startDatetime: string;
+  readonly endDatetime?: string;
+  readonly allDay?: boolean;
+  readonly location?: string;
+}
+
+/**
+ * Writes one activity into the `activities` store.
+ *
+ * Same ordering rule as {@link seedPerson}: seed before the trip is current.
+ *
+ * @param page - Playwright page object
+ * @param options - The activity to write
+ * @returns The new activity's id
+ */
+export async function seedActivity(
+  page: Page,
+  options: SeedActivityOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedActivityOptions) => {
+    const id = `seed-activity-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikouchou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('activities', 'readwrite');
+        tx.objectStore('activities').add({
+          id,
+          tripId: options.tripId,
+          title: options.title,
+          category: options.category ?? 'other',
+          startDatetime: options.startDatetime,
+          ...(options.endDatetime === undefined ? {} : { endDatetime: options.endDatetime }),
+          allDay: options.allDay ?? false,
+          ...(options.location === undefined ? {} : { location: options.location }),
+          participantIds: [],
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create activity'));
+        };
+      };
+    });
+  }, options);
+}
+
+/**
  * The fields a seeded transport is given.
  */
 export interface SeedTransportOptions {

@@ -277,8 +277,8 @@ export interface ActivityDateGroup {
 /**
  * Groups activities by their local start day, chronologically.
  *
- * Multi-day activities appear once, under the day they start on — the timeline
- * is where their full span is shown.
+ * Multi-day activities appear once, under the day they start on — the planning
+ * (`buildActivityAgenda`) is where they are listed on every day they cover.
  *
  * @param activities - Activities to group
  * @param locale - date-fns locale used for the header labels

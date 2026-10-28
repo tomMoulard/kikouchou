@@ -1269,7 +1269,7 @@ runtime and therefore cannot be a utility class:
 1. **A user-chosen colour** — `style={{ backgroundColor: person.color }}` and the guest
    swatches in `ColorPicker`. The palette lives in the database, not in the theme.
 2. **Computed pixel geometry** — the timeline rows (`CalendarTimelineRow`,
-   `ActivityTimelineRow`, `RoomOccupancyTimeline`, `TripTimelineFrame`) and progress-bar
+   `RoomOccupancyTimeline`, `TripTimelineFrame`) and progress-bar
    widths, where a position is a percentage of measured content.
 
 Anything else — a colour, a spacing, a radius you could have written down in advance —

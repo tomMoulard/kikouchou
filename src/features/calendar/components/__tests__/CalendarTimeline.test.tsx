@@ -295,7 +295,7 @@ describe('CalendarTimeline', () => {
     expect(screen.queryByText('Nothing scheduled yet')).not.toBeInTheDocument();
   });
 
-  it('draws the shared agenda under the guests when it can open it', () => {
+  it('lists the shared agenda day by day under the guests, off the day axis', () => {
     render(
       <CalendarTimeline
         {...defaultProps}
@@ -304,8 +304,26 @@ describe('CalendarTimeline', () => {
       />,
     );
 
-    expect(screen.getByText('activities.title')).toBeInTheDocument();
-    expect(screen.getAllByRole('list', { name: 'Timeline rows' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { level: 2, name: 'Schedule' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 3, name: /Wednesday, January 7th, 2026/ }),
+    ).toBeInTheDocument();
+    // The guest rows are the only rows on the axis now.
+    expect(screen.getAllByRole('list', { name: 'Timeline rows' })).toHaveLength(1);
+    const timeline = screen.getByRole('region', { name: 'Timeline calendar' });
+    expect(within(timeline).queryByText('Plant fair')).not.toBeInTheDocument();
+  });
+
+  it('opens an activity from the agenda', async () => {
+    const onActivityClick = vi.fn();
+    const activity = makeActivity('2026-01-07T10:00:00');
+    render(
+      <CalendarTimeline {...defaultProps} activities={[activity]} onActivityClick={onActivityClick} />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Plant fair/ }));
+
+    expect(onActivityClick).toHaveBeenCalledWith(activity);
   });
 
   it('leaves the agenda out when nothing can open it', () => {
@@ -313,7 +331,7 @@ describe('CalendarTimeline', () => {
       <CalendarTimeline {...defaultProps} activities={[makeActivity('2026-01-07T10:00:00')]} />,
     );
 
-    expect(screen.queryByText('activities.title')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Schedule' })).not.toBeInTheDocument();
   });
 
   it('widens the axis to reach a leg before the trip', () => {
@@ -336,13 +354,23 @@ describe('CalendarTimeline', () => {
         assignments={[
           { ...makeAssignment('p1'), startDate: '2026-01-12' as ISODateString, endDate: '2026-01-14' as ISODateString },
         ]}
+      />,
+    );
+
+    expect(screen.getAllByTitle(/Outside the trip dates/).length).toBeGreaterThan(0);
+  });
+
+  it('does not widen the axis for an activity, which the agenda lists instead', () => {
+    render(
+      <CalendarTimeline
+        {...defaultProps}
         activities={[makeActivity('2026-01-15T10:00:00')]}
         onActivityClick={vi.fn()}
       />,
     );
 
-    expect(screen.getAllByTitle(/Outside the trip dates/).length).toBeGreaterThan(0);
-    expect(screen.getByTitle(/Plant fair/)).toBeInTheDocument();
+    expect(screen.queryAllByTitle(/Outside the trip dates/)).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /Plant fair/ })).toBeInTheDocument();
   });
 
   it('is not empty while a stay is booked, even with no guest rows', () => {
@@ -378,23 +406,10 @@ describe('CalendarTimeline', () => {
     expect(screen.getByRole('slider', { name: 'Scroll the timeline' })).toBeInTheDocument();
   });
 
-  it('draws no agenda band when there is no activity', () => {
+  it('draws no agenda when there is no activity', () => {
     render(<CalendarTimeline {...defaultProps} onActivityClick={vi.fn()} />);
 
-    expect(screen.queryByText('activities.title')).not.toBeInTheDocument();
-  });
-
-  it('spans the agenda header across the label column and the canvas', () => {
-    render(
-      <CalendarTimeline
-        {...defaultProps}
-        activities={[makeActivity('2026-01-07T10:00:00')]}
-        onActivityClick={vi.fn()}
-      />,
-    );
-
-    const canvasWidth = parseFloat(screen.getAllByRole('group')[0]!.style.width);
-    expect(screen.getByText('activities.title')).toHaveStyle({ width: `${200 + canvasWidth}px` });
+    expect(screen.queryByRole('heading', { name: 'Schedule' })).not.toBeInTheDocument();
   });
 
   it('gives each agenda row its own key', () => {
@@ -435,11 +450,10 @@ describe('CalendarTimeline', () => {
 
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Station/ })).toBeInTheDocument();
-    expect(screen.getByTitle(/Plant fair/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Plant fair/ })).toBeInTheDocument();
     expect(screen.getByTestId('timeline-headcount-2026-01-11')).toHaveTextContent('2');
-    // The 11th is inside the trip now, the 13th, which only the activity needs, is not.
+    // The 11th is inside the trip now.
     expect(screen.getByText('11').closest('[data-outside-trip="true"]')).toBeNull();
-    expect(screen.getByText('13').closest('[data-outside-trip="true"]')).not.toBeNull();
   });
 
   it('keys each column by its own day when the axis grows backwards', () => {

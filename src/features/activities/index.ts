@@ -8,7 +8,7 @@
  * import {
  *   ActivityListPage,
  *   ActivityDialog,
- *   ActivityTimeline,
+ *   ActivityAgenda,
  *   activityRoutes,
  * } from '@/features/activities';
  * ```
@@ -33,11 +33,8 @@ export type { ActivityDialogProps } from './components/ActivityDialog';
 export { ActivityCard } from './components/ActivityCard';
 export type { ActivityCardProps } from './components/ActivityCard';
 
-export { ActivityTimeline } from './components/ActivityTimeline';
-export type { ActivityTimelineProps } from './components/ActivityTimeline';
-
-export { ActivityTimelineRow } from './components/ActivityTimelineRow';
-export type { ActivityTimelineRowProps } from './components/ActivityTimelineRow';
+export { ActivityAgenda } from './components/ActivityAgenda';
+export type { ActivityAgendaProps } from './components/ActivityAgenda';
 
 // ============================================================================
 // Utilities
@@ -55,12 +52,11 @@ export {
 } from './utils/activity-utils';
 
 export {
-  buildActivityTimelineModel,
-  type ActivityTimelineItem,
-  type ActivityTimelineItemWithLane,
-  type ActivityTimelineModel,
-  type ActivityTimelineRowModel,
-} from './utils/activity-timeline-utils';
+  buildActivityAgenda,
+  MAX_AGENDA_SPAN_DAYS,
+  type ActivityAgendaDay,
+  type ActivityAgendaEntry,
+} from './utils/activity-agenda-utils';
 
 // ============================================================================
 // Routes
