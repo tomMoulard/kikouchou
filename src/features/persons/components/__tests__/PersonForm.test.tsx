@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { act, render, screen, waitFor } from '@/test/utils';
 import type { Person, PersonFormData, Trip } from '@/types';
 
 /**
@@ -87,14 +87,15 @@ vi.mock('@/components/shared/DateRangePicker', () => ({
 }));
 
 vi.mock('@/lib/contacts', () => ({
-  isContactPickerSupported: vi.fn(() => false),
-  pickContact: vi.fn(),
+  isContactSearchAvailable: vi.fn(() => false),
+  ensureContactsAccess: vi.fn(),
+  searchContacts: vi.fn(),
 }));
 
 import { PersonForm } from '../PersonForm';
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
-import { isContactPickerSupported, pickContact } from '@/lib/contacts';
+import { ensureContactsAccess, isContactSearchAvailable, searchContacts } from '@/lib/contacts';
 
 // ============================================================================
 // Tests
@@ -109,9 +110,10 @@ describe('PersonForm', () => {
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [existingPerson],
     } as unknown as ReturnType<typeof usePersonContext>);
-    // The browsers without the Contact Picker API — every one on iOS, and every
-    // desktop — are the default here, so the manual field is what most tests see.
-    vi.mocked(isContactPickerSupported).mockReturnValue(false);
+    // The website is the default here: no address book, a plain name field.
+    vi.mocked(isContactSearchAvailable).mockReturnValue(false);
+    vi.mocked(ensureContactsAccess).mockResolvedValue(true);
+    vi.mocked(searchContacts).mockResolvedValue([]);
   });
 
   it('renders create mode with empty name field', () => {
@@ -522,112 +524,194 @@ describe('PersonForm', () => {
   });
 
   // ==========================================================================
-  // Importing from the device address book
+  // Suggestions from the device address book
   // ==========================================================================
 
-  describe('import from contacts', () => {
-    it('hides the button on a browser without the Contact Picker API', () => {
-      render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+  describe('contact suggestions', () => {
+    const MARY = { id: '0:0', name: 'Mary Poppins', phone: '+33 6 12 34 56 78' };
+    const MARY_WORK = { id: '0:1', name: 'Mary Poppins', phone: '+44 20 7946 0000' };
+    const MARIE = { id: '1', name: 'Marie Curie' };
 
-      expect(
-        screen.queryByRole('button', { name: /persons\.importFromContacts/ }),
-      ).not.toBeInTheDocument();
-    });
-
-    it('fills in the name and the phone of the contact the user picked', async () => {
-      vi.mocked(isContactPickerSupported).mockReturnValue(true);
-      vi.mocked(pickContact).mockResolvedValue({
-        status: 'picked',
-        contact: { name: 'Mary Poppins', phone: '+33 6 12 34 56 78' },
+    /** Lets the access answer and an empty search land inside act(). */
+    async function flush(): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
+    }
+
+    function inApp(): void {
+      vi.mocked(isContactSearchAvailable).mockReturnValue(true);
+    }
+
+    it('is a plain text field on the web, and never asks for the contacts', async () => {
       const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
-      await user.click(screen.getByRole('button', { name: /persons\.importFromContacts/ }));
+      await user.type(screen.getByLabelText(/persons\.name/), 'Mar');
+
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(ensureContactsAccess).not.toHaveBeenCalled();
+      expect(searchContacts).not.toHaveBeenCalled();
+    });
+
+    it('has no contacts button, in the app or on the web', () => {
+      inApp();
+      render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+      expect(screen.queryByRole('button', { name: /contact/i })).not.toBeInTheDocument();
+    });
+
+    it('asks for access on the first letter, and only once', async () => {
+      inApp();
+      const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.type(screen.getByRole('combobox'), 'M');
+      await flush();
+      expect(ensureContactsAccess).toHaveBeenCalledTimes(1);
+
+      await user.type(screen.getByRole('combobox'), 'ary');
+      await waitFor(() => expect(searchContacts).toHaveBeenLastCalledWith('Mary'));
+      expect(ensureContactsAccess).toHaveBeenCalledTimes(1);
+      await flush();
+    });
+
+    it('lists the matching contacts, one line per number', async () => {
+      inApp();
+      vi.mocked(searchContacts).mockResolvedValue([MARY, MARY_WORK, MARIE]);
+      const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.type(screen.getByRole('combobox'), 'Mar');
+
+      expect(await screen.findByRole('option', { name: /\+33 6 12 34 56 78/ })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /\+44 20 7946 0000/ })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: /Marie Curie/ })).toBeInTheDocument();
+      expect(screen.getByText('persons.contactSuggestions')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('fills in the name and the number of the line the user picked', async () => {
+      inApp();
+      vi.mocked(searchContacts).mockResolvedValue([MARY, MARY_WORK]);
+      const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.type(screen.getByRole('combobox'), 'Mar');
+      await user.click(await screen.findByRole('option', { name: /\+44 20 7946 0000/ }));
+
+      expect(screen.getByLabelText(/persons\.name/)).toHaveValue('Mary Poppins');
+      expect(screen.getByLabelText(/persons\.phone/)).toHaveValue('+44 20 7946 0000');
+      expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    });
+
+    it('picks with the keyboard, without leaving the field', async () => {
+      inApp();
+      vi.mocked(searchContacts).mockResolvedValue([MARY]);
+      const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.type(screen.getByRole('combobox'), 'Mar');
+      await screen.findByRole('option', { name: /Mary Poppins/ });
+      await user.keyboard('{Enter}');
 
       expect(screen.getByLabelText(/persons\.name/)).toHaveValue('Mary Poppins');
       expect(screen.getByLabelText(/persons\.phone/)).toHaveValue('+33 6 12 34 56 78');
     });
 
-    it('leaves a field the contact has nothing for alone', async () => {
-      // Importing a number-less contact must not wipe a name already typed.
-      vi.mocked(isContactPickerSupported).mockReturnValue(true);
-      vi.mocked(pickContact).mockResolvedValue({
-        status: 'picked',
-        contact: { name: 'Mary' },
-      });
+    it('keeps a typed number when the picked contact has none', async () => {
+      inApp();
+      vi.mocked(searchContacts).mockResolvedValue([MARIE]);
       const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
       await user.type(screen.getByLabelText(/persons\.phone/), '0612345678');
-      await user.click(screen.getByRole('button', { name: /persons\.importFromContacts/ }));
+      await user.type(screen.getByRole('combobox'), 'Mar');
+      await user.click(await screen.findByRole('option', { name: /Marie Curie/ }));
 
-      expect(screen.getByLabelText(/persons\.name/)).toHaveValue('Mary');
+      expect(screen.getByLabelText(/persons\.name/)).toHaveValue('Marie Curie');
       expect(screen.getByLabelText(/persons\.phone/)).toHaveValue('0612345678');
     });
 
-    it('clears the required-name error the import has just satisfied', async () => {
-      vi.mocked(isContactPickerSupported).mockReturnValue(true);
-      vi.mocked(pickContact).mockResolvedValue({
-        status: 'picked',
-        contact: { name: 'Mary' },
-      });
+    it('clears the required-name error a pick has just satisfied', async () => {
+      inApp();
+      vi.mocked(searchContacts).mockResolvedValue([MARY]);
       const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
       await user.click(screen.getByText('common.save'));
-      expect(screen.getByRole('alert')).toHaveTextContent('common.required');
+      expect(screen.getByText('common.required')).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: /persons\.importFromContacts/ }));
+      await user.type(screen.getByRole('combobox'), 'M');
+      await user.click(await screen.findByRole('option', { name: /Mary Poppins/ }));
 
       expect(screen.queryByText('common.required')).not.toBeInTheDocument();
     });
 
-    it('says nothing when the user dismisses the picker', async () => {
-      // Backing out is the most common outcome; a message on it would be noise.
-      vi.mocked(isContactPickerSupported).mockReturnValue(true);
-      vi.mocked(pickContact).mockResolvedValue({ status: 'cancelled' });
+    it('stays a working text field when access is refused, and never searches', async () => {
+      inApp();
+      vi.mocked(ensureContactsAccess).mockResolvedValue(false);
       const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
-      await user.type(screen.getByLabelText(/persons\.name/), 'Typed by hand');
-      await user.click(screen.getByRole('button', { name: /persons\.importFromContacts/ }));
+      const field = screen.getByLabelText(/persons\.name/);
+      await user.type(field, 'Mary');
 
-      expect(screen.getByLabelText(/persons\.name/)).toHaveValue('Typed by hand');
+      expect(field).toHaveValue('Mary');
+      // The refusal did not remount the field under the user's finger.
+      expect(field).toHaveFocus();
+      expect(searchContacts).not.toHaveBeenCalled();
+      expect(ensureContactsAccess).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
-    it('explains a failure and points at the manual fields', async () => {
-      vi.mocked(isContactPickerSupported).mockReturnValue(true);
-      vi.mocked(pickContact).mockResolvedValue({
-        status: 'failed',
-        error: new Error('Contacts Picker is already in use.'),
-      });
+    it('closes the list on Escape and opens it again on the next letter', async () => {
+      inApp();
+      vi.mocked(searchContacts).mockResolvedValue([MARY]);
       const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
-      await user.click(screen.getByRole('button', { name: /persons\.importFromContacts/ }));
+      await user.type(screen.getByRole('combobox'), 'Ma');
+      await screen.findByRole('option', { name: /Mary Poppins/ });
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('option')).not.toBeInTheDocument();
 
-      // Queried by message rather than by role: leaving the autofocused empty
-      // name field also raises its own `role="alert"`, as it does for any click.
-      expect(screen.getByText('persons.contactFailed')).toBeInTheDocument();
+      await user.type(screen.getByRole('combobox'), 'r');
+      expect(await screen.findByRole('option', { name: /Mary Poppins/ })).toBeInTheDocument();
     });
 
-    it('reports a contact that carries neither a name nor a number', async () => {
-      vi.mocked(isContactPickerSupported).mockReturnValue(true);
-      vi.mocked(pickContact).mockResolvedValue({ status: 'picked', contact: {} });
+    it('drops an answer for an older query', async () => {
+      inApp();
+      let answerOld: (value: readonly (typeof MARY)[]) => void = () => undefined;
+      vi.mocked(searchContacts).mockImplementation(async (query: string) =>
+        query === 'M'
+          ? new Promise((resolve) => {
+              answerOld = resolve;
+            })
+          : [MARIE],
+      );
       const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
-      await user.click(screen.getByRole('button', { name: /persons\.importFromContacts/ }));
+      await user.type(screen.getByRole('combobox'), 'M');
+      await waitFor(() => expect(searchContacts).toHaveBeenCalledWith('M'));
+      await user.type(screen.getByRole('combobox'), 'arie');
+      await screen.findByRole('option', { name: /Marie Curie/ });
 
-      expect(screen.getByText('persons.contactEmpty')).toBeInTheDocument();
+      answerOld([MARY]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(screen.queryByRole('option', { name: /Mary Poppins/ })).not.toBeInTheDocument();
     });
   });
 });
