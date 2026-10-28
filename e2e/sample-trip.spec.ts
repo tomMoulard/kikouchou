@@ -87,6 +87,23 @@ test.describe('Sample trip', () => {
     await expect(page.getByTestId('pet')).toBeVisible();
   });
 
+  test('the planning-view arm opens the sample calendar from /', async ({ page }) => {
+    await firstOpenIn(page, 'en');
+    await page.addInitScript(() => {
+      localStorage.setItem('kikouchou-flag:onboarding-planning-view', 'on');
+    });
+
+    await page.goto('/');
+    const tripId = await sampleTripId(page);
+    await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/calendar$`));
+    await waitForRoute(page);
+
+    expect(await waitForCapturedProperties(page, 'sample_trip_viewed')).toEqual({
+      page: 'calendar',
+      via: 'entry',
+    });
+  });
+
   test('a first open selects the sample, so the bottom bar works', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await firstOpenIn(page, 'en');
