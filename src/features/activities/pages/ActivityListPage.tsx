@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import type { Locale } from 'date-fns';
 import { CalendarDays, ChevronDown, ChevronRight, History, Plus } from 'lucide-react';
 
-import { useOfflineAwareNotify, useTripIdentity } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
 import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -53,6 +53,7 @@ import { captureDeletion } from '@/lib/posthog';
 import { ActivityCard } from '../components/ActivityCard';
 import { ActivityDialog } from '../components/ActivityDialog';
 import { ActivityTimeline } from '../components/ActivityTimeline';
+import { useActivityParticipation } from '../hooks/useActivityParticipation';
 import {
   type ActivityDateGroup,
   groupActivitiesByDate,
@@ -165,7 +166,6 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
     isLoading: isActivitiesLoading,
     error: activitiesError,
     deleteActivity,
-    setParticipation,
   } = useActivityContext();
 
   const [activityToDelete, setActivityToDelete] = useState<ActivityId | null>(null);
@@ -210,9 +210,10 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
    * person was somebody on the transport views and anonymous here: an organiser
    * who picked themselves in Settings, or a guest who joined through an invite,
    * had no share-link entry and so could not sign themselves up for an
-   * activity. `useTripIdentity` answers the question once, for every screen.
+   * activity. `useTripIdentity` answers the question once, for every screen,
+   * and `useActivityParticipation` reads it for every join button.
    */
-  const { myPersonId: currentPersonId } = useTripIdentity();
+  const { myPersonId: currentPersonId, toggleParticipation } = useActivityParticipation();
   const { canEdit } = useTripAccess();
 
   /**
@@ -302,23 +303,9 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
 
   const handleToggleParticipation = useCallback(
     (activityId: ActivityId, joining: boolean) => {
-      if (!currentPersonId) {
-        return;
-      }
-
-      void setParticipation(activityId, currentPersonId, joining)
-        .then(() => {
-          notifySuccess(joining ? t('activities.joined') : t('activities.left'));
-        })
-        .catch((error: unknown) => {
-          reportFailure(
-            'ActivityListPage.updateParticipation',
-            error,
-            t('activities.errors.participationFailed'),
-          );
-        });
+      void toggleParticipation(activityId, joining);
     },
-    [currentPersonId, setParticipation, notifySuccess, t],
+    [toggleParticipation],
   );
 
   const handleDialogOpenChange = useCallback((open: boolean) => {

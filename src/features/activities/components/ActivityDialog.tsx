@@ -20,6 +20,8 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { ActivityForm } from '@/features/activities/components/ActivityForm';
+import { ActivityParticipationButton } from '@/features/activities/components/ActivityParticipationButton';
+import { useActivityParticipation } from '@/features/activities/hooks/useActivityParticipation';
 import { captureUsage } from '@/lib/posthog';
 import type { Activity, ActivityFormData, ActivityId, ISODateString } from '@/types';
 
@@ -53,6 +55,8 @@ export interface ActivityDialogProps {
  * - Guards against losing unsaved edits when closing
  * - Success confirmation (offline-aware) and error toast
  * - Closes automatically on successful submission
+ * - In edit mode, a one-tap join/leave for the guest holding this device, so
+ *   signing yourself up does not mean editing the participant list
  *
  * @param props - Component props
  * @returns The activity dialog element
@@ -72,8 +76,14 @@ const ActivityDialog = memo(function ActivityDialog({
   const { activities, createActivity, updateActivity } = useActivityContext();
   const { persons } = usePersonContext();
   const { notifySuccess } = useOfflineAwareNotify();
+  const { myPersonId, canToggle, toggleParticipation } = useActivityParticipation();
 
   const [isDirty, setIsDirty] = useState(false);
+  const [isTogglingParticipation, setIsTogglingParticipation] = useState(false);
+  // Bumped after a join or leave to remount the form. It reads the activity
+  // once, when it mounts, so without this its participant list would still
+  // show the old sign-ups and a later save would undo the tap.
+  const [formRevision, setFormRevision] = useState(0);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Reset dirty state when the dialog opens (prevents stale state carrying over)
@@ -124,6 +134,25 @@ const ActivityDialog = memo(function ActivityDialog({
       onOpenChange(false);
     },
     [activityId, updateActivity, createActivity, t, onOpenChange, notifySuccess],
+  );
+
+  /**
+   * Joins or leaves straight away, without touching the rest of the form.
+   *
+   * Offered only while the form is clean: the remount that picks up the new
+   * participant list would otherwise throw away what was being typed.
+   */
+  const handleToggleParticipation = useCallback(
+    (id: ActivityId, joining: boolean) => {
+      setIsTogglingParticipation(true);
+      void toggleParticipation(id, joining).then((saved) => {
+        setIsTogglingParticipation(false);
+        if (saved) {
+          setFormRevision((revision) => revision + 1);
+        }
+      });
+    },
+    [toggleParticipation],
   );
 
   const handleCancel = useCallback(() => {
@@ -182,7 +211,18 @@ const ActivityDialog = memo(function ActivityDialog({
             <DialogDescription>{dialogDescription}</DialogDescription>
           </DialogHeader>
 
+          {activity && canToggle && myPersonId ? (
+            <ActivityParticipationButton
+              activity={activity}
+              personId={myPersonId}
+              onToggle={handleToggleParticipation}
+              disabled={isDirty || isTogglingParticipation}
+              className="w-full sm:w-auto sm:self-start"
+            />
+          ) : null}
+
           <ActivityForm
+            key={formRevision}
             activity={activity}
             persons={persons}
             defaultDate={isEditMode ? undefined : defaultDate}

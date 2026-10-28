@@ -43,6 +43,7 @@ import {
   formatActivityDayRange,
   formatActivityTimeRange,
 } from '@/features/activities/utils/activity-utils';
+import { ActivityParticipationButton } from '@/features/activities/components/ActivityParticipationButton';
 import { RideSummary } from '@/features/transports/components/RideSummary';
 import { GuestOverviewSection } from './GuestOverviewSection';
 import type { GuestOverview } from '../utils/guest-overview';
@@ -52,7 +53,9 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { getActivityCategoryColor } from '@/types';
 import type {
   Activity,
+  ActivityId,
   Person,
+  PersonId,
   Room,
   RoomAssignment,
   Transport,
@@ -152,6 +155,13 @@ export interface EventDetailDialogProps {
    * the dialog is the detail view and nothing more.
    */
   readonly canEdit?: boolean;
+  /**
+   * The guest holding this device. With `onToggleParticipation`, an activity
+   * offers a one-tap join/leave, so signing yourself up needs no edit.
+   */
+  readonly currentPersonId?: PersonId;
+  /** Joins (`true`) or leaves (`false`) an activity as `currentPersonId`. */
+  readonly onToggleParticipation?: (activityId: ActivityId, joining: boolean) => void;
 }
 
 // ============================================================================
@@ -539,6 +549,8 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
 interface ActivityDetailsProps {
   readonly event: ActivityEventData;
   readonly dateLocale: Locale;
+  readonly currentPersonId?: PersonId;
+  readonly onToggleParticipation?: (activityId: ActivityId, joining: boolean) => void;
 }
 
 /**
@@ -547,6 +559,8 @@ interface ActivityDetailsProps {
 const ActivityDetails = memo(function ActivityDetails({
   event,
   dateLocale,
+  currentPersonId,
+  onToggleParticipation,
 }: ActivityDetailsProps) {
   const { t } = useTranslation();
   const { activity, participants, organizer } = event;
@@ -632,6 +646,14 @@ const ActivityDetails = memo(function ActivityDetails({
             {t('activities.noParticipants', 'Nobody has signed up yet')}
           </p>
         )}
+        {currentPersonId && onToggleParticipation ? (
+          <ActivityParticipationButton
+            activity={activity}
+            personId={currentPersonId}
+            onToggle={onToggleParticipation}
+            className="w-full h-11 md:h-8"
+          />
+        ) : null}
       </div>
 
       {/* Organizer */}
@@ -689,6 +711,8 @@ const EventDetailDialog = memo(function EventDetailDialog({
   onEdit,
   onDelete,
   canEdit = true,
+  currentPersonId,
+  onToggleParticipation,
 }: EventDetailDialogProps) {
   const { t, i18n } = useTranslation();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -779,7 +803,12 @@ const EventDetailDialog = memo(function EventDetailDialog({
             {isAssignmentEvent(event) ? (
               <AssignmentDetails event={event} dateLocale={dateLocale} />
             ) : isActivityEvent(event) ? (
-              <ActivityDetails event={event} dateLocale={dateLocale} />
+              <ActivityDetails
+                event={event}
+                dateLocale={dateLocale}
+                currentPersonId={currentPersonId}
+                onToggleParticipation={onToggleParticipation}
+              />
             ) : (
               <TransportDetails event={event} dateLocale={dateLocale} />
             )}

@@ -104,6 +104,17 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
+const mockActivityParticipation = vi.fn(() => ({
+  myPersonId: undefined as Person['id'] | undefined,
+  canToggle: false,
+  toggleParticipation: vi.fn().mockResolvedValue(true),
+}));
+
+// Anonymous device by default: who can join an activity is its own suite.
+vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
+  useActivityParticipation: () => mockActivityParticipation(),
+}));
+
 vi.mock('@/hooks/useToday', () => ({
   useToday: () => ({
     today: new Date('2026-04-04T12:00:00.000Z'),

@@ -134,6 +134,17 @@ vi.mock('@/hooks', () => ({
 // Local midnight, exactly what `useToday` returns in production (`startOfDay`).
 // An instant literal would mean a different calendar day on a machine east of
 // UTC than on one west of it, so "today" would move with the runner.
+const mockActivityParticipation = vi.fn(() => ({
+  myPersonId: undefined as Person['id'] | undefined,
+  canToggle: false,
+  toggleParticipation: vi.fn().mockResolvedValue(true),
+}));
+
+// Anonymous device by default: who can join an activity is its own suite.
+vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
+  useActivityParticipation: () => mockActivityParticipation(),
+}));
+
 vi.mock('@/hooks/useToday', () => ({
   useToday: () => ({ today: new Date(2026, 3, 4) }),
 }));
