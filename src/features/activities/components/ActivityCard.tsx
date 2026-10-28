@@ -13,8 +13,6 @@ import {
   MapPin,
   MoreVertical,
   Trash2,
-  UserPlus,
-  UserMinus,
   Users,
 } from 'lucide-react';
 
@@ -35,6 +33,7 @@ import { getActivityCategoryColor } from '@/types';
 import type { Activity, ActivityId, Person, PersonId } from '@/types';
 
 import { formatActivityTimeRange } from '../utils/activity-utils';
+import { ActivityParticipationButton } from './ActivityParticipationButton';
 
 // ============================================================================
 // Type Definitions
@@ -111,11 +110,6 @@ const ActivityCard = memo(function ActivityCard({
   const participantCount = activity.participantIds?.length ?? 0;
   const cap = activity.maxParticipants;
   const isFull = cap !== undefined && participantCount >= cap;
-  const isJoined = currentPersonId
-    ? (activity.participantIds ?? []).includes(currentPersonId)
-    : false;
-  const canToggleParticipation =
-    Boolean(currentPersonId && onToggleParticipation) && !readOnly;
 
   const handleEdit = useCallback(() => {
     onEdit(activity.id);
@@ -124,10 +118,6 @@ const ActivityCard = memo(function ActivityCard({
   const handleDelete = useCallback(() => {
     onDelete(activity.id);
   }, [activity.id, onDelete]);
-
-  const handleToggleParticipation = useCallback(() => {
-    onToggleParticipation?.(activity.id, !isJoined);
-  }, [activity.id, isJoined, onToggleParticipation]);
 
   /**
    * How many people are coming, said the same way on screen and to a screen
@@ -284,27 +274,14 @@ const ActivityCard = memo(function ActivityCard({
         )}
 
         {/* Join / leave */}
-        {canToggleParticipation && (
-          <Button
-            type="button"
-            variant={isJoined ? 'outline' : 'default'}
-            size="sm"
+        {currentPersonId && onToggleParticipation && !readOnly && (
+          <ActivityParticipationButton
+            activity={activity}
+            personId={currentPersonId}
+            onToggle={onToggleParticipation}
+            disabled={isActionsDisabled}
             className="w-full sm:w-auto"
-            onClick={handleToggleParticipation}
-            disabled={isActionsDisabled || (!isJoined && isFull)}
-          >
-            {isJoined ? (
-              <>
-                <UserMinus className="size-4 mr-2" aria-hidden="true" />
-                {t('activities.leave')}
-              </>
-            ) : (
-              <>
-                <UserPlus className="size-4 mr-2" aria-hidden="true" />
-                {isFull ? t('activities.full') : t('activities.join')}
-              </>
-            )}
-          </Button>
+          />
         )}
       </CardContent>
     </Card>

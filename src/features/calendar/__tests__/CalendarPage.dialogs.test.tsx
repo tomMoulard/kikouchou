@@ -119,6 +119,17 @@ vi.mock('@/hooks', () => ({
   useOfflineAwareNotify: () => ({ notifySuccess: mockNotifySuccess }),
 }));
 
+const mockActivityParticipation = vi.fn(() => ({
+  myPersonId: undefined as Person['id'] | undefined,
+  canToggle: false,
+  toggleParticipation: vi.fn().mockResolvedValue(true),
+}));
+
+// Anonymous device by default: who can join an activity is its own suite.
+vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
+  useActivityParticipation: () => mockActivityParticipation(),
+}));
+
 vi.mock('@/hooks/useToday', () => ({ useToday: () => ({ today: new Date(2026, 3, 4) }) }));
 
 // The money figures reach the page through a live query. Stubbed, because an

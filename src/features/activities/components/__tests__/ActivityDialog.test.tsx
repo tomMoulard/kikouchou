@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
 import type {
   Activity,
@@ -49,6 +49,17 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
+const mockToggleParticipation = vi.fn().mockResolvedValue(true);
+const mockActivityParticipation = vi.fn(() => ({
+  myPersonId: undefined as PersonId | undefined,
+  canToggle: false,
+  toggleParticipation: mockToggleParticipation,
+}));
+
+vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
+  useActivityParticipation: () => mockActivityParticipation(),
+}));
+
 vi.mock('@/lib/posthog', () => ({
   captureUsage: (...args: unknown[]) => mockCaptureUsage(...args),
 }));
@@ -88,6 +99,8 @@ vi.mock('@/features/activities/components/ActivityForm', () => ({
         <span data-testid="create-mode">New</span>
       )}
       <span data-testid="default-date">{defaultDate ?? 'none'}</span>
+      {/* Uncontrolled, so it only goes back to empty when the form remounts. */}
+      <input data-testid="form-draft" defaultValue="" aria-label="draft" />
       <button data-testid="cancel-btn" onClick={onCancel}>
         Cancel
       </button>
@@ -279,5 +292,104 @@ describe('ActivityDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByText('unsaved.discardChanges')).not.toBeInTheDocument();
+  });
+
+  describe('joining or leaving in one tap', () => {
+    const renderEdit = () =>
+      render(<ActivityDialog activityId={'a1' as ActivityId} open onOpenChange={vi.fn()} />, {
+        withProviders: false,
+      });
+
+    const asGuest = (personId: string) => {
+      mockActivityParticipation.mockReturnValue({
+        myPersonId: personId as PersonId,
+        canToggle: true,
+        toggleParticipation: mockToggleParticipation,
+      });
+    };
+
+    beforeEach(() => {
+      mockToggleParticipation.mockResolvedValue(true);
+    });
+
+    afterEach(() => {
+      mockActivityParticipation.mockReturnValue({
+        myPersonId: undefined,
+        canToggle: false,
+        toggleParticipation: mockToggleParticipation,
+      });
+    });
+
+    it('signs the guest up without saving the form, then reloads the form', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      asGuest('p2');
+      renderEdit();
+
+      await user.type(screen.getByTestId('form-draft'), 'stale');
+      await user.click(screen.getByRole('button', { name: 'activities.join' }));
+
+      expect(mockToggleParticipation).toHaveBeenCalledWith('a1', true);
+      expect(mockUpdateActivity).not.toHaveBeenCalled();
+      // Remounted: the form re-reads the activity and its new participant list.
+      await waitFor(() => {
+        expect(screen.getByTestId('form-draft')).toHaveValue('');
+      });
+    });
+
+    it('offers to leave an activity the guest is already on', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      asGuest('p1');
+      renderEdit();
+
+      await user.click(screen.getByRole('button', { name: 'activities.leave' }));
+
+      expect(mockToggleParticipation).toHaveBeenCalledWith('a1', false);
+    });
+
+    it('keeps the form as it was when the sign-up could not be saved', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      mockToggleParticipation.mockResolvedValue(false);
+      asGuest('p2');
+      renderEdit();
+
+      await user.type(screen.getByTestId('form-draft'), 'kept');
+      await user.click(screen.getByRole('button', { name: 'activities.join' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'activities.join' })).toBeEnabled();
+      });
+      expect(screen.getByTestId('form-draft')).toHaveValue('kept');
+    });
+
+    it('waits for unsaved edits to be saved or dropped first', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      asGuest('p2');
+      renderEdit();
+
+      await user.click(screen.getByTestId('dirty-btn'));
+
+      expect(screen.getByRole('button', { name: 'activities.join' })).toBeDisabled();
+    });
+
+    it('is not offered when creating an activity or when the device is anonymous', () => {
+      asGuest('p2');
+      const { unmount } = render(<ActivityDialog open onOpenChange={vi.fn()} />, {
+        withProviders: false,
+      });
+      expect(screen.queryByRole('button', { name: 'activities.join' })).not.toBeInTheDocument();
+      unmount();
+
+      mockActivityParticipation.mockReturnValue({
+        myPersonId: undefined,
+        canToggle: false,
+        toggleParticipation: mockToggleParticipation,
+      });
+      renderEdit();
+      expect(screen.queryByRole('button', { name: 'activities.join' })).not.toBeInTheDocument();
+    });
   });
 });

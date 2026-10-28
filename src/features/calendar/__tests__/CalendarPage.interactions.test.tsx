@@ -177,6 +177,17 @@ vi.mock('@/hooks', () => ({
   useOfflineAwareNotify: () => ({ notifySuccess: mockNotifySuccess }),
 }));
 
+const mockActivityParticipation = vi.fn(() => ({
+  myPersonId: undefined as Person['id'] | undefined,
+  canToggle: false,
+  toggleParticipation: vi.fn().mockResolvedValue(true),
+}));
+
+// Anonymous device by default: who can join an activity is its own suite.
+vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
+  useActivityParticipation: () => mockActivityParticipation(),
+}));
+
 vi.mock('@/hooks/useToday', () => ({ useToday: () => ({ today: new Date(2026, 3, 4) }) }));
 
 // The suite-wide mock pins the language to English. This copy reads it from a
@@ -497,6 +508,72 @@ describe('CalendarPage — deleting from the detail dialog', () => {
     });
     expect(mockNotifySuccess).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+describe('CalendarPage — joining an activity from the detail dialog', () => {
+  const mockToggleParticipation = vi.fn().mockResolvedValue(true);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setDefaultMocks();
+    mockActivityParticipation.mockReturnValue({
+      myPersonId: mockPerson2.id,
+      canToggle: true,
+      toggleParticipation: mockToggleParticipation,
+    });
+  });
+
+  afterEach(() => {
+    mockActivityParticipation.mockReturnValue({
+      myPersonId: undefined,
+      canToggle: false,
+      toggleParticipation: vi.fn().mockResolvedValue(true),
+    });
+  });
+
+  it('signs the guest holding the device up without opening the editor', async () => {
+    const { user, rerender } = renderCalendarPage();
+    await showMonth(user);
+
+    await user.click(screen.getAllByRole('button', { name: 'calendar.viewActivityDetails' })[0]!);
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'activities.join' }));
+
+    expect(mockToggleParticipation).toHaveBeenCalledWith(mockActivity.id, true);
+
+    // The dialog reads the activity live, so the saved sign-up shows at once.
+    mockUseActivityContext.mockReturnValue({
+      activities: [{ ...mockActivity, participantIds: [mockPerson.id, mockPerson2.id] }],
+      isLoading: false,
+      error: null,
+      deleteActivity: mockDeleteActivity,
+    });
+    rerender(
+      <Routes>
+        <Route path="/trips/:tripId/calendar" element={<CalendarPage />} />
+        <Route path="*" element={<LandedOn />} />
+      </Routes>,
+    );
+
+    const refreshed = await screen.findByRole('dialog');
+    expect(within(refreshed).getByRole('button', { name: 'activities.leave' })).toBeInTheDocument();
+    expect(within(refreshed).getByText('Bob')).toBeInTheDocument();
+  });
+
+  it('offers no join button to a device that does not know who it is', async () => {
+    mockActivityParticipation.mockReturnValue({
+      myPersonId: undefined,
+      canToggle: false,
+      toggleParticipation: mockToggleParticipation,
+    });
+    const { user } = renderCalendarPage();
+    await showMonth(user);
+
+    await user.click(screen.getAllByRole('button', { name: 'calendar.viewActivityDetails' })[0]!);
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).queryByRole('button', { name: 'activities.join' })).not.toBeInTheDocument();
   });
 });
 
