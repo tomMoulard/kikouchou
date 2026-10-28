@@ -29,7 +29,6 @@
     "comingSoon": "Coming soon",
     "date": "Date",
     "time": "Time",
-    "pickDate": "Pick a date",
     "scrollTimeline": "Scroll the timeline",
     "currentTime": "Current time"
   },
@@ -454,7 +453,6 @@
     "namePlaceholder": "e.g. Sarah",
     "color": "Color",
     "stayDates": "Stay dates",
-    "stayDatesPlaceholder": "Select arrival and departure dates",
     "stayDatesHint": "When will this guest be at the trip?",
     "notes": "Notes",
     "notesPlaceholder": "e.g. allergic to cats, vegan…",
@@ -1787,12 +1785,11 @@
     "turnOff": "Turn off"
   },
   "dateRangePicker": {
-    "placeholder": "Select date range",
     "ariaLabel": "Date range picker",
-    "calendarDialog": "Select date range",
-    "selectEndDate": "{{date}} → select end date",
+    "start": "From",
+    "end": "To",
     "clear": "Clear",
-    "alreadyBooked": "Already assigned"
+    "alreadyBooked": "Already assigned: {{ranges}}"
   },
   "locationPicker": {
     "placeholder": "Search for a location...",

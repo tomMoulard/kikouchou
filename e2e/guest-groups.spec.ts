@@ -66,10 +66,8 @@ async function createGroup(
  * no fixture date here to go stale.
  */
 async function fillTripDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.locator('#trip-end-date').click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
+  await page.locator('#trip-start-date').fill(fixtureDate(15, 0));
+  await page.locator('#trip-end-date').fill(fixtureDate(22, 0));
 }
 
 /** A trip whose dates are derived from today, never a literal month. */

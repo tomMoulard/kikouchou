@@ -566,10 +566,10 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     // The dialog knows the trip's dates, so the day is filled in already
-    expect(screen.getByLabelText('common.date')).toHaveTextContent('July 15th, 2027');
+    expect(screen.getByLabelText('common.date')).toHaveValue('2027-07-15');
 
     await user.click(screen.getByLabelText('transports.departure'));
-    expect(screen.getByLabelText('common.date')).toHaveTextContent('July 22nd, 2027');
+    expect(screen.getByLabelText('common.date')).toHaveValue('2027-07-22');
   });
 
   it('keeps the day the user set when the type changes afterwards', async () => {
@@ -593,7 +593,7 @@ describe('TransportForm', () => {
     await user.type(timeInput, '08:30');
 
     await user.click(screen.getByLabelText('transports.departure'));
-    expect(screen.getByLabelText('common.date')).toHaveTextContent('July 15th, 2027');
+    expect(screen.getByLabelText('common.date')).toHaveValue('2027-07-15');
   });
 
   it('submits form with valid data in edit mode (pre-filled)', async () => {
@@ -818,7 +818,7 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     // Should render without error - datetime should be empty due to invalid parsing
-    expect(screen.getByLabelText('common.date')).toHaveTextContent('common.pickDate');
+    expect(screen.getByLabelText('common.date')).toHaveValue('');
     expect(screen.getByLabelText('common.time')).toHaveValue('');
   });
 

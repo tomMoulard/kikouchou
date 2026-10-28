@@ -105,8 +105,8 @@ describe('TripForm Basic Rendering', () => {
 
     expect(screen.getByLabelText(/trips\.name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/trips\.location/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /trips\.startDate/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /trips\.endDate/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/trips\.startDate/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/trips\.endDate/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /common\.save/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /common\.cancel/i })).toBeInTheDocument();
   });
@@ -562,19 +562,6 @@ describe('TripForm Accessibility', () => {
       expect(submitButton).toHaveAttribute('aria-busy', 'true');
     });
   });
-
-  it('date buttons have aria-haspopup', () => {
-    const onSubmit = vi.fn();
-    const onCancel = vi.fn();
-
-    render(<TripForm onSubmit={onSubmit} onCancel={onCancel} />);
-
-    const startDateButton = screen.getByRole('button', { name: /trips\.startDate/i });
-    const endDateButton = screen.getByRole('button', { name: /trips\.endDate/i });
-
-    expect(startDateButton).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(endDateButton).toHaveAttribute('aria-haspopup', 'dialog');
-  });
 });
 
 // ============================================================================
@@ -792,7 +779,7 @@ describe('TripForm Description', () => {
     await user.type(nameInput, 'Test');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     await waitFor(() => {
-      const startBtn = screen.getByRole('button', { name: /trips\.startDate/i });
+      const startBtn = screen.getByLabelText(/trips\.startDate/i);
       expect(startBtn).toHaveAttribute('aria-invalid', 'true');
     });
   });
@@ -853,7 +840,7 @@ describe('TripForm Edge Cases', () => {
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     await waitFor(() => {
-      const endBtn = screen.getByRole('button', { name: /trips\.endDate/i });
+      const endBtn = screen.getByLabelText(/trips\.endDate/i);
       expect(endBtn).toHaveAttribute('aria-invalid', 'true');
     });
   });
@@ -889,7 +876,7 @@ describe('TripForm Edge Cases', () => {
 // ============================================================================
 
 describe('TripForm Date Selection Branches', () => {
-  it('clears start date error when start date is selected via calendar', async () => {
+  it('clears the start date error once a start date is picked', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
@@ -900,33 +887,16 @@ describe('TripForm Date Selection Branches', () => {
     await user.type(nameInput, 'Test Trip');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
-    // Verify start date error exists
     await waitFor(() => {
-      const startBtn = screen.getByRole('button', { name: /trips\.startDate/i });
-      expect(startBtn).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByLabelText(/trips\.startDate/i)).toHaveAttribute('aria-invalid', 'true');
     });
 
-    // Open start date picker and select a date
-    const startBtn = screen.getByRole('button', { name: /trips\.startDate/i });
-    await user.click(startBtn);
+    pickDate('start', '2024-07-10');
 
-    // The calendar should now be visible - click a date
-    await waitFor(() => {
-      const dayButtons = screen.getAllByRole('gridcell');
-      expect(dayButtons.length).toBeGreaterThan(0);
-    });
-
-    // Click the first available day
-    const dayButtons = screen.getAllByRole('gridcell');
-    const enabledDay = dayButtons.find(btn => !btn.getAttribute('disabled'));
-    if (enabledDay) {
-      const clickableButton = enabledDay.querySelector('button') ?? enabledDay;
-      await user.click(clickableButton);
-    }
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveAttribute('aria-invalid', 'false');
   });
 
-  it('validates end date when start date changes with existing end date', async () => {
-    const user = userEvent.setup();
+  it('flags an end date that a new start date has not overtaken as valid', () => {
     const trip = createTestTrip({
       startDate: isoDate('2024-07-10'),
       endDate: isoDate('2024-07-20'),
@@ -934,34 +904,10 @@ describe('TripForm Date Selection Branches', () => {
 
     render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
 
-    // The end date should already be set - clicking start date should re-validate end
-    const startBtn = screen.getByRole('button', { name: /trips\.startDate/i });
-    await user.click(startBtn);
+    pickDate('start', '2024-07-12');
 
-    // Calendar should open
-    await waitFor(() => {
-      const gridCells = screen.getAllByRole('gridcell');
-      expect(gridCells.length).toBeGreaterThan(0);
-    });
-  });
-
-  it('clears errors for end date when end date is selected', async () => {
-    const user = userEvent.setup();
-
-    // Trip with start date but no end date
-    const trip = createTestTrip();
-
-    render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-
-    // Open end date picker
-    const endBtn = screen.getByRole('button', { name: /trips\.endDate/i });
-    await user.click(endBtn);
-
-    // Calendar should be visible
-    await waitFor(() => {
-      const gridCells = screen.getAllByRole('gridcell');
-      expect(gridCells.length).toBeGreaterThan(0);
-    });
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveValue('2024-07-20');
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveAttribute('aria-invalid', 'false');
   });
 
   it('handles import trip selection and removal', async () => {
@@ -1143,52 +1089,21 @@ describe('TripForm Map Pin', () => {
 });
 
 // ============================================================================
-// Which month a picker opens on, and what a new start date does to the end date
+// The date inputs, and what a new start date does to the end date
 // ============================================================================
 
 /**
- * The month heading of the calendar currently on screen.
- *
- * Read out of the DOM rather than through a role query because
- * react-day-picker renders the heading as a plain span, and the assertion is
- * about *which* month is showing — the one thing a role query cannot express.
+ * Sets a trip date input the way a browser does when its native picker
+ * closes: one `change` carrying the whole `YYYY-MM-DD` value, or `''` when the
+ * date is cleared.
  */
-function openCalendarMonth(): string {
-  const label = document.querySelector('.rdp-caption_label');
-  if (!label) {
-    throw new Error('no calendar is open');
-  }
-  return label.textContent ?? '';
+function pickDate(field: 'start' | 'end', value: string): void {
+  const label = field === 'start' ? /trips\.startDate/i : /trips\.endDate/i;
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
 }
 
-/**
- * The day buttons of the month on screen, with the neighbouring months'
- * leading and trailing days excluded — clicking one of those moves the
- * calendar instead of choosing a date.
- */
-function daysOfOpenMonth(): readonly HTMLButtonElement[] {
-  return Array.from(
-    document.querySelectorAll<HTMLButtonElement>(
-      '.rdp-day:not(.rdp-outside) button',
-    ),
-  );
-}
-
-/** The "next month" arrow of the calendar on screen. */
-function nextMonthArrow(): HTMLElement {
-  return screen.getByRole('button', { name: /next month/i });
-}
-
-/** Waits for a date picker popover to have rendered its calendar. */
-async function waitForOpenCalendar(): Promise<void> {
-  await waitFor(() => {
-    expect(document.querySelector('.rdp-root')).toBeTruthy();
-  });
-}
-
-describe('TripForm Date Picker Month', () => {
-  it('opens the start date picker on the month already chosen', async () => {
-    const user = userEvent.setup();
+describe('TripForm Date Inputs', () => {
+  it('uses native date inputs holding the trip dates', () => {
     const trip = createTestTrip({
       startDate: isoDate('2024-07-15'),
       endDate: isoDate('2024-07-22'),
@@ -1196,43 +1111,22 @@ describe('TripForm Date Picker Month', () => {
 
     render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-    await waitForOpenCalendar();
-
-    // A selected date does not move react-day-picker's month on its own: with
-    // no `defaultMonth` the picker opens on today, so re-opening the dates of
-    // any trip that is not this month means paging back to it by hand.
-    expect(openCalendarMonth()).toBe('July 2024');
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveAttribute('type', 'date');
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveValue('2024-07-15');
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveAttribute('type', 'date');
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveValue('2024-07-22');
   });
 
-  it('opens the end date picker on the month of the start date', async () => {
-    const user = userEvent.setup();
-
+  it('keeps the end date from going before the start', () => {
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText(/trips\.endDate/i)).not.toHaveAttribute('min');
 
-    // Three months out, which is where a holiday actually gets booked — and
-    // far enough that a picker opening on today shows a month whose every day
-    // is disabled.
-    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-    await waitForOpenCalendar();
-    await user.click(nextMonthArrow());
-    await user.click(nextMonthArrow());
-    await user.click(nextMonthArrow());
-    const chosenMonth = openCalendarMonth();
-    await user.click(daysOfOpenMonth()[14]!);
+    pickDate('start', '2024-10-15');
 
-    await user.click(screen.getByRole('button', { name: /trips\.endDate/i }));
-    await waitForOpenCalendar();
-
-    // Every day before the start is disabled, so opening on the current month
-    // leaves the user in front of a grid where nothing can be tapped and the
-    // only way out is the month arrow — three times.
-    expect(openCalendarMonth()).toBe(chosenMonth);
-    expect(daysOfOpenMonth().some((day) => !day.disabled)).toBe(true);
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveAttribute('min', '2024-10-15');
   });
 
-  it('drops an end date that the newly chosen start date has overtaken', async () => {
-    const user = userEvent.setup();
+  it('drops an end date that the newly chosen start date has overtaken', () => {
     const trip = createTestTrip({
       startDate: isoDate('2024-07-10'),
       endDate: isoDate('2024-07-12'),
@@ -1240,19 +1134,14 @@ describe('TripForm Date Picker Month', () => {
 
     render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
 
-    // Move the start a month past the end.
-    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-    await waitForOpenCalendar();
-    await user.click(nextMonthArrow());
-    await user.click(daysOfOpenMonth()[14]!);
+    pickDate('start', '2024-08-15');
 
     // The end date the form is holding is now before the start — a range the
-    // end picker itself refuses to produce, since it disables everything
-    // before the start. Keeping it only to report an error leaves the form in
-    // a state no sequence of taps could reach; dropping it puts the user one
-    // tap from a valid range instead.
-    const endButton = screen.getByRole('button', { name: /trips\.endDate/i });
-    expect(endButton).not.toHaveTextContent(/2024/);
+    // end input itself refuses to produce, since its `min` is the start.
+    // Keeping it only to report an error leaves the form in a state no
+    // sequence of picks could reach; dropping it puts the user one pick from
+    // a valid range instead.
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveValue('');
     expect(screen.queryByText('validation.endDateBeforeStart')).toBeNull();
   });
 });
@@ -1273,21 +1162,15 @@ function guestInputs(): readonly HTMLInputElement[] {
 
 /**
  * Fills the trip fields a create-mode submit needs, leaving the guest list
- * alone — the dates have to come from the pickers, since the form offers no
- * way to type them.
+ * alone.
  */
 async function fillRequiredTripFields(
   user: ReturnType<typeof userEvent.setup>,
 ): Promise<void> {
   await user.type(screen.getByLabelText(/trips\.name/i), 'Beach Vacation');
 
-  await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-  await waitForOpenCalendar();
-  await user.click(daysOfOpenMonth()[9]!);
-
-  await user.click(screen.getByRole('button', { name: /trips\.endDate/i }));
-  await waitForOpenCalendar();
-  await user.click(daysOfOpenMonth()[14]!);
+  pickDate('start', '2024-07-10');
+  pickDate('end', '2024-07-15');
 }
 
 describe('TripForm Guest List', () => {
@@ -1828,12 +1711,8 @@ describe('TripForm switching trips', () => {
 
     expect(screen.getByLabelText(/trips\.name/i)).toHaveValue('Coast');
     expect(screen.getByLabelText(/trips\.location/i)).toHaveValue('Biarritz');
-    expect(screen.getByRole('button', { name: /trips\.startDate/i })).toHaveTextContent(
-      'March 1st, 2025',
-    );
-    expect(screen.getByRole('button', { name: /trips\.endDate/i })).toHaveTextContent(
-      'March 5th, 2025',
-    );
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveValue('2025-03-01');
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveValue('2025-03-05');
 
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     await waitFor(() => {
@@ -1868,12 +1747,8 @@ describe('TripForm switching trips', () => {
     expect(screen.getByLabelText(/trips\.name/i)).toHaveValue('');
     expect(screen.getByLabelText(/trips\.location/i)).toHaveValue('');
     expect(screen.getByLabelText(/trips\.description/i)).toHaveValue('');
-    expect(screen.getByRole('button', { name: /trips\.startDate/i })).toHaveTextContent(
-      /^trips\.startDate$/,
-    );
-    expect(screen.getByRole('button', { name: /trips\.endDate/i })).toHaveTextContent(
-      /^trips\.endDate$/,
-    );
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveValue('');
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveValue('');
     expect(screen.queryByRole('button', { name: /trips\.removePin/i })).not.toBeInTheDocument();
   });
 
@@ -1884,11 +1759,11 @@ describe('TripForm switching trips', () => {
 
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
-    expect(screen.getByRole('button', { name: /trips\.startDate/i })).toHaveAttribute(
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveAttribute(
       'aria-invalid',
       'true',
     );
-    expect(screen.getByRole('button', { name: /trips\.endDate/i })).toHaveAttribute(
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveAttribute(
       'aria-invalid',
       'true',
     );
@@ -1917,12 +1792,8 @@ describe('TripForm required fields', () => {
     const onSubmit = vi.fn();
     render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[9]!);
-    await user.click(screen.getByRole('button', { name: /trips\.endDate/i }));
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[14]!);
+    pickDate('start', '2024-07-10');
+    pickDate('end', '2024-07-15');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     expect(onSubmit).not.toHaveBeenCalled();
@@ -1936,13 +1807,11 @@ describe('TripForm required fields', () => {
     const { container } = render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
     await user.type(screen.getByLabelText(/trips\.name/i), 'Lake');
-    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[9]!);
+    pickDate('start', '2024-07-10');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: /trips\.endDate/i })).toHaveAttribute(
+    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveAttribute(
       'aria-invalid',
       'true',
     );
@@ -1957,45 +1826,27 @@ describe('TripForm required fields', () => {
 });
 
 describe('TripForm picking dates', () => {
-  const startButton = () => screen.getByRole('button', { name: /trips\.startDate/i });
-  const endButton = () => screen.getByRole('button', { name: /trips\.endDate/i });
+  const startInput = () => screen.getByLabelText(/trips\.startDate/i);
+  const endInput = () => screen.getByLabelText(/trips\.endDate/i);
 
-  async function pickStart(user: ReturnType<typeof userEvent.setup>, day: number) {
-    await user.click(startButton());
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[day]!);
+  /** Picks the given day of July 2024 as the start. */
+  function pickStart(day: number) {
+    pickDate('start', `2024-07-${String(day).padStart(2, '0')}`);
   }
 
-  async function pickEnd(user: ReturnType<typeof userEvent.setup>, day: number) {
-    await user.click(endButton());
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[day]!);
+  /** Picks the given day of July 2024 as the end. */
+  function pickEnd(day: number) {
+    pickDate('end', `2024-07-${String(day).padStart(2, '0')}`);
   }
 
-  it('closes each picker once a day is chosen', async () => {
-    const user = userEvent.setup();
+  it('keeps an end date the new start date has not overtaken', () => {
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    pickStart(10);
+    pickEnd(15);
 
-    await pickStart(user, 9);
-    expect(document.querySelector('.rdp-root')).toBeNull();
-    expect(startButton()).toHaveAttribute('aria-expanded', 'false');
+    pickStart(12);
 
-    await pickEnd(user, 14);
-    expect(document.querySelector('.rdp-root')).toBeNull();
-    expect(endButton()).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('keeps an end date the new start date has not overtaken', async () => {
-    const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await pickStart(user, 9);
-    await pickEnd(user, 14);
-    const chosenEnd = endButton().textContent;
-
-    await pickStart(user, 11);
-
-    expect(endButton()).toHaveTextContent(chosenEnd ?? '');
-    expect(endButton()).not.toHaveTextContent(/^trips\.endDate$/);
+    expect(endInput()).toHaveValue('2024-07-15');
   });
 
   it('drops an end date overtaken in a new trip, and then asks for one', async () => {
@@ -2003,15 +1854,15 @@ describe('TripForm picking dates', () => {
     const onSubmit = vi.fn();
     render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
     await user.type(screen.getByLabelText(/trips\.name/i), 'Lake');
-    await pickStart(user, 9);
-    await pickEnd(user, 14);
+    pickStart(10);
+    pickEnd(15);
 
-    await pickStart(user, 20);
+    pickStart(21);
 
-    expect(endButton()).toHaveTextContent(/^trips\.endDate$/);
+    expect(endInput()).toHaveValue('');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(endButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('keeps the name error when only the start date is chosen', async () => {
@@ -2021,7 +1872,7 @@ describe('TripForm picking dates', () => {
     await user.tab();
     expect(screen.getByLabelText(/trips\.name/i)).toHaveAttribute('aria-invalid', 'true');
 
-    await pickStart(user, 9);
+    pickStart(10);
 
     expect(screen.getByLabelText(/trips\.name/i)).toHaveAttribute('aria-invalid', 'true');
   });
@@ -2030,12 +1881,12 @@ describe('TripForm picking dates', () => {
     const user = userEvent.setup();
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
-    expect(endButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
 
-    await pickStart(user, 9);
+    pickStart(10);
 
-    expect(startButton()).toHaveAttribute('aria-invalid', 'false');
-    expect(endButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(startInput()).toHaveAttribute('aria-invalid', 'false');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   describe('on a trip that arrived with its dates the wrong way round', () => {
@@ -2054,19 +1905,19 @@ describe('TripForm picking dates', () => {
       const user = userEvent.setup();
       await submitInverted(user);
 
-      await pickStart(user, 9);
+      pickStart(10);
 
       expect(screen.queryByText('validation.endDateBeforeStart')).not.toBeInTheDocument();
-      expect(endButton()).toHaveAttribute('aria-invalid', 'false');
+      expect(endInput()).toHaveAttribute('aria-invalid', 'false');
     });
 
     it('clears the complaint along with the end date a new start overtakes', async () => {
       const user = userEvent.setup();
       await submitInverted(user);
 
-      await pickStart(user, 25);
+      pickStart(26);
 
-      expect(endButton()).toHaveTextContent(/^trips\.endDate$/);
+      expect(endInput()).toHaveValue('');
       expect(screen.queryByText('validation.endDateBeforeStart')).not.toBeInTheDocument();
     });
   });
@@ -2074,40 +1925,39 @@ describe('TripForm picking dates', () => {
   it('lets a chosen start date be cleared again', async () => {
     const user = userEvent.setup();
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await pickStart(user, 9);
-    expect(startButton()).not.toHaveTextContent(/^trips\.startDate$/);
+    pickStart(10);
+    expect(startInput()).toHaveValue('2024-07-10');
 
-    // Choosing the selected day again unselects it.
-    await pickStart(user, 9);
+    pickDate('start', '');
 
-    expect(startButton()).toHaveTextContent(/^trips\.startDate$/);
+    expect(startInput()).toHaveValue('');
     // Unselected means unset: the form asks for it again.
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
-    expect(startButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(startInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('lets a chosen end date be cleared again', async () => {
     const user = userEvent.setup();
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await pickEnd(user, 9);
+    pickEnd(10);
 
-    await pickEnd(user, 9);
+    pickDate('end', '');
 
-    expect(endButton()).toHaveTextContent(/^trips\.endDate$/);
+    expect(endInput()).toHaveValue('');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
-    expect(endButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('clears the end date complaint once an end is chosen, and only that one', async () => {
     const user = userEvent.setup();
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await pickStart(user, 9);
+    pickStart(10);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
-    expect(endButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
 
-    await pickEnd(user, 14);
+    pickEnd(15);
 
-    expect(endButton()).toHaveAttribute('aria-invalid', 'false');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByLabelText(/trips\.name/i)).toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -2116,48 +1966,37 @@ describe('TripForm picking dates', () => {
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
-    await pickEnd(user, 14);
+    pickEnd(15);
 
-    expect(endButton()).toHaveAttribute('aria-invalid', 'false');
-    expect(startButton()).toHaveAttribute('aria-invalid', 'true');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'false');
+    expect(startInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('greys an unchosen date and outlines one in error', async () => {
+  it('marks a missing date in error and ties the message to it', async () => {
     const user = userEvent.setup();
     const { container } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    expect(startButton()).toHaveClass('w-full', 'justify-start', 'text-muted-foreground');
-    expect(endButton()).toHaveClass('w-full', 'justify-start', 'text-muted-foreground');
-    expect(startButton()).not.toHaveClass('border-destructive');
-    expect(endButton()).not.toHaveClass('border-destructive');
+    expect(startInput()).toHaveAttribute('aria-invalid', 'false');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'false');
     expect(container.querySelector('#trip-start-date-error')).toBeNull();
     expect(container.querySelector('#trip-end-date-error')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
-    expect(startButton()).toHaveClass('border-destructive');
-    expect(endButton()).toHaveClass('border-destructive');
-    expect(startButton()).toHaveAttribute('aria-describedby', 'trip-start-date-error');
-    expect(endButton()).toHaveAttribute('aria-describedby', 'trip-end-date-error');
+    expect(startInput()).toHaveAttribute('aria-invalid', 'true');
+    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
+    expect(startInput()).toHaveAttribute('aria-describedby', 'trip-start-date-error');
+    expect(endInput()).toHaveAttribute('aria-describedby', 'trip-end-date-error');
     expect(container.querySelector('#trip-start-date-error')).toHaveTextContent('common.required');
 
-    await pickStart(user, 9);
-    expect(startButton()).not.toHaveClass('text-muted-foreground');
-    expect(startButton()).not.toHaveClass('border-destructive');
-    await pickEnd(user, 14);
-    expect(endButton()).not.toHaveClass('text-muted-foreground');
+    pickStart(10);
+    expect(startInput()).toHaveAttribute('aria-invalid', 'false');
   });
 
-  it('greys out every end day before the start', async () => {
-    const user = userEvent.setup();
+  it('keeps the end input from going before the start', () => {
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await pickStart(user, 9);
+    pickStart(10);
 
-    await user.click(endButton());
-    await waitForOpenCalendar();
-
-    const days = daysOfOpenMonth();
-    expect(days[8]).toBeDisabled();
-    expect(days[9]).toBeEnabled();
+    expect(endInput()).toHaveAttribute('min', '2024-07-10');
   });
 });
 
@@ -2248,7 +2087,7 @@ describe('TripForm name checks', () => {
     await user.type(screen.getByLabelText(/trips\.name/i), 'L');
 
     expect(screen.getByLabelText(/trips\.name/i)).toHaveAttribute('aria-invalid', 'false');
-    expect(screen.getByRole('button', { name: /trips\.startDate/i })).toHaveAttribute(
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveAttribute(
       'aria-invalid',
       'true',
     );
@@ -2275,26 +2114,20 @@ describe('TripForm unsaved changes', () => {
     expect(last(onDirtyChange)).toBe(true);
   });
 
-  it('is dirty once the start date alone changes', async () => {
-    const user = userEvent.setup();
+  it('is dirty once the start date alone changes', () => {
     const onDirtyChange = vi.fn();
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />);
 
-    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[9]!);
+    pickDate('start', '2024-07-10');
 
     expect(last(onDirtyChange)).toBe(true);
   });
 
-  it('is dirty once the end date alone changes', async () => {
-    const user = userEvent.setup();
+  it('is dirty once the end date alone changes', () => {
     const onDirtyChange = vi.fn();
     render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />);
 
-    await user.click(screen.getByRole('button', { name: /trips\.endDate/i }));
-    await waitForOpenCalendar();
-    await user.click(daysOfOpenMonth()[9]!);
+    pickDate('end', '2024-07-10');
 
     expect(last(onDirtyChange)).toBe(true);
   });

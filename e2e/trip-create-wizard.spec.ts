@@ -8,20 +8,14 @@
  * @module e2e/trip-create-wizard
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import { guestCards, roomCards } from './support/page-regions';
+import { pickWizardDates } from './support/trip-create';
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Picks the 15th and the 22nd of the month the range picker opens on. */
-async function pickDates(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /trip dates/i }).click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
-}
 
 // ============================================================================
 // Tests
@@ -38,7 +32,7 @@ test.describe('the first-trip wizard', () => {
     await page.keyboard.press('Enter');
 
     await expect(page.getByText(/when is it/i)).toBeVisible();
-    await pickDates(page);
+    await pickWizardDates(page);
     await page.getByRole('button', { name: /^next$/i }).click();
 
     // Everything after the dates can be skipped.
@@ -88,7 +82,7 @@ test.describe('the first-trip wizard', () => {
     await page.goto('/trips/new');
     await page.getByLabel(/trip name/i).fill('Lake house');
     await page.keyboard.press('Enter');
-    await pickDates(page);
+    await pickWizardDates(page);
     await page.getByRole('button', { name: /^next$/i }).click();
     await page.getByRole('button', { name: /skip for now/i }).click();
 
@@ -113,7 +107,7 @@ test.describe('the first-trip wizard', () => {
     await page.goto('/trips/new');
     await page.getByLabel(/trip name/i).fill('First');
     await page.keyboard.press('Enter');
-    await pickDates(page);
+    await pickWizardDates(page);
     await page.getByRole('button', { name: /^next$/i }).click();
     await page.getByRole('button', { name: /skip for now/i }).click();
     await page.getByRole('button', { name: /skip for now/i }).click();
@@ -129,44 +123,31 @@ test.describe('the first-trip wizard', () => {
 });
 
 /**
- * The replay that reported this ran on a 384×697 Chrome. The popover opened
- * against the left edge of the screen with most of it empty beside it; on a
- * phone the calendar is now a dialog that spans the screen between equal
- * gutters.
+ * The replay that reported this ran on a 384×697 Chrome, where a drawn
+ * calendar opened against one edge of the screen. The dates are now the
+ * phone's own date inputs; this keeps them on the screen.
  */
 test.describe('the dates step on a phone', () => {
   test.use({ viewport: { width: 384, height: 697 } });
 
-  test('opens the calendar centred, across the width of the screen', async ({ page }) => {
+  test('fits both date inputs on the screen and takes a range', async ({ page }) => {
     await page.goto('/trips/new');
 
     await page.getByLabel(/trip name/i).fill('Lake house');
     await page.keyboard.press('Enter');
     await expect(page.getByText(/when is it/i)).toBeVisible();
-    await page.getByRole('button', { name: /trip dates/i }).click();
 
-    const dialog = page.getByRole('dialog', { name: /select date range/i });
-    await expect(dialog).toBeVisible();
-    const box = await dialog.boundingBox();
-    expect(box).not.toBeNull();
-    if (box === null) return;
+    const dates = page.getByRole('group', { name: /trip dates/i });
+    for (const label of [/^from$/i, /^to$/i]) {
+      const box = await dates.getByLabel(label).boundingBox();
+      expect(box).not.toBeNull();
+      if (box === null) return;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(384);
+    }
 
-    const leftGutter = box.x,
-     rightGutter = 384 - (box.x + box.width);
-    expect(leftGutter).toBeGreaterThan(8);
-    expect(Math.abs(leftGutter - rightGutter)).toBeLessThanOrEqual(1);
-    expect(box.width).toBeGreaterThan(384 * 0.85);
-    expect(box.y + box.height).toBeLessThanOrEqual(697);
-
-    // The day grid fills the dialog rather than sitting in a corner of it.
-    const grid = await dialog.getByRole('grid').boundingBox();
-    expect(grid?.width ?? 0).toBeGreaterThan(box.width * 0.85);
-
-    await page.screenshot({ path: test.info().outputPath('dates-on-a-phone.png') });
-
-    // And it still picks a range and closes.
-    await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-    await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
-    await expect(dialog).toBeHidden();
+    await pickWizardDates(page);
+    await expect(dates.getByLabel(/^from$/i)).not.toHaveValue('');
+    await expect(dates.getByLabel(/^to$/i)).not.toHaveValue('');
   });
 });

@@ -1,6 +1,6 @@
 /**
- * @fileoverview The date and time control: a calendar button and a time field
- * that together make one `YYYY-MM-DDTHH:mm` value.
+ * @fileoverview The date and time control: a native date field and a time
+ * field that together make one `YYYY-MM-DDTHH:mm` value.
  *
  * @module components/shared/__tests__/DateTimePicker.test
  */
@@ -8,11 +8,11 @@
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fireEvent, render, screen, within } from '@/test/utils';
+import { fireEvent, render, screen } from '@/test/utils';
 
 /**
- * Loaded inside the first test rather than at the top of the file: the date
- * format and the default time are load-time constants, and Stryker can only
+ * Loaded inside the first test rather than at the top of the file: the
+ * default time is a load-time constant, and Stryker can only
  * test a mutant in load-time code against the test that was running then.
  */
 let DateTimePicker: typeof import('../DateTimePicker').DateTimePicker;
@@ -55,18 +55,12 @@ function Controlled({
   );
 }
 
-const dateButton = (): HTMLElement => screen.getByRole('button', { name: 'Pickup date' });
+const dateField = (): HTMLInputElement => screen.getByLabelText('Pickup date') as HTMLInputElement;
 const timeField = (): HTMLInputElement => screen.getByLabelText('Pickup time') as HTMLInputElement;
 
-/** Opens the calendar and clicks the given day of the shown month. */
+/** Picks the given day of March 2026, the way the native picker reports it. */
 function pickDay(day: number): void {
-  fireEvent.click(dateButton());
-  const grid = screen.getByRole('grid');
-  const cell = within(grid)
-    .getAllByRole('button')
-    .find((button) => button.textContent === String(day) && !button.closest('[data-outside]'));
-  if (!cell) throw new Error(`no day ${day}`);
-  fireEvent.click(cell);
+  fireEvent.change(dateField(), { target: { value: `2026-03-${String(day).padStart(2, '0')}` } });
 }
 
 // ============================================================================
@@ -74,10 +68,9 @@ function pickDay(day: number): void {
 // ============================================================================
 
 describe('DateTimePicker load-time constants', () => {
-  it('writes the date out long, and settles a picked day with no time at noon', () => {
+  it('settles a picked day with no time at noon', () => {
     const onChange = vi.fn();
     render(<Controlled initial="2026-03-10T09:30" onChange={onChange} />, { withProviders: false });
-    expect(dateButton()).toHaveTextContent('March 10th, 2026');
 
     fireEvent.change(timeField(), { target: { value: '' } });
     pickDay(15);
@@ -87,37 +80,34 @@ describe('DateTimePicker load-time constants', () => {
 });
 
 describe('DateTimePicker', () => {
-  it('spells the value out as a long date and a time', () => {
+  it('splits the value into a date field and a time field', () => {
     render(<DateTimePicker id="pickup" value="2026-03-10T09:30" onChange={vi.fn()} {...LABELS} />, {
       withProviders: false,
     });
 
-    expect(dateButton()).toHaveTextContent('March 10th, 2026');
-    expect(dateButton()).toHaveAttribute('id', 'pickup');
-    expect(dateButton()).not.toHaveClass('text-muted-foreground');
-    expect(dateButton()).toHaveClass('w-full', 'justify-start', 'text-left', 'font-normal', 'sm:flex-1');
-    expect(dateButton()).toHaveAttribute('aria-expanded', 'false');
-    expect(dateButton()).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(dateButton()).toHaveAttribute('aria-invalid', 'false');
-    expect(dateButton().querySelector('svg')).toHaveClass('mr-2', 'size-4');
+    expect(dateField()).toHaveAttribute('type', 'date');
+    expect(dateField()).toHaveValue('2026-03-10');
+    expect(dateField()).toHaveAttribute('id', 'pickup');
+    expect(dateField()).toHaveAttribute('aria-invalid', 'false');
+    expect(dateField()).toHaveClass('w-full', 'sm:flex-1');
+    expect(timeField()).toHaveAttribute('type', 'time');
     expect(timeField()).toHaveValue('09:30');
     expect(timeField()).toHaveAttribute('id', 'pickup-time');
     expect(timeField()).toHaveAttribute('aria-invalid', 'false');
     expect(timeField()).toHaveClass('w-full', 'sm:w-32');
-    expect(dateButton().parentElement).toHaveClass('flex', 'flex-col', 'gap-2', 'sm:flex-row');
+    expect(dateField().parentElement).toHaveClass('flex', 'flex-col', 'gap-2', 'sm:flex-row');
   });
 
-  it('asks for a date when there is none', () => {
+  it('leaves both fields empty when there is no value', () => {
     render(<DateTimePicker id="pickup" value="" onChange={vi.fn()} {...LABELS} />, {
       withProviders: false,
     });
 
-    expect(dateButton()).toHaveTextContent('common.pickDate');
-    expect(dateButton()).toHaveClass('text-muted-foreground');
+    expect(dateField()).toHaveValue('');
     expect(timeField()).toHaveValue('');
   });
 
-  it('marks both halves invalid, and the date in red, on an error', () => {
+  it('marks both halves invalid on an error', () => {
     render(
       <DateTimePicker
         id="pickup"
@@ -130,9 +120,8 @@ describe('DateTimePicker', () => {
       { withProviders: false },
     );
 
-    expect(dateButton()).toHaveAttribute('aria-invalid', 'true');
-    expect(dateButton()).toHaveClass('border-destructive');
-    expect(dateButton()).toHaveAttribute('aria-describedby', 'pickup-error');
+    expect(dateField()).toHaveAttribute('aria-invalid', 'true');
+    expect(dateField()).toHaveAttribute('aria-describedby', 'pickup-error');
     expect(timeField()).toHaveAttribute('aria-invalid', 'true');
     expect(timeField()).toHaveAttribute('aria-describedby', 'pickup-error');
   });
@@ -142,19 +131,18 @@ describe('DateTimePicker', () => {
       withProviders: false,
     });
 
-    expect(dateButton()).toBeDisabled();
+    expect(dateField()).toBeDisabled();
     expect(timeField()).toBeDisabled();
   });
 
-  it('keeps the time when another day is picked, and closes the calendar', () => {
+  it('keeps the time when another day is picked', () => {
     const onChange = vi.fn();
     render(<Controlled initial="2026-03-10T09:30" onChange={onChange} />, { withProviders: false });
 
     pickDay(20);
 
     expect(onChange).toHaveBeenLastCalledWith('2026-03-20T09:30');
-    expect(dateButton()).toHaveTextContent('March 20th, 2026');
-    expect(dateButton()).toHaveAttribute('aria-expanded', 'false');
+    expect(dateField()).toHaveValue('2026-03-20');
   });
 
   it('settles the time at noon when a day is picked with no time', () => {
@@ -164,7 +152,7 @@ describe('DateTimePicker', () => {
     fireEvent.change(timeField(), { target: { value: '' } });
     expect(onChange).toHaveBeenLastCalledWith('');
     // A half-filled control keeps the half that is there.
-    expect(dateButton()).toHaveTextContent('March 10th, 2026');
+    expect(dateField()).toHaveValue('2026-03-10');
 
     pickDay(15);
 
@@ -181,14 +169,14 @@ describe('DateTimePicker', () => {
     expect(onChange).toHaveBeenLastCalledWith('2026-03-10T18:45');
   });
 
-  it('reports nothing usable when the picked day is taken back', () => {
+  it('reports nothing usable when the date is cleared', () => {
     const onChange = vi.fn();
     render(<Controlled initial="2026-03-10T09:30" onChange={onChange} />, { withProviders: false });
 
-    pickDay(10);
+    fireEvent.change(dateField(), { target: { value: '' } });
 
     expect(onChange).toHaveBeenLastCalledWith('');
-    expect(dateButton()).toHaveTextContent('common.pickDate');
+    expect(dateField()).toHaveValue('');
     expect(timeField()).toHaveValue('09:30');
   });
 
@@ -200,7 +188,7 @@ describe('DateTimePicker', () => {
 
     rerender(<DateTimePicker id="pickup" value="2026-04-02T07:15" onChange={vi.fn()} {...LABELS} />);
 
-    expect(dateButton()).toHaveTextContent('April 2nd, 2026');
+    expect(dateField()).toHaveValue('2026-04-02');
     expect(timeField()).toHaveValue('07:15');
   });
 
@@ -227,22 +215,11 @@ describe('DateTimePicker', () => {
       withProviders: false,
     });
 
-    fireEvent.blur(dateButton(), { relatedTarget: timeField() });
+    fireEvent.blur(dateField(), { relatedTarget: timeField() });
     expect(onBlur).not.toHaveBeenCalled();
 
     fireEvent.blur(timeField(), { relatedTarget: screen.getByRole('button', { name: 'outside' }) });
     expect(onBlur).toHaveBeenCalledTimes(1);
-  });
-
-  it('opens the calendar on the month of the value', () => {
-    render(<DateTimePicker id="pickup" value="2025-11-05T09:30" onChange={vi.fn()} {...LABELS} />, {
-      withProviders: false,
-    });
-
-    fireEvent.click(dateButton());
-
-    expect(dateButton()).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('grid')).toHaveAccessibleName(/November 2025/);
   });
 });
 
@@ -270,7 +247,7 @@ describe('DateTimePicker uncontrolled and blur', () => {
     fireEvent.change(timeField(), { target: { value: '10:00' } });
 
     expect(timeField()).toHaveValue('10:00');
-    expect(dateButton()).toHaveTextContent('April 2nd, 2026');
+    expect(dateField()).toHaveValue('2026-04-02');
   });
 
   it('takes a blur with no handler, and reports to the newest one', () => {
