@@ -5,7 +5,9 @@
  * current trip" says nothing about whether anybody looked at it. A page of it
  * on screen does. `sample_trip_viewed` fires once per navigation to such a
  * page, with the page and the way the user got there: `list` from the trip
- * list, `nav` from the bottom bar, the "More" sheet or the sidebar, `other`
+ * list, `nav` from the bottom bar, the "More" sheet or the sidebar, `entry`
+ * when opening the app went straight to it (the `onboarding-planning-view`
+ * experiment's test arm, `features/trips/components/EntryRedirect`), `other`
  * for anything else (a typed URL, a reload of a page reached some other way).
  *
  * The way in travels as router state, `{ via }`, set by the link that was
@@ -29,7 +31,7 @@ import { captureEvent } from '@/lib/posthog';
 // ============================================================================
 
 /** Where a click that opened a trip page came from. */
-export type TripPageOpenedVia = 'list' | 'nav';
+export type TripPageOpenedVia = 'list' | 'nav' | 'entry';
 
 /** The router state a link sets to say where it is. */
 export interface TripPageNavigationState {
@@ -46,6 +48,9 @@ export const OPENED_FROM_LIST: TripPageNavigationState = { via: 'list' };
 /** Router state for a page opened from the navigation. */
 export const OPENED_FROM_NAV: TripPageNavigationState = { via: 'nav' };
 
+/** Router state for a page the app opened on by itself, from `/`. */
+export const OPENED_ON_ENTRY: TripPageNavigationState = { via: 'entry' };
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -58,7 +63,7 @@ function readVia(state: unknown): TripPageOpenedVia | 'other' {
     return 'other';
   }
   const { via } = state as { readonly via: unknown };
-  return via === 'list' || via === 'nav' ? via : 'other';
+  return via === 'list' || via === 'nav' || via === 'entry' ? via : 'other';
 }
 
 // ============================================================================

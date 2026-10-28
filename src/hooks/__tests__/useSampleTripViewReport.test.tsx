@@ -12,6 +12,7 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-d
 import {
   OPENED_FROM_LIST,
   OPENED_FROM_NAV,
+  OPENED_ON_ENTRY,
   useSampleTripViewReport,
 } from '@/hooks/useSampleTripViewReport';
 import { useTripContext } from '@/contexts/TripContext';
@@ -71,6 +72,12 @@ describe('useSampleTripViewReport', () => {
       { page: 'calendar', via: 'list' },
       { page: 'rooms', via: 'nav' },
     ]);
+  });
+
+  it('reports the calendar the app opened on by itself as the entry', () => {
+    renderAt(`/trips/${SAMPLE_ID}/calendar`, OPENED_ON_ENTRY);
+
+    expect(sampleViews()).toEqual([{ page: 'calendar', via: 'entry' }]);
   });
 
   it('says other when no link said where it was', () => {

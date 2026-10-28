@@ -7,7 +7,6 @@
 
 import { type ReactElement, Suspense, lazy, useEffect, useState } from 'react';
 import {
-  Navigate,
   Outlet,
   type RouteObject,
   createBrowserRouter,
@@ -27,6 +26,7 @@ import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/c
 
 // Feature route imports
 import { tripRoutes } from '@/features/trips/routes';
+import { EntryRedirect } from '@/features/trips/components/EntryRedirect';
 import { calendarRoutes } from '@/features/calendar/routes';
 import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
@@ -294,12 +294,14 @@ export const appRoutes: RouteObject = {
   element: <LayoutWrapper />,
   errorElement: <ErrorPage />,
   children: [
-    // Index redirect: the trip list, always. A first open lands there too, on
-    // the sample trip with the pet turned on (see `main.tsx`), and the
-    // first-trip wizard is one "New trip" away.
+    // Index redirect: the trip list. A first open lands there too, on the
+    // sample trip with the pet turned on (see `main.tsx`), and the first-trip
+    // wizard is one "New trip" away. A device whose one trip is the sample
+    // takes part in the `onboarding-planning-view` experiment, whose test arm
+    // opens the sample's calendar instead (`EntryRedirect`).
     {
       index: true,
-      element: <Navigate to="/trips" replace />,
+      element: <EntryRedirect />,
     },
 
     // Trip management routes
