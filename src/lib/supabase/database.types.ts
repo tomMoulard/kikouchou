@@ -54,6 +54,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      assistant_usage: {
+        Row: {
+          day: string
+          requests: number
+          user_id: string
+        }
+        Insert: {
+          day: string
+          requests?: number
+          user_id: string
+        }
+        Update: {
+          day?: string
+          requests?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       guest_groups: {
         Row: {
           created_at: string
@@ -426,6 +444,10 @@ export type Database = {
       }
     }
     Functions: {
+      consume_assistant_quota: {
+        Args: { p_limit: number; p_user_id: string }
+        Returns: boolean
+      }
       delete_my_account: { Args: never; Returns: undefined }
       publish_trip_snapshot: {
         Args: { p_state: string; p_through_id: number; p_trip_id: string }
