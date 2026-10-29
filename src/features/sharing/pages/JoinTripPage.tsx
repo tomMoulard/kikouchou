@@ -15,6 +15,11 @@
  *
  * Each step is visible because any of them can take a moment or fail.
  *
+ * Once the name is picked, the page asks one more thing: "When do you arrive?"
+ * A member's answer is saved at once as the guest's `stayStartDate`. A
+ * viewer's waits on the device until they sign in (`usePendingArrival`),
+ * because a viewer trip takes no write.
+ *
  * Somebody the organiser never added is not stuck as "nobody in particular":
  * a member types their name, a guest is created in the trip, and that guest is
  * claimed in the same tap. A viewer has no write access, so the same button
@@ -23,7 +28,15 @@
  * @module features/sharing/pages/JoinTripPage
  */
 
-import { type FormEvent, type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type FormEvent,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
@@ -51,7 +64,7 @@ import { reportFailure } from '@/lib/errors/report-failure';
 import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
-import { createPersonWithAutoColor } from '@/lib/db';
+import { createPersonWithAutoColor, updatePersonWithOwnershipCheck } from '@/lib/db';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
@@ -59,12 +72,19 @@ import { notify } from '@/lib/notifications';
 import { isRunningStandalone } from '@/lib/pwa/display-mode';
 import { useHereManifest } from '@/lib/pwa/use-here-manifest';
 import { getTripGuestPersonId, writeGuestIdentity } from '@/lib/sharing/guest-identity';
+import {
+  clearPendingArrival,
+  readPendingArrival,
+  writePendingArrival,
+} from '@/lib/sharing/pending-arrival';
 import { claimParticipant, fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { cn } from '@/lib/utils';
-import { formatDateRange } from '@/lib/utils/date-format';
+import { formatDateRange, formatFullDate } from '@/lib/utils/date-format';
 import { useJoinTrip } from '../hooks/useJoinTrip';
-import type { PersonId, Trip, TripId } from '@/types';
+import { GuestArrivalQuestion, GuestArrivalSaved } from '../components/GuestArrivalQuestion';
+import { listArrivalDays } from '../utils/arrival-days';
+import type { ISODateString, Person, PersonId, Trip, TripId } from '@/types';
 
 // ============================================================================
 // Constants
@@ -183,6 +203,8 @@ function AddSelfForm({ onSubmit, disabled }: AddSelfFormProps): ReactElement {
 interface IdentityStepProps {
   readonly tripId: TripId;
   readonly remoteTripId: string;
+  /** The trip's dates, which are the days the arrival question offers. */
+  readonly trip: Pick<Trip, 'startDate' | 'endDate'>;
 }
 
 /**
@@ -192,7 +214,7 @@ interface IdentityStepProps {
  * — that wait is shown rather than hidden, because on a slow connection an empty
  * list would otherwise look like a trip with nobody in it.
  */
-function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement {
+function IdentityStep({ tripId, remoteTripId, trip }: IdentityStepProps): ReactElement {
   const { state: syncState } = useSyncStatus();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -225,6 +247,10 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
   const [error, setError] = useState<string | null>(null);
   const [addingSelf, setAddingSelf] = useState(false);
   const [showAddSelf, setShowAddSelf] = useState(false);
+  /** The guest just claimed, while "When do you arrive?" is on screen. */
+  const [answering, setAnswering] = useState<Person | null>(null);
+  const [savingArrival, setSavingArrival] = useState(false);
+  const [arrivalSaved, setArrivalSaved] = useState<ISODateString | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -251,6 +277,38 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
   const available = useMemo(
     () => persons.filter((person) => !claimed.has(person.id)),
     [claimed, persons],
+  );
+
+  /**
+   * Writes the guest's arrival day, then offers the journey.
+   *
+   * A member trip takes the write at once: the identity step only runs once
+   * the document has filled Dexie, so the sync bridge publishes it to the
+   * others like any edit from the guest list.
+   */
+  const saveArrival = useCallback(
+    async (
+      personId: PersonId,
+      date: ISODateString,
+      via: 'join' | 'after_sign_in',
+    ): Promise<void> => {
+      setSavingArrival(true);
+      setError(null);
+      try {
+        await updatePersonWithOwnershipCheck(personId, tripId, { stayStartDate: date });
+      } catch (error) {
+        reportFailure('JoinTripPage.saveArrival', error, t('errors.saveFailed', 'Failed to save'));
+        setError(t('errors.saveFailed', 'Failed to save'));
+        return;
+      } finally {
+        setSavingArrival(false);
+      }
+      clearPendingArrival(tripId);
+      captureEvent('guest_arrival_saved', { via });
+      setAnswering(null);
+      setArrivalSaved(date);
+    },
+    [t, tripId],
   );
 
   const handleClaim = useCallback(
@@ -322,10 +380,25 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       // sense of being anybody, and every "my travel" view showed them nothing.
       await cacheClaimedPersonId(tripId, user.id, personId);
 
+      // Read from Dexie rather than from `persons`: a guest added a moment ago
+      // by `handleAddSelf` is not in this render's list yet.
+      const person = await db.persons.get(personId);
+
+      // A guest who answered before signing in has said when they arrive.
+      const pending = readPendingArrival(tripId);
+      if (person && pending?.personId === personId) {
+        await saveArrival(personId, pending.date, 'after_sign_in');
+        return;
+      }
+
       // Only on a confirmed claim.
+      if (person && listArrivalDays(trip, person.stayEndDate).length > 0) {
+        setAnswering(person);
+        return;
+      }
       void navigate(`/trips/${tripId}/calendar`);
     },
-    [navigate, remoteTripId, t, tripId, user],
+    [navigate, remoteTripId, saveArrival, t, trip, tripId, user],
   );
 
   /**
@@ -380,6 +453,39 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
     void navigate(`/trips/${tripId}/calendar`);
   }, [navigate, tripId]);
 
+  const handleArrivalAnswer = useCallback(
+    (date: ISODateString | null): void => {
+      if (!answering) {
+        return;
+      }
+      captureEvent('guest_arrival_answered', {
+        scope: 'account',
+        answer: date === null ? 'unknown' : 'date',
+      });
+      if (date === null) {
+        void navigate(`/trips/${tripId}/calendar`);
+        return;
+      }
+      void saveArrival(answering.id, date, 'join');
+    },
+    [answering, navigate, saveArrival, tripId],
+  );
+
+  // A guest who answered on this device before signing in, and came back to
+  // the link: their name was picked already, so it is claimed without asking.
+  const pendingClaimRef = useRef(false);
+  useEffect(() => {
+    if (pendingClaimRef.current || !user || claiming !== null) {
+      return;
+    }
+    const pending = readPendingArrival(tripId);
+    if (pending === undefined || !available.some((person) => person.id === pending.personId)) {
+      return;
+    }
+    pendingClaimRef.current = true;
+    void handleClaim(pending.personId);
+  }, [available, claiming, handleClaim, tripId, user]);
+
   /**
    * Whether the document might still be arriving.
    *
@@ -407,6 +513,34 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       clearTimeout(timer);
     };
   }, []);
+
+  if (arrivalSaved !== null) {
+    return (
+      <GuestArrivalSaved
+        date={arrivalSaved}
+        onAddTransport={() => void navigate(`/trips/${tripId}/transports?new=1`)}
+        onLater={() => void navigate(`/trips/${tripId}/calendar`)}
+      />
+    );
+  }
+
+  if (answering !== null) {
+    return (
+      <div className="flex flex-col gap-3">
+        {error !== null ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <GuestArrivalQuestion
+          trip={trip}
+          person={answering}
+          onAnswer={handleArrivalAnswer}
+          busy={savingArrival}
+        />
+      </div>
+    );
+  }
 
   if (persons.length === 0) {
     if (!settled && !waitedLongEnough) {
@@ -582,7 +716,15 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
     void navigate(`/trips/${trip.id}/calendar`);
   }, [navigate, trip.id]);
 
-  const alreadyIdentified = getTripGuestPersonId(trip) !== undefined;
+  // Read once: picking a name below writes the same key, and a value read on
+  // every render would then send the guest to the calendar before the arrival
+  // question could be asked.
+  const [alreadyIdentified] = useState(() => getTripGuestPersonId(trip) !== undefined);
+
+  /** The guest just picked, while "When do you arrive?" is on screen. */
+  const [answering, setAnswering] = useState<Person | null>(null);
+  /** The day they gave, kept on the device until they sign in. */
+  const [answeredDate, setAnsweredDate] = useState<ISODateString | null>(null);
 
   // Adding a guest is a write, and a viewer has none. Signing in from here
   // redeems the same link as a member, and the page swaps to the member step,
@@ -616,10 +758,48 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
         );
       }
       captureEvent('trip_identity_claimed', { scope: 'device' });
+      const person = persons.find((candidate) => candidate.id === personId);
+      if (person && listArrivalDays(trip, person.stayEndDate).length > 0) {
+        setAnswering(person);
+        return;
+      }
       openTrip();
     },
-    [openTrip, t, trip.id, trip.shareId],
+    [openTrip, persons, t, trip],
   );
+
+  const handleArrivalAnswer = useCallback(
+    (date: ISODateString | null): void => {
+      if (!answering) {
+        return;
+      }
+      captureEvent('guest_arrival_answered', {
+        scope: 'device',
+        answer: date === null ? 'unknown' : 'date',
+      });
+      if (date === null) {
+        openTrip();
+        return;
+      }
+      if (!writePendingArrival(trip.id, { personId: answering.id, date })) {
+        notify.error(
+          t(
+            'sharing.join.arrivalStorageFailed',
+            'Could not keep your arrival day on this device. You can add it from the guest list once signed in.',
+          ),
+        );
+        openTrip();
+        return;
+      }
+      setAnsweredDate(date);
+    },
+    [answering, openTrip, t, trip.id],
+  );
+
+  const openArrivalSignIn = useCallback((): void => {
+    captureEvent('viewer_sign_in_clicked');
+    setSignInOpen(true);
+  }, []);
 
   const skip = useCallback((): void => {
     captureEvent('trip_identity_skipped', { scope: 'device' });
@@ -697,7 +877,42 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
             </div>
           ) : null}
 
-          {installRequested && alreadyIdentified ? (
+          {answeredDate !== null ? (
+            <div className="space-y-3 text-center" data-testid="guest-arrival-sign-in">
+              <p className="font-display text-lg font-semibold text-foreground">
+                {t('sharing.join.arrivalKept', {
+                  date: formatFullDate(answeredDate, getDateLocale(i18n.language)),
+                  defaultValue: 'You arrive on {{date}}.',
+                })}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  'sharing.join.arrivalSignInHint',
+                  'Sign in to save it, and the others see it. Until then it stays on this phone.',
+                )}
+              </p>
+              <Button type="button" className="h-11 w-full" onClick={openArrivalSignIn}>
+                {t('sharing.join.arrivalSignIn', 'Save my arrival')}
+              </Button>
+              <SignInDialog
+                open={signInOpen}
+                onOpenChange={setSignInOpen}
+                reason={t(
+                  'sharing.join.arrivalSignInReason',
+                  'Sign in to save your arrival day. The others will see it on the trip.',
+                )}
+              />
+              <Button type="button" variant="ghost" className="h-11 w-full" onClick={openTrip}>
+                {t('sharing.join.arrivalNotNow', 'Not now')}
+              </Button>
+            </div>
+          ) : answering !== null ? (
+            <GuestArrivalQuestion
+              trip={trip}
+              person={answering}
+              onAnswer={handleArrivalAnswer}
+            />
+          ) : installRequested && alreadyIdentified ? (
             <Button type="button" variant="outline" className="h-11 w-full" onClick={openTrip}>
               {t('sharing.join.openTrip', 'Open the trip')}
             </Button>
@@ -913,7 +1128,11 @@ export function JoinTripPage(): ReactElement {
   return (
     <JoinShell>
       {landedTrip?.remoteTripId ? (
-        <IdentityStep tripId={phase.tripId} remoteTripId={landedTrip.remoteTripId} />
+        <IdentityStep
+          tripId={phase.tripId}
+          remoteTripId={landedTrip.remoteTripId}
+          trip={landedTrip}
+        />
       ) : (
         <div className="flex flex-col items-center gap-3 text-center">
           <Check className="size-6 text-primary" aria-hidden="true" />

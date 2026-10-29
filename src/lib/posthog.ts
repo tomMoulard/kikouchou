@@ -1065,6 +1065,8 @@ export type AnalyticsEvent =
   | 'upgrade_prompt_opened'
   | 'upgrade_prompt_shown'
   // Sharing, joining and syncing
+  | 'guest_arrival_answered'
+  | 'guest_arrival_saved'
   | 'own_trip_prompt_accepted'
   | 'own_trip_prompt_dismissed'
   | 'own_trip_prompt_shown'

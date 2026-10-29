@@ -22,6 +22,7 @@
 
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
+import { skipArrivalQuestion } from './support/arrival';
 import { SupabaseStub, type StubUser } from './support/supabase-stub';
 import { fixtureDate } from './support/fixture-dates';
 import { fillNewTrip } from './support/trip-create';
@@ -424,6 +425,14 @@ test.describe('joining a trip', () => {
     ).toHaveLength(0);
     expect(stub.members.find((m) => m.user_id === GUEST.id)?.person_id).toBeTruthy();
 
+    // Then the one question: a member's arrival day is saved at once, and the
+    // journey is offered and can wait.
+    const question = guestPage.getByTestId('guest-arrival-question');
+    await expect(question).toBeVisible({ timeout: 20_000 });
+    await question.getByRole('listitem').first().getByRole('button').click();
+    await expect(guestPage.getByTestId('guest-arrival-saved')).toBeVisible({ timeout: 20_000 });
+    await guestPage.getByRole('button', { name: /^later$/i }).click();
+
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
   });
 
@@ -652,6 +661,7 @@ test.describe('two devices on one trip', () => {
       timeout: 30_000,
     });
     await guestPage.getByRole('button', { name: /alice/i }).click();
+    await skipArrivalQuestion(guestPage);
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
 
     // A new guest on the owner's device, after the invitee is already in.
@@ -958,6 +968,7 @@ test.describe('the trip preview on the server', () => {
       timeout: 30_000,
     });
     await guestPage.getByRole('button', { name: /alice/i }).click();
+    await skipArrivalQuestion(guestPage);
     await expect(guestPage).toHaveURL(/\/trips\/([^/]+)\/calendar/, { timeout: 20_000 });
     const guestTripId = (/\/trips\/([^/]+)\//.exec(guestPage.url()) ?? [])[1] ?? '';
     expect(guestTripId).not.toBe('');

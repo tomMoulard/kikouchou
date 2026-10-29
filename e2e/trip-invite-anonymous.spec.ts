@@ -16,6 +16,7 @@
 
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
+import { skipArrivalQuestion } from './support/arrival';
 import { SupabaseStub, type StubUser } from './support/supabase-stub';
 import { fixtureDate } from './support/fixture-dates';
 import { fillNewTrip } from './support/trip-create';
@@ -95,6 +96,33 @@ async function shareTripWithGuests(
   await waitForNameOnServer(stub, 'Bob');
 
   return { token, ownerPage };
+}
+
+/** Reads a guest's arrival day from a device's own IndexedDB. */
+async function readStayStartDate(page: Page, name: string): Promise<string | null> {
+  return page.evaluate(
+    (guestName) =>
+      new Promise<string | null>((resolve) => {
+        const request = indexedDB.open('kikouchou');
+        request.onerror = () => {
+          resolve(null);
+        };
+        request.onsuccess = () => {
+          const database = request.result;
+          const read = database.transaction('persons').objectStore('persons').getAll();
+          read.onsuccess = () => {
+            const rows = read.result as { name: string; stayStartDate?: string }[];
+            resolve(rows.find((row) => row.name === guestName)?.stayStartDate ?? null);
+            database.close();
+          };
+          read.onerror = () => {
+            resolve(null);
+            database.close();
+          };
+        };
+      }),
+    name,
+  );
 }
 
 /**
@@ -206,6 +234,7 @@ test.describe('an invite opened with no account', () => {
     await expect(guestPage.getByRole('button', { name: /sign in/i })).toHaveCount(0);
 
     await guestPage.getByRole('button', { name: /alice/i }).click();
+    await skipArrivalQuestion(guestPage);
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
 
     // Reading is not joining: nothing was redeemed, nobody was added.
@@ -227,6 +256,7 @@ test.describe('an invite opened with no account', () => {
     const guestPage = await newDevice(browser, stub);
     await guestPage.goto(`/join/${token}`);
     await guestPage.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await skipArrivalQuestion(guestPage);
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
 
     // Guests: the list is there, the "new guest" action is not.
@@ -260,6 +290,7 @@ test.describe('an invite opened with no account', () => {
     const phone = await newDevice(browser, stub, undefined, { phone: true, push: false });
     await phone.goto(`/join/${token}`);
     await phone.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await skipArrivalQuestion(phone);
     await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
     await expect(phone.getByTestId('viewer-unlock-card')).toBeVisible({ timeout: 20_000 });
 
@@ -284,6 +315,7 @@ test.describe('an invite opened with no account', () => {
     const phone = await newDevice(browser, stub, undefined, { phone: true, push: true });
     await phone.goto(`/join/${token}`);
     await phone.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await skipArrivalQuestion(phone);
     await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
 
     const card = phone.getByTestId('reminder-card');
@@ -328,6 +360,7 @@ test.describe('an invite opened with no account', () => {
     const laptop = await newDevice(browser, stub, undefined, { push: false });
     await laptop.goto(`/join/${token}`);
     await laptop.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await skipArrivalQuestion(laptop);
     await expect(laptop).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
     await expect(laptop.getByTestId('viewer-unlock-card')).toBeVisible({ timeout: 20_000 });
 
@@ -364,6 +397,67 @@ test.describe('an invite opened with no account', () => {
 // ============================================================================
 
 test.describe('a viewer who signs in', () => {
+  test('keeps the arrival day picked signed out, and saves it for everyone after sign-in', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const { token, ownerPage } = await shareTripWithGuests(browser, stub);
+
+    const context = await browser.newContext();
+    openContexts.push(context);
+    const guestPage = await context.newPage();
+    await stub.install(guestPage);
+
+    await guestPage.goto(`/join/${token}`);
+    await guestPage.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+
+    // One question, one tap: the second night of the trip.
+    const question = guestPage.getByTestId('guest-arrival-question');
+    await expect(question).toBeVisible({ timeout: 30_000 });
+    await question.getByRole('listitem').nth(1).getByRole('button').click();
+
+    // A viewer trip takes no write, so the day waits on the device.
+    await expect(guestPage.getByTestId('guest-arrival-sign-in')).toBeVisible();
+    const pending = await guestPage.evaluate(() => {
+      const key = Object.keys(localStorage).find((candidate) =>
+        candidate.startsWith('kikouchou-pending-arrival:'),
+      );
+      return key === undefined ? null : localStorage.getItem(key);
+    });
+    const date = (JSON.parse(pending ?? '{}') as { date?: string }).date ?? '';
+    expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    await guestPage.getByRole('button', { name: /not now/i }).click();
+    await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+
+    await stub.signIn(guestPage, GUEST);
+    await guestPage.reload();
+
+    // Saved once the trip is a member trip and synced, and carried by the
+    // server to the organiser, which is the point of asking. The stub refuses
+    // Realtime, so the organiser's device is nudged to pull, the way it is when
+    // a connection comes back.
+    await ownerPage.keyboard.press('Escape');
+    await expect
+      .poll(
+        async () => {
+          await ownerPage.evaluate(() => {
+            window.dispatchEvent(new Event('online'));
+          });
+          return readStayStartDate(ownerPage, 'Alice');
+        },
+        { timeout: 45_000 },
+      )
+      .toBe(date);
+    await expect
+      .poll(() =>
+        guestPage.evaluate(() =>
+          Object.keys(localStorage).some((key) => key.startsWith('kikouchou-pending-arrival:')),
+        ),
+      )
+      .toBe(false);
+  });
+
   test('joins the trip with the same link and can edit it', async ({ browser }) => {
     const stub = new SupabaseStub();
     const { token } = await shareTripWithGuests(browser, stub);
@@ -375,6 +469,7 @@ test.describe('a viewer who signs in', () => {
 
     await guestPage.goto(`/join/${token}`);
     await guestPage.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await skipArrivalQuestion(guestPage);
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
     await expect(guestPage.getByTestId('viewer-unlock-card')).toBeVisible({ timeout: 20_000 });
 
