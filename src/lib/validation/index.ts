@@ -51,6 +51,8 @@ export {
   TransportFormDataSchema,
   ActivityFormDataSchema,
   ExpenseFormDataSchema,
+  MealFormDataSchema,
+  ShoppingItemFormDataSchema,
   // Primitive schemas
   isoDateStringSchema,
   isoDateTimeStringSchema,
@@ -62,6 +64,9 @@ export {
   expenseKindSchema,
   expenseCategorySchema,
   expenseSplitModeSchema,
+  dietaryTagSchema,
+  mealSlotSchema,
+  mealKindSchema,
   coordinatesSchema,
   personIdSchema,
   roomIdSchema,

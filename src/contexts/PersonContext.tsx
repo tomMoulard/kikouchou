@@ -124,7 +124,23 @@ const comparePersons = (a: Person, b: Person): boolean =>
   // The child restraint they need in a car. Same rule, same reason: without it
   // a guest gaining a booster never republishes, so every ride they are in goes
   // on reporting no seat requirement until some unrelated field also changes.
-  a.childSeat === b.childSeat;
+  a.childSeat === b.childSeat &&
+  // What they eat. Without it a guest turning vegetarian never republishes,
+  // and every meal card keeps counting them as eating anything.
+  a.dietaryNote === b.dietaryNote &&
+  areDietaryTagsEqual(a.dietaryTags, b.dietaryTags);
+
+/**
+ * Order-sensitive comparison of two diet tag lists; absent and empty are equal.
+ */
+function areDietaryTagsEqual(
+  a: Person['dietaryTags'],
+  b: Person['dietaryTags'],
+): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  return left.length === right.length && left.every((tag, index) => tag === right[index]);
+}
 
 /**
  * Compares two person arrays for equality based on IDs and mutable properties.

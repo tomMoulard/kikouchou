@@ -71,7 +71,8 @@
     "syncStatusRegion": "Sync status",
     "guestGroups": "Groups",
     "vehicles": "Cars",
-    "syncReadOnly": "Read-only copy"
+    "syncReadOnly": "Read-only copy",
+    "meals": "Meals"
   },
   "analytics": {
     "tripTitle": "Trip analytics",
@@ -1422,7 +1423,9 @@
       "removeRide": "remove a ride",
       "removeVehicle": "remove a car",
       "removeActivity": "remove an activity",
-      "removeExpense": "remove an expense"
+      "removeExpense": "remove an expense",
+      "removeMeal": "clear a meal",
+      "removeShoppingItem": "remove a shopping item"
     },
     "queuedCount_one": "1 request queued",
     "queuedCount_other": "{{count}} requests queued",
@@ -1543,7 +1546,12 @@
       "leaveRide": "{{person}} left the car for {{location}}",
       "addExpense": "Added to the accounts: {{title}} ({{amount}})",
       "updateExpense": "Edited in the accounts: {{title}}",
-      "removeExpense": "Removed from the accounts: {{title}}"
+      "removeExpense": "Removed from the accounts: {{title}}",
+      "planMeal": "Planned: {{slot}} on {{date}}",
+      "removeMeal": "Cleared: {{slot}} on {{date}}",
+      "addShoppingItem": "Added to the shopping list: {{name}}",
+      "checkShoppingItem": "Bought: {{name}}",
+      "removeShoppingItem": "Removed from the shopping list: {{name}}"
     },
     "initializingCachedLoader": "Initializing cached model…",
     "loadingCachedModelFiles": "Loading cached model files…",
@@ -1554,7 +1562,12 @@
     "invalidVehicle": "Those car details are invalid, nothing was saved.",
     "readOnlyTrip": "This trip is read-only on this device. Sign in to change it.",
     "expenseNotFound": "I could not find that line in the accounts.",
-    "invalidExpense": "I could not add that line: something in it does not add up."
+    "invalidExpense": "I could not add that line: something in it does not add up.",
+    "mealPlannerOff": "The meal planner is not available on this device.",
+    "mealNotFound": "I could not find that meal.",
+    "invalidMeal": "I could not plan that meal: the day or the meal is not valid.",
+    "shoppingItemNotFound": "I could not find that item on the shopping list.",
+    "invalidShoppingItem": "I could not add that item: it needs a name."
   },
   "auth": {
     "account": {
@@ -2205,5 +2218,95 @@
       "tooLarge": "This photo is too large, even after resizing.",
       "decodeFailed": "This photo could not be read. Try another one."
     }
+  },
+  "meals": {
+    "title": "Meals",
+    "description": "Who cooks, what is on the menu, and how many people eat.",
+    "view": {
+      "ariaLabel": "Meal planner view",
+      "meals": "Meals",
+      "shopping": "Shopping list"
+    },
+    "slots": {
+      "lunch": "Lunch",
+      "dinner": "Dinner"
+    },
+    "kinds": {
+      "home": "At home",
+      "restaurant": "Restaurant",
+      "picnic": "Picnic"
+    },
+    "kindLabel": "Where",
+    "today": "Today",
+    "noDays": "This trip has no dates yet",
+    "noDaysDescription": "Set the trip dates and each day gets a lunch and a dinner to plan.",
+    "unplanned": "Nobody yet",
+    "plan": "Plan the {{slot}} of {{date}}",
+    "open": "Open the {{slot}} of {{date}}",
+    "people_one": "{{count}} person",
+    "people_other": "{{count}} people",
+    "organizers": {
+      "home": "Who cooks?",
+      "restaurant": "Who books?",
+      "picnic": "Who packs it?"
+    },
+    "menu": {
+      "home": "Menu",
+      "restaurant": "Restaurant",
+      "picnic": "Menu"
+    },
+    "menuPlaceholder": {
+      "home": "Lasagne, green salad",
+      "restaurant": "Le Bistrot du Port at 20:00",
+      "picnic": "Sandwiches and fruit"
+    },
+    "headcount": "People to feed",
+    "headcountHint_one": "{{count}} person is on site at that time.",
+    "headcountHint_other": "{{count}} people are on site at that time.",
+    "decrease": "One person fewer",
+    "increase": "One person more",
+    "diets": "Diets",
+    "notes": "Food notes",
+    "dialogTitle": "{{slot}} · {{date}}",
+    "dialogDescription": "Fill in what you know. Everyone on the trip sees it.",
+    "clear": "Clear this meal",
+    "clearTitle": "Clear this meal?",
+    "clearDescription": "The {{slot}} of {{date}} goes back to empty. The guests stay on the trip.",
+    "saveSuccess": "Meal saved",
+    "clearSuccess": "Meal cleared",
+    "shopping": {
+      "itemLabel": "Item",
+      "itemPlaceholder": "What to buy",
+      "quantityLabel": "Quantity",
+      "quantityPlaceholder": "How much",
+      "add": "Add",
+      "empty": "The shopping list is empty",
+      "emptyDescription": "Add what the group needs. Tick each item off in the shop.",
+      "toBuy": "To buy",
+      "bought": "Bought",
+      "buyer": "Who buys {{name}}",
+      "noBuyer": "Anyone",
+      "check": "{{name}} is bought",
+      "remove": "Remove {{name}}",
+      "clearChecked": "Clear bought items",
+      "clearTitle": "Clear the bought items?",
+      "clearDescription_one": "{{count}} bought item leaves the list for everyone on the trip.",
+      "clearDescription_other": "{{count}} bought items leave the list for everyone on the trip.",
+      "cleared_one": "{{count}} item cleared",
+      "cleared_other": "{{count}} items cleared"
+    }
+  },
+  "diets": {
+    "label": "Diet",
+    "hint": "Counted on every meal this guest eats.",
+    "vegetarian": "Vegetarian",
+    "vegan": "Vegan",
+    "pescatarian": "Pescatarian",
+    "glutenFree": "Gluten-free",
+    "lactoseFree": "Lactose-free",
+    "noPork": "No pork",
+    "noteLabel": "Allergies and food notes",
+    "notePlaceholder": "Peanuts, no raw egg",
+    "count": "{{diet}} · {{count}}"
   }
 }

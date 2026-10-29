@@ -7,14 +7,17 @@
  * @module hooks/useMobileNavPreferences
  */
 
+import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import {
   DEFAULT_MOBILE_NAV_MODE,
   TRIP_NAV_ITEMS,
+  hiddenNavPages,
   resolveMobileNavMode,
   resolveMobileNavOrder,
 } from '@/components/shared/nav-items';
+import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { getSettings } from '@/lib/db';
 import type { MobileNavMode, MobileNavPage } from '@/types';
 
@@ -26,7 +29,10 @@ import type { MobileNavMode, MobileNavPage } from '@/types';
  * The resolved preferences: always complete, never `undefined`.
  */
 export interface MobileNavPreferences {
-  /** Every trip page once; the first four go in the bottom bar */
+  /**
+   * Every trip page this device offers, once; the first four go in the bottom
+   * bar. A page behind a flag that is off is left out (`hiddenNavPages`).
+   */
   readonly order: readonly MobileNavPage[];
   /** Bottom bar, menu button, or automatic */
   readonly mode: MobileNavMode;
@@ -65,5 +71,13 @@ export function useMobileNavPreferences(): MobileNavPreferences {
     };
   }, []);
 
-  return preferences ?? DEFAULT_PREFERENCES;
+  const mealPlanner = useMealPlannerEnabled();
+  const resolved = preferences ?? DEFAULT_PREFERENCES;
+
+  return useMemo((): MobileNavPreferences => {
+    const hidden = hiddenNavPages({ mealPlanner });
+    return hidden.size === 0
+      ? resolved
+      : { ...resolved, order: resolved.order.filter((page) => !hidden.has(page)) };
+  }, [mealPlanner, resolved]);
 }

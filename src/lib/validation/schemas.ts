@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import {
   ACTIVITY_CATEGORIES,
+  DIETARY_TAGS,
   EXPENSE_CATEGORIES,
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
@@ -21,6 +22,8 @@ import {
   MAX_EXPENSE_SPLIT_VALUE,
   MAX_GUEST_GROUP_MEMBERS,
   MAX_LEAD_TIME_MINUTES,
+  MAX_MEAL_HEADCOUNT_ADJUSTMENT,
+  MAX_MEAL_ORGANIZERS,
   MAX_PERSON_HEADCOUNT,
   MAX_ROOM_CAPACITY,
   MAX_VEHICLE_SEAT_COUNT,
@@ -28,15 +31,20 @@ import {
   MIN_PERSON_HEADCOUNT,
   MIN_ROOM_CAPACITY,
   MIN_VEHICLE_SEAT_COUNT,
+  MEAL_KINDS,
+  MEAL_SLOTS,
   ROOM_ICONS,
 } from '@/types';
 import type {
   ActivityCategory,
+  DietaryTag,
   ExpenseCategory,
   ExpenseKind,
   ExpenseSplitMode,
   HexColor,
   ISODateString,
+  MealKind,
+  MealSlot,
   PersonId,
   RideId,
   RoomIcon,
@@ -172,6 +180,27 @@ export const expenseCategorySchema = z.enum(
 export const expenseSplitModeSchema = z.enum(
   EXPENSE_SPLIT_MODES as unknown as [ExpenseSplitMode, ...ExpenseSplitMode[]],
 ) satisfies z.ZodType<ExpenseSplitMode>;
+
+/**
+ * Diet tag validator.
+ */
+export const dietaryTagSchema = z.enum(
+  DIETARY_TAGS as unknown as [DietaryTag, ...DietaryTag[]],
+) satisfies z.ZodType<DietaryTag>;
+
+/**
+ * Meal slot validator.
+ */
+export const mealSlotSchema = z.enum(
+  MEAL_SLOTS as unknown as [MealSlot, ...MealSlot[]],
+) satisfies z.ZodType<MealSlot>;
+
+/**
+ * Meal kind validator.
+ */
+export const mealKindSchema = z.enum(
+  MEAL_KINDS as unknown as [MealKind, ...MealKind[]],
+) satisfies z.ZodType<MealKind>;
 
 /**
  * Currency code validator: ISO 4217's three uppercase letters.
@@ -331,6 +360,14 @@ export const PersonFormDataSchema = z
       .max(MAX_PERSON_HEADCOUNT, `Headcount must be ${MAX_PERSON_HEADCOUNT} or less`)
       .optional(),
     childSeat: childSeatKindSchema.optional(),
+    dietaryTags: z.array(dietaryTagSchema).max(DIETARY_TAGS.length).optional(),
+    dietaryNote: z
+      .string()
+      .max(
+        MAX_LENGTHS.personDietaryNote,
+        `Food note must be ${MAX_LENGTHS.personDietaryNote} characters or less`,
+      )
+      .optional(),
   })
   .refine(
     (data) => {
@@ -624,6 +661,64 @@ export const ExpenseFormDataSchema = z
   );
 
 /**
+ * Meal form data schema.
+ *
+ * Validates:
+ * - date: required, valid ISO date
+ * - slot / kind: required, known values
+ * - organizerIds: at most MAX_MEAL_ORGANIZERS guests
+ * - menu: optional, bounded
+ * - headcountAdjustment: optional whole number within the bound, either way
+ */
+export const MealFormDataSchema = z.object({
+  date: isoDateStringSchema,
+  slot: mealSlotSchema,
+  kind: mealKindSchema,
+  organizerIds: z
+    .array(personIdSchema)
+    .max(MAX_MEAL_ORGANIZERS, `A meal names at most ${MAX_MEAL_ORGANIZERS} guests in charge`),
+  menu: z
+    .string()
+    .max(MAX_LENGTHS.mealMenu, `Menu must be ${MAX_LENGTHS.mealMenu} characters or less`)
+    .optional(),
+  headcountAdjustment: z
+    .number()
+    .int('The correction must be a whole number')
+    .min(-MAX_MEAL_HEADCOUNT_ADJUSTMENT)
+    .max(MAX_MEAL_HEADCOUNT_ADJUSTMENT)
+    .optional(),
+});
+
+/**
+ * Shopping item form data schema.
+ *
+ * Validates:
+ * - name: required, bounded
+ * - quantity: optional, bounded
+ * - buyerId: optional guest
+ * - checked: required boolean
+ */
+export const ShoppingItemFormDataSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(
+      MAX_LENGTHS.shoppingItemName,
+      `Name must be ${MAX_LENGTHS.shoppingItemName} characters or less`,
+    ),
+  quantity: z
+    .string()
+    .max(
+      MAX_LENGTHS.shoppingItemQuantity,
+      `Quantity must be ${MAX_LENGTHS.shoppingItemQuantity} characters or less`,
+    )
+    .optional(),
+  buyerId: personIdSchema.optional(),
+  checked: z.boolean(),
+});
+
+/**
  * Guest group member schema.
  *
  * Deliberately the same bounds as {@link PersonFormDataSchema} on the fields
@@ -701,6 +796,8 @@ export type RideFormDataInput = z.input<typeof RideFormDataSchema>;
 export type VehicleFormDataInput = z.input<typeof VehicleFormDataSchema>;
 export type ActivityFormDataInput = z.input<typeof ActivityFormDataSchema>;
 export type ExpenseFormDataInput = z.input<typeof ExpenseFormDataSchema>;
+export type MealFormDataInput = z.input<typeof MealFormDataSchema>;
+export type ShoppingItemFormDataInput = z.input<typeof ShoppingItemFormDataSchema>;
 export type GuestGroupFormDataInput = z.input<typeof GuestGroupFormDataSchema>;
 export type GuestGroupMemberFormDataInput = z.input<
   typeof GuestGroupMemberFormDataSchema

@@ -105,4 +105,15 @@ export {
   type ActivityContextValue,
 } from './ActivityContext';
 
+// ============================================================================
+// Meal Context
+// ============================================================================
+
+export {
+  MealProvider,
+  MealContext,
+  useMealContext,
+  type MealContextValue,
+} from './MealContext';
+
 

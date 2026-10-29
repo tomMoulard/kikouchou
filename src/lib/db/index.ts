@@ -38,6 +38,8 @@ export {
   createRideId,
   createVehicleId,
   createActivityId,
+  createMealId,
+  createShoppingItemId,
   createGuestGroupId,
   createGuestGroupMemberId,
   createShareId,
@@ -216,6 +218,29 @@ export {
   updateExpenseWithOwnershipCheck,
   deleteExpenseWithOwnershipCheck,
 } from './repositories/expense-repository';
+
+// Meal repository
+export {
+  createMeal,
+  getMealsByTripId,
+  getMealById,
+  getMealCount,
+  // Transactional operations with ownership validation
+  updateMealWithOwnershipCheck,
+  deleteMealWithOwnershipCheck,
+} from './repositories/meal-repository';
+
+// Shopping item repository
+export {
+  createShoppingItem,
+  getShoppingItemsByTripId,
+  getShoppingItemById,
+  compareShoppingItems,
+  // Transactional operations with ownership validation
+  updateShoppingItemWithOwnershipCheck,
+  deleteShoppingItemWithOwnershipCheck,
+  deleteCheckedShoppingItems,
+} from './repositories/shopping-item-repository';
 
 // Guest group repository (global — not trip-scoped)
 export {

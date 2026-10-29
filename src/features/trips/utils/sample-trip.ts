@@ -35,11 +35,13 @@ import { createPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
   createActivityId,
   createExpenseId,
+  createMealId,
   createPersonId,
   createRideId,
   createRoomAssignmentId,
   createRoomId,
   createShareId,
+  createShoppingItemId,
   createTransportId,
   createTripId,
   createVehicleId,
@@ -53,11 +55,13 @@ import type {
   ISODateString,
   ISODateTimeString,
   Language,
+  Meal,
   Person,
   PersonId,
   Ride,
   Room,
   RoomAssignment,
+  ShoppingItem,
   Transport,
   Trip,
   Vehicle,
@@ -80,6 +84,8 @@ export interface SampleTripRows {
   readonly expenses: readonly Expense[];
   /** The bytes of the photos the trip and its rooms name. */
   readonly photos: readonly PhotoRow[];
+  readonly meals: readonly Meal[];
+  readonly shoppingItems: readonly ShoppingItem[];
 }
 
 /** The words of the sample trip, in one language. */
@@ -158,6 +164,21 @@ interface SampleTripCopy {
     readonly cleaning: { readonly title: string; readonly description: string };
     readonly deposit: { readonly title: string; readonly description: string };
     readonly settle: { readonly title: string; readonly description: string };
+  };
+  readonly diets: {
+    readonly hugo: string;
+  };
+  readonly meals: {
+    readonly arrival: string;
+    readonly lake: string;
+    readonly barbecue: string;
+    readonly bastide: string;
+  };
+  readonly shopping: {
+    readonly bread: { readonly name: string; readonly quantity: string };
+    readonly tomatoes: { readonly name: string; readonly quantity: string };
+    readonly sausages: { readonly name: string; readonly quantity: string };
+    readonly milk: { readonly name: string; readonly quantity: string };
   };
 }
 
@@ -289,6 +310,21 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       deposit: { title: 'Deposit returned', description: 'The owner gave the deposit back to Camille.' },
       settle: { title: 'Sam pays Camille back', description: 'Bank transfer.' },
     },
+    diets: {
+      hugo: 'Allergic to nuts',
+    },
+    meals: {
+      arrival: 'Pasta with pesto, green salad',
+      lake: 'Sandwiches, peaches, a big bottle of water each',
+      barbecue: 'Barbecue, grilled vegetables for Nora',
+      bastide: 'La Bastide, table for 8 at 20:00',
+    },
+    shopping: {
+      bread: { name: 'Baguettes', quantity: '4' },
+      tomatoes: { name: 'Tomatoes', quantity: '2 kg' },
+      sausages: { name: 'Sausages for the barbecue', quantity: '12' },
+      milk: { name: 'Milk', quantity: '2 L' },
+    },
   },
   fr: {
     tripName: 'Voyage exemple : l’été en Provence',
@@ -376,6 +412,21 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       cleaning: { title: 'Produits ménagers', description: 'La maison n’en avait plus.' },
       deposit: { title: 'Caution rendue', description: 'Le propriétaire a rendu la caution à Camille.' },
       settle: { title: 'Sam rembourse Camille', description: 'Virement bancaire.' },
+    },
+    diets: {
+      hugo: 'Allergique aux fruits à coque',
+    },
+    meals: {
+      arrival: 'Pâtes au pesto, salade verte',
+      lake: 'Sandwichs, pêches, une grande bouteille d’eau chacun',
+      barbecue: 'Barbecue, légumes grillés pour Nora',
+      bastide: 'La Bastide, table pour 8 à 20 h',
+    },
+    shopping: {
+      bread: { name: 'Baguettes', quantity: '4' },
+      tomatoes: { name: 'Tomates', quantity: '2 kg' },
+      sausages: { name: 'Saucisses pour le barbecue', quantity: '12' },
+      milk: { name: 'Lait', quantity: '2 L' },
     },
   },
 };
@@ -512,6 +563,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       stayEndDate: key(lastDay - 1),
       notes: copy.notes.hugo,
       childSeat: 'booster',
+      dietaryNote: copy.diets.hugo,
     },
     {
       id: ids.nora,
@@ -522,6 +574,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       stayEndDate: key(lastDay),
       notes: copy.notes.nora,
       phone: PHONES.nora,
+      dietaryTags: ['vegetarian'],
     },
     {
       id: ids.jules,
@@ -1044,6 +1097,85 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     },
   ];
 
+  // ---- Meals and the shopping list ---------------------------------------
+  // One meal of each kind, both slots, and one that counts two neighbours on
+  // top of the guests, so the planner shows every field it has.
+  const meals: Meal[] = [
+    {
+      id: createMealId(),
+      tripId,
+      date: key(0),
+      slot: 'dinner',
+      kind: 'home',
+      organizerIds: [ids.camille, ids.samAlex],
+      menu: copy.meals.arrival,
+    },
+    {
+      id: createMealId(),
+      tripId,
+      date: key(1),
+      slot: 'lunch',
+      kind: 'picnic',
+      organizerIds: [ids.nora],
+      menu: copy.meals.lake,
+    },
+    {
+      id: createMealId(),
+      tripId,
+      date: key(2),
+      slot: 'dinner',
+      kind: 'home',
+      organizerIds: [ids.martins, ids.jules],
+      menu: copy.meals.barbecue,
+      headcountAdjustment: 2,
+    },
+    {
+      id: createMealId(),
+      tripId,
+      date: key(3),
+      slot: 'dinner',
+      kind: 'restaurant',
+      organizerIds: [ids.camille],
+      menu: copy.meals.bastide,
+    },
+  ];
+
+  // Ordered by `createdAt`, one second apart, so the list reads the same on
+  // every device that seeds it.
+  const shoppingStart = trip.createdAt;
+  const shoppingItems: ShoppingItem[] = [
+    {
+      id: createShoppingItemId(),
+      tripId,
+      ...copy.shopping.bread,
+      buyerId: ids.jules,
+      checked: false,
+      createdAt: shoppingStart,
+    },
+    {
+      id: createShoppingItemId(),
+      tripId,
+      ...copy.shopping.tomatoes,
+      checked: false,
+      createdAt: shoppingStart + 1_000,
+    },
+    {
+      id: createShoppingItemId(),
+      tripId,
+      ...copy.shopping.sausages,
+      buyerId: ids.martins,
+      checked: false,
+      createdAt: shoppingStart + 2_000,
+    },
+    {
+      id: createShoppingItemId(),
+      tripId,
+      ...copy.shopping.milk,
+      checked: true,
+      createdAt: shoppingStart + 3_000,
+    },
+  ];
+
   return {
     trip,
     rooms,
@@ -1055,5 +1187,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     activities,
     expenses,
     photos,
+    meals,
+    shoppingItems,
   };
 }

@@ -30,16 +30,19 @@ import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 
 import { computeBalances } from '@/features/money/lib/balances';
 import { loadTripMoney } from '@/features/money/lib/trip-money';
+import { buildMealAttendance } from '@/features/meals/utils/meal-headcount';
 
 import {
   collectDrivenRideIds,
   isLegCovered,
 } from '@/features/transports/utils/pickup-utils';
 
+import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { useToday } from '@/hooks/useToday';
 
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
+import { useMealContext } from '@/contexts/MealContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
 import { useRoomContext } from '@/contexts/RoomContext';
@@ -57,14 +60,20 @@ import {
   type Activity,
   type Expense,
   type Language,
+  type Meal,
   type Person,
   type PersonId,
   type Ride,
+  type ShoppingItem,
   type Transport,
   type Vehicle,
 } from '@/types';
 
-import { ACTION_SCHEMAS, generateActionPrompt, type ActionDef } from '../action-schema';
+import {
+  generateActionPrompt,
+  offeredActionSchemas,
+  type ActionDef,
+} from '../action-schema';
 
 // ============================================================================
 // Type Definitions
@@ -86,6 +95,11 @@ export interface UseTripSystemPromptReturn {
    * returns exactly {@link systemPrompt}.
    */
   buildSystemPrompt: (actions: readonly ActionDef[]) => string;
+  /**
+   * The actions this device offers: every action, minus the meal planner's
+   * while its flag is off. {@link systemPrompt} documents exactly these.
+   */
+  readonly offeredActions: readonly ActionDef[];
   /** Whether we have a trip loaded to provide context */
   readonly hasTripContext: boolean;
 }
@@ -293,6 +307,55 @@ function formatExpenseLine(
     .join(' · ');
 }
 
+/**
+ * One planned meal, as the assistant reads it: the id first, for
+ * `removeMeal`, then the day and the meal, who is in charge, the menu, and
+ * how many people eat it.
+ *
+ * @param meal - The meal to serialize
+ * @param people - People eating it, the meal's own correction included
+ * @param persons - All guests of the trip, used to resolve names
+ * @returns A single prompt line
+ */
+function formatMealLine(
+  meal: Meal,
+  people: number,
+  persons: ReadonlyMap<string, Person>,
+): string {
+  return [
+    `- ${meal.slot} on ${meal.date} (id: ${meal.id})`,
+    meal.kind,
+    meal.organizerIds.length > 0
+      ? `by ${meal.organizerIds.map((id) => personNameById(persons, id)).join(', ')}`
+      : 'nobody in charge',
+    meal.menu ? `menu: ${toPromptText(meal.menu)}` : '',
+    `${people} people`,
+  ]
+    .filter((segment) => segment !== '')
+    .join(' · ');
+}
+
+/**
+ * One line of the shopping list, as the assistant reads it.
+ *
+ * @param item - The line to serialize
+ * @param persons - All guests of the trip, used to resolve names
+ * @returns A single prompt line
+ */
+function formatShoppingLine(
+  item: ShoppingItem,
+  persons: ReadonlyMap<string, Person>,
+): string {
+  return [
+    `- "${toPromptText(item.name)}" (id: ${item.id})`,
+    item.quantity ? toPromptText(item.quantity) : '',
+    item.buyerId ? `bought by ${personNameById(persons, item.buyerId)}` : '',
+    item.checked ? 'already bought' : 'to buy',
+  ]
+    .filter((segment) => segment !== '')
+    .join(' · ');
+}
+
 function formatActivityLine(
   activity: Activity,
   persons: ReadonlyMap<string, Person>,
@@ -338,7 +401,7 @@ function formatActivityLine(
  * the assistant can answer catering, accessibility, "who do I call" and "whose
  * car has to carry a booster" questions.
  */
-function formatGuestLine(person: Person): string {
+function formatGuestLine(person: Person, withDiet: boolean): string {
   // A guest with no dates of their own is here for the whole trip, the way the
   // rest of the app reads them — saying nothing let the model answer that it
   // did not know when they were around.
@@ -355,8 +418,15 @@ function formatGuestLine(person: Person): string {
   const notes = person.notes
     ? ` — notes: ${toPromptText(person.notes)}`
     : '';
+  // The meal planner's fields, read only where it is on.
+  const diet =
+    withDiet && person.dietaryTags && person.dietaryTags.length > 0
+      ? ` — diet: ${person.dietaryTags.join(', ')}`
+      : '';
+  const food =
+    withDiet && person.dietaryNote ? ` — food: ${toPromptText(person.dietaryNote)}` : '';
 
-  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${childSeat}${notes}`;
+  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${childSeat}${diet}${food}${notes}`;
 }
 
 /**
@@ -524,6 +594,8 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
   const { transports } = useTransportContext();
   const { rides, vehicles } = useRideContext();
   const { activities } = useActivityContext();
+  const { meals, shoppingItems } = useMealContext();
+  const mealPlanner = useMealPlannerEnabled();
   const { groups: guestGroups } = useGuestGroups();
   const { today } = useToday();
   // The accounts are the one part of a trip no context holds, so they are read
@@ -673,7 +745,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         `## Guests (${persons.length} ${entryLabel}, ${totalHeadcount} ${peopleLabel})`,
       );
       for (const person of persons) {
-        parts.push(formatGuestLine(person));
+        parts.push(formatGuestLine(person, mealPlanner));
       }
     } else {
       parts.push('', '## Guests', 'No guests added yet.');
@@ -806,6 +878,38 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Money', 'No line yet.');
     }
 
+    // Meals and the shopping list, only where the meal planner is on
+    if (mealPlanner) {
+      const source = {
+        persons,
+        arrivals: transports.filter((transport) => transport.type === 'arrival'),
+        departures: transports.filter((transport) => transport.type === 'departure'),
+        assignments,
+        tripWindow: { startDate: currentTrip.startDate, endDate: currentTrip.endDate },
+      };
+      if (meals.length > 0) {
+        parts.push(
+          '',
+          '## Meals (lunch and dinner; people counts who is on site, plus extra)',
+        );
+        for (const meal of meals) {
+          const { people } = buildMealAttendance(source, meal.date, meal.slot, meal);
+          parts.push(formatMealLine(meal, people, personsById));
+        }
+      } else {
+        parts.push('', '## Meals', 'No meal planned yet.');
+      }
+
+      if (shoppingItems.length > 0) {
+        parts.push('', '## Shopping list');
+        for (const item of shoppingItems) {
+          parts.push(formatShoppingLine(item, personsById));
+        }
+      } else {
+        parts.push('', '## Shopping list', 'Nothing on the list yet.');
+      }
+    }
+
     // Modification action instructions — generated from the shared schema
     parts.push(...generateActionPrompt(actions));
 
@@ -822,18 +926,24 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     activities,
     guestGroups,
     money,
+    meals,
+    shoppingItems,
+    mealPlanner,
     todayIso,
     languageName,
   ]);
 
+  const offeredActions = useMemo(() => offeredActionSchemas(mealPlanner), [mealPlanner]);
+
   const systemPrompt = useMemo(
-    () => buildSystemPrompt(ACTION_SCHEMAS),
-    [buildSystemPrompt],
+    () => buildSystemPrompt(offeredActions),
+    [buildSystemPrompt, offeredActions],
   );
 
   return {
     systemPrompt,
     buildSystemPrompt,
+    offeredActions,
     hasTripContext: currentTrip !== null,
   };
 }

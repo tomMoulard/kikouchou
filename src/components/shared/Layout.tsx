@@ -52,6 +52,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useActivePalette } from '@/hooks/useActivePalette';
 import { useToday } from '@/hooks/useToday';
+import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { useMobileNavPreferences } from '@/hooks/useMobileNavPreferences';
 import { usePendingArrival } from '@/hooks/usePendingArrival';
 import { OPENED_FROM_NAV, useSampleTripViewReport } from '@/hooks/useSampleTripViewReport';
@@ -66,6 +67,7 @@ import { cn } from '@/lib/utils';
 import {
   type NavItem,
   TRIP_NAV_ITEMS,
+  hiddenNavPages,
   tripNavItemsInOrder,
 } from '@/components/shared/nav-items';
 import { formatDateRange } from '@/lib/utils/date-format';
@@ -959,6 +961,11 @@ const DesktopSidebar = memo(function DesktopSidebar({
   readonly trip: Trip | null;
 }): React.ReactElement {
   const { t } = useTranslation();
+  const mealPlanner = useMealPlannerEnabled();
+  const sidebarItems = useMemo(() => {
+    const hidden = hiddenNavPages({ mealPlanner });
+    return TRIP_NAV_ITEMS.filter((item) => !hidden.has(item.pathSuffix));
+  }, [mealPlanner]);
 
   return (
     <aside
@@ -1008,7 +1015,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
       */}
       <nav className="flex-1 overflow-y-auto py-2" aria-label={t('nav.tripSections', 'Trip navigation')}>
         <ul className="space-y-1 px-2">
-          {TRIP_NAV_ITEMS.map((item) => (
+          {sidebarItems.map((item) => (
             <NavLinkItem
               key={item.pathSuffix}
               item={item}

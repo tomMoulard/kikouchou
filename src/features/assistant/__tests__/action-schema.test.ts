@@ -9,7 +9,13 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { ACTION_SCHEMAS, generateActionPrompt, validateAction } from '../action-schema';
+import {
+  ACTION_SCHEMAS,
+  MEAL_PLANNER_ACTIONS,
+  generateActionPrompt,
+  offeredActionSchemas,
+  validateAction,
+} from '../action-schema';
 import { ASSISTANT_VIEWS } from '../views';
 
 // ============================================================================
@@ -310,11 +316,39 @@ describe('action-schema', () => {
  */
 const MAX_ACTION_PROMPT_CHARS = 4300;
 
+/**
+ * The ceiling for the catalogue a device with the `meal-planner` flag on
+ * offers: everything above, plus the five meal planner actions.
+ *
+ * Raised rather than trimmed to fit, by the project owner's decision on
+ * 2026-10-29: the meal actions cost about 420 characters (~115 tokens, ~33
+ * MiB of logits per turn on qwen3-1-7b), and only flagged devices pay it.
+ * The ceiling above still holds every device without the flag.
+ */
+const MAX_MEAL_PLANNER_ACTION_PROMPT_CHARS = 4750;
+
 describe('action-schema prompt budget', () => {
-  it('documents every action within the prompt character budget', () => {
-    const prompt = generateActionPrompt().join('\n');
+  it('documents every action without the meal planner within the prompt budget', () => {
+    const prompt = generateActionPrompt(offeredActionSchemas(false)).join('\n');
 
     expect(prompt.length).toBeLessThanOrEqual(MAX_ACTION_PROMPT_CHARS);
+  });
+
+  it('documents every action with the meal planner within its own budget', () => {
+    const prompt = generateActionPrompt(offeredActionSchemas(true)).join('\n');
+
+    expect(prompt.length).toBeLessThanOrEqual(MAX_MEAL_PLANNER_ACTION_PROMPT_CHARS);
+  });
+
+  it('offers the meal planner actions only where its flag is on', () => {
+    const off = offeredActionSchemas(false).map((def) => def.action);
+    const on = offeredActionSchemas(true).map((def) => def.action);
+
+    expect(off.some((action) => MEAL_PLANNER_ACTIONS.has(action))).toBe(false);
+    expect(on).toEqual(ACTION_SCHEMAS.map((def) => def.action));
+    for (const action of MEAL_PLANNER_ACTIONS) {
+      expect(on).toContain(action);
+    }
   });
 
   it('still names every action in ACTION_SCHEMAS', () => {

@@ -11,6 +11,7 @@ import { db } from '@/lib/db/database';
 import {
   MAX_LENGTHS,
   normalizeChildSeat,
+  normalizeDietaryTags,
   sanitizeOptionalText,
   sanitizePersonData,
 } from '@/lib/db/sanitize';
@@ -166,6 +167,15 @@ export async function updatePerson(
   if (sanitizedData.childSeat !== undefined) {
     sanitizedData.childSeat = normalizeChildSeat(sanitizedData.childSeat);
   }
+  if (sanitizedData.dietaryTags !== undefined) {
+    sanitizedData.dietaryTags = normalizeDietaryTags(sanitizedData.dietaryTags);
+  }
+  if (sanitizedData.dietaryNote !== undefined) {
+    sanitizedData.dietaryNote = sanitizeOptionalText(
+      sanitizedData.dietaryNote,
+      MAX_LENGTHS.personDietaryNote,
+    );
+  }
   // Note: color field is not sanitized (it's a hex color, not free text)
 
   const updatedCount = await db.persons.update(id, sanitizedData);
@@ -208,6 +218,8 @@ export async function deletePerson(id: PersonId): Promise<void> {
         db.vehicles,
         db.activities,
         db.expenses,
+        db.meals,
+        db.shoppingItems,
       ],
       async () => {
         // Delete related records in parallel
@@ -239,6 +251,11 @@ export async function deletePerson(id: PersonId): Promise<void> {
 
           // Take the guest out of the trip's accounts
           removePersonFromExpenses(id),
+
+          // Take the guest off the meals they were in charge of, and off the
+          // shopping lines they said they would buy. Both survive: dinner still
+          // happens, and the bread still has to be bought.
+          removePersonFromMeals(id),
         ]);
 
         // Delete the person
@@ -341,6 +358,12 @@ export async function updatePersonWithOwnershipCheck(
     if (patch.childSeat !== undefined) {
       patch.childSeat = normalizeChildSeat(patch.childSeat);
     }
+    if (patch.dietaryTags !== undefined) {
+      patch.dietaryTags = normalizeDietaryTags(patch.dietaryTags);
+    }
+    if (patch.dietaryNote !== undefined) {
+      patch.dietaryNote = sanitizeOptionalText(patch.dietaryNote, MAX_LENGTHS.personDietaryNote);
+    }
 
     await db.persons.update(id, patch);
   });
@@ -374,6 +397,8 @@ export async function deletePersonWithOwnershipCheck(
       db.vehicles,
       db.activities,
       db.expenses,
+      db.meals,
+      db.shoppingItems,
     ],
     async () => {
       const person = await db.persons.get(id);
@@ -414,6 +439,11 @@ export async function deletePersonWithOwnershipCheck(
 
         // Take the guest out of the trip's accounts
         removePersonFromExpenses(id),
+
+        // Take the guest off the meals they were in charge of, and off the
+        // shopping lines they said they would buy. Both survive: dinner still
+        // happens, and the bread still has to be bought.
+        removePersonFromMeals(id),
       ]);
 
       // Delete the person
@@ -447,6 +477,27 @@ async function removePersonFromActivities(id: PersonId): Promise<void> {
     .where('organizerId')
     .equals(id)
     .modify({ organizerId: undefined });
+}
+
+/**
+ * Removes a guest from the meal planner: drops them from every meal they were
+ * in charge of and clears them as buyer on the shopping list.
+ *
+ * @param id - The person being deleted
+ *
+ * @internal Called from within the person delete transactions.
+ */
+async function removePersonFromMeals(id: PersonId): Promise<void> {
+  await db.meals
+    .where('organizerIds')
+    .equals(id)
+    .modify((meal) => {
+      meal.organizerIds = (meal.organizerIds ?? []).filter(
+        (organizerId) => organizerId !== id,
+      );
+    });
+
+  await db.shoppingItems.where('buyerId').equals(id).modify({ buyerId: undefined });
 }
 
 /**

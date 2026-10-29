@@ -14,6 +14,7 @@ import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
 import { RideProvider } from '@/contexts/RideContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
+import { MealProvider } from '@/contexts/MealContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { PhotoUploadSync } from '@/lib/photos/PhotoUploadSync';
 import { AccountTripSync } from '@/lib/sync/AccountTripSync';
@@ -62,6 +63,9 @@ interface AppProvidersProps {
  *    pickup panel asks both whether anybody is driving yet — so a component
  *    reaching for rides always has transports in scope too.
  * 7. ActivityProvider - Manages the shared activity agenda (depends on TripProvider)
+ * 8. MealProvider - Manages the meal planner and the shopping list (depends on
+ *    TripProvider). Mounted whatever the `meal-planner` flag says: the
+ *    assistant and the sync read it on every device.
  *
  * The WebRTC awareness provider that used to sit here is gone with the
  * transport; sync state now comes from SupabaseTripSync inside YjsTripSync.
@@ -140,7 +144,9 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
                 <TransportProvider>
                   <RideProvider>
                     <ActivityProvider>
-                      <YjsTripSync>{children}</YjsTripSync>
+                      <MealProvider>
+                        <YjsTripSync>{children}</YjsTripSync>
+                      </MealProvider>
                     </ActivityProvider>
                   </RideProvider>
                 </TransportProvider>

@@ -12,6 +12,8 @@ import { nanoid } from 'nanoid';
 import type {
   ActivityId,
   ExpenseId,
+  MealId,
+  ShoppingItemId,
   GuestGroupId,
   GuestGroupMemberId,
   HexColor,
@@ -113,6 +115,20 @@ export const createActivityId = (): ActivityId => nanoid() as ActivityId;
  * ```
  */
 export const createExpenseId = (): ExpenseId => nanoid() as ExpenseId;
+
+/**
+ * Creates a new Meal ID.
+ *
+ * @returns A branded MealId
+ */
+export const createMealId = (): MealId => nanoid() as MealId;
+
+/**
+ * Creates a new ShoppingItem ID.
+ *
+ * @returns A branded ShoppingItemId
+ */
+export const createShoppingItemId = (): ShoppingItemId => nanoid() as ShoppingItemId;
 
 /**
  * Creates a new GuestGroup ID.

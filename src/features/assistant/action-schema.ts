@@ -13,6 +13,8 @@ import {
   CHILD_SEAT_KINDS,
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
+  MEAL_KINDS,
+  MEAL_SLOTS,
   RIDE_DIRECTIONS,
   RIDE_KINDS,
 } from '@/types';
@@ -948,7 +950,142 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       },
     },
   },
+  // ---- Meals (behind the `meal-planner` flag, see MEAL_PLANNER_ACTIONS) -----
+  {
+    // One verb for create and edit: a slot is named by its day and its meal,
+    // so the model never has to look up an id to change tonight's dinner.
+    action: 'planMeal',
+    label: 'Plan a lunch or dinner',
+    fields: {
+      date: {
+        type: 'string',
+        required: true,
+        description: 'Day (YYYY-MM-DD)',
+        example: '2026-04-20',
+      },
+      slot: {
+        type: 'string',
+        required: true,
+        description: 'Which meal',
+        example: 'dinner',
+        enum: MEAL_SLOTS,
+      },
+      kind: {
+        type: 'string',
+        required: false,
+        description: 'Where it is eaten',
+        example: 'home',
+        enum: MEAL_KINDS,
+      },
+      organizerIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Guests in charge',
+        example: ['<guest id>'],
+      },
+      menu: {
+        type: 'string',
+        required: false,
+        description: 'Menu or restaurant',
+        example: 'Lasagne',
+      },
+      extra: {
+        type: 'number',
+        required: false,
+        description: 'People added to the count, negative to remove',
+        example: 2,
+      },
+    },
+  },
+  {
+    action: 'removeMeal',
+    label: 'Clear a planned meal',
+    fields: {
+      mealId: {
+        type: 'string',
+        required: true,
+        description: 'Meal ID',
+        example: '<meal id>',
+      },
+    },
+  },
+  {
+    action: 'addShoppingItem',
+    label: 'Add to the shopping list',
+    fields: {
+      name: {
+        type: 'string',
+        required: true,
+        description: 'What to buy',
+        example: 'Bread',
+      },
+      quantity: {
+        type: 'string',
+        required: false,
+        description: 'How much',
+        example: '2',
+      },
+      buyerId: {
+        type: 'string',
+        required: false,
+        description: 'Guest who buys it',
+        example: '<guest id>',
+      },
+    },
+  },
+  {
+    action: 'checkShoppingItem',
+    label: 'Mark a shopping item bought',
+    fields: {
+      itemId: {
+        type: 'string',
+        required: true,
+        description: 'Shopping item ID',
+        example: '<item id>',
+      },
+    },
+  },
+  {
+    action: 'removeShoppingItem',
+    label: 'Remove from the shopping list',
+    fields: {
+      itemId: {
+        type: 'string',
+        required: true,
+        description: 'Shopping item ID',
+        example: '<item id>',
+      },
+    },
+  },
 ] as const;
+
+/**
+ * The actions of the meal planner, offered only where its flag is on.
+ *
+ * `planMeal` and friends are part of {@link ACTION_SCHEMAS} so the validator
+ * and the executor know them, but a device whose `meal-planner` flag is off
+ * neither documents them to the model nor runs them: the planner does not
+ * exist on that device, and the assistant must not be the one way in.
+ */
+export const MEAL_PLANNER_ACTIONS: ReadonlySet<string> = new Set([
+  'planMeal',
+  'removeMeal',
+  'addShoppingItem',
+  'checkShoppingItem',
+  'removeShoppingItem',
+]);
+
+/**
+ * The catalogue a device offers, given its `meal-planner` flag.
+ *
+ * @param mealPlanner - Whether the meal planner is on for this device
+ * @returns Every action, or every action but the meal planner's
+ */
+export function offeredActionSchemas(mealPlanner: boolean): readonly ActionDef[] {
+  return mealPlanner
+    ? ACTION_SCHEMAS
+    : ACTION_SCHEMAS.filter((def) => !MEAL_PLANNER_ACTIONS.has(def.action));
+}
 
 // ============================================================================
 // Action name union (derived from schema)

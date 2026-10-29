@@ -82,6 +82,23 @@ const V10 = {
 
 const V11 = { ...V10, expenses: 'id, tripId, payerId, [tripId+date]' };
 
+const V12 = {
+  ...V11,
+  rooms: 'id, tripId, [tripId+order]',
+  roomAssignments:
+    'id, tripId, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+  transports:
+    'id, tripId, personId, driverId, rideId, [tripId+datetime], [tripId+personId], [tripId+type]',
+};
+
+const V13 = { ...V12, photos: '[tripId+id], tripId, pending' };
+
+const V14 = {
+  ...V13,
+  meals: 'id, tripId, *organizerIds, [tripId+date]',
+  shoppingItems: 'id, tripId, buyerId',
+};
+
 const HISTORY: readonly (readonly [number, Record<string, string>])[] = [
   [1, V1],
   [2, V2],
@@ -94,6 +111,7 @@ const HISTORY: readonly (readonly [number, Record<string, string>])[] = [
   [9, V9],
   [10, V10],
   [11, V11],
+  [12, V12],
 ];
 
 // ============================================================================
@@ -165,6 +183,21 @@ const ROWS: Record<string, Record<string, unknown>> = {
     date: '2026-07-16',
     amount: 30,
   },
+  meals: {
+    id: 'meal-1',
+    tripId: TRIP_ID,
+    date: '2026-07-16',
+    slot: 'dinner',
+    kind: 'home',
+    organizerIds: ['person-1'],
+  },
+  shoppingItems: {
+    id: 'item-1',
+    tripId: TRIP_ID,
+    name: 'Bread',
+    checked: false,
+    createdAt: 1,
+  },
 };
 
 /** The CRDT log, which v8 re-keyed from the WebRTC room to the trip. */
@@ -209,7 +242,7 @@ describe('upgrading from every historical schema', () => {
     try {
       await upgraded.open();
 
-      expect(upgraded.verno).toBe(13);
+      expect(upgraded.verno).toBe(14);
       for (const table of Object.keys(schema)) {
         if (table === 'yjsUpdates') {
           const rows = await upgraded.yjsUpdates.where('tripId').equals(TRIP_ID).toArray();
@@ -317,7 +350,7 @@ describe('two tabs on different schema versions', () => {
     await current.open();
 
     const newer = new Dexie(DB_NAME);
-    newer.version(14).stores(V11);
+    newer.version(15).stores(V14);
     await newer.open();
 
     expect(current.isOpen()).toBe(false);

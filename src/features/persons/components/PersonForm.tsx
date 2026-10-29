@@ -17,8 +17,9 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
+import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,12 +45,13 @@ import { cn } from '@/lib/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
   CHILD_SEAT_KINDS,
+  DIETARY_TAGS,
   MAX_PERSON_HEADCOUNT,
   MIN_PERSON_HEADCOUNT,
   getPersonHeadcount,
   normalizePersonHeadcount,
 } from '@/types';
-import type { ChildSeatKind, Person, PersonFormData } from '@/types';
+import type { ChildSeatKind, DietaryTag, Person, PersonFormData } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -88,6 +90,11 @@ interface FormErrors {
  * submit maps it back to `undefined`, which is what the guest stores.
  */
 const NO_CHILD_SEAT = 'none';
+
+/** Whether a guest already carries a diet, so the details open on it. */
+function hasDiet(person: Person | undefined): boolean {
+  return (person?.dietaryTags?.length ?? 0) > 0 || Boolean(person?.dietaryNote);
+}
 
 /**
  * Parses the headcount input into a valid headcount.
@@ -183,13 +190,22 @@ const PersonForm = memo(function PersonForm({
   const [childSeat, setChildSeat] = useState<ChildSeatKind | undefined>(
     () => person?.childSeat,
   );
+  // The diet fields belong to the meal planner and show only with its flag.
+  // With the flag off they are neither shown nor submitted, so saving a guest
+  // here never clears a diet another member typed in.
+  const mealPlanner = useMealPlannerEnabled();
+  const [dietaryTags, setDietaryTags] = useState<DietaryTag[]>(
+    () => [...(person?.dietaryTags ?? [])],
+  );
+  const [dietaryNote, setDietaryNote] = useState(person?.dietaryNote ?? '');
   // Extra details stay collapsed by default, but open when the guest already
   // stands for several people, or already needs a seat, so neither value is
   // silently hidden behind a closed section.
   const [isExtraOpen, setIsExtraOpen] = useState(
     () =>
       getPersonHeadcount(person ?? {}) > MIN_PERSON_HEADCOUNT ||
-      person?.childSeat !== undefined,
+      person?.childSeat !== undefined ||
+      (mealPlanner && hasDiet(person)),
   );
 
   const [initialSnapshot, setInitialSnapshot] = useState<{
@@ -201,6 +217,8 @@ const PersonForm = memo(function PersonForm({
     readonly phone: string;
     readonly headcount: number;
     readonly childSeat: ChildSeatKind | undefined;
+    readonly dietaryTags: string;
+    readonly dietaryNote: string;
   } | null>(null);
 
   const currentStayStart = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '';
@@ -220,11 +238,15 @@ const PersonForm = memo(function PersonForm({
         notes !== initialSnapshot.notes ||
         phone !== initialSnapshot.phone ||
         currentHeadcount !== initialSnapshot.headcount ||
-        childSeat !== initialSnapshot.childSeat
+        childSeat !== initialSnapshot.childSeat ||
+        dietaryTags.join(',') !== initialSnapshot.dietaryTags ||
+        dietaryNote !== initialSnapshot.dietaryNote
       );
     },
     [
       childSeat,
+      dietaryNote,
+      dietaryTags,
       color,
       currentHeadcount,
       currentStayEnd,
@@ -279,8 +301,14 @@ const PersonForm = memo(function PersonForm({
 
     const nextChildSeat = person?.childSeat;
     setChildSeat(nextChildSeat);
+    const nextDietaryTags = [...(person?.dietaryTags ?? [])];
+    setDietaryTags(nextDietaryTags);
+    const nextDietaryNote = person?.dietaryNote ?? '';
+    setDietaryNote(nextDietaryNote);
     setIsExtraOpen(
-      nextHeadcount > MIN_PERSON_HEADCOUNT || nextChildSeat !== undefined,
+      nextHeadcount > MIN_PERSON_HEADCOUNT ||
+        nextChildSeat !== undefined ||
+        (mealPlanner && hasDiet(person)),
     );
 
     setInitialSnapshot({
@@ -292,6 +320,8 @@ const PersonForm = memo(function PersonForm({
       phone: nextPhone,
       headcount: nextHeadcount,
       childSeat: nextChildSeat,
+      dietaryTags: nextDietaryTags.join(','),
+      dietaryNote: nextDietaryNote,
     });
 
     // Use callback to avoid creating new object if already empty
@@ -417,6 +447,21 @@ const PersonForm = memo(function PersonForm({
   }, []);
 
   /**
+   * Adds or removes one diet tag, keeping the order the form offers them in.
+   */
+  const handleDietaryTagToggle = useCallback((tag: DietaryTag) => {
+    setDietaryTags((prev) =>
+      prev.includes(tag)
+        ? prev.filter((candidate) => candidate !== tag)
+        : DIETARY_TAGS.filter((candidate) => candidate === tag || prev.includes(candidate)),
+    );
+  }, []);
+
+  const handleDietaryNoteChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setDietaryNote(e.target.value);
+  }, []);
+
+  /**
    * Toggles the collapsible "more details" section.
    */
   const handleToggleExtra = useCallback(() => {
@@ -456,12 +501,29 @@ const PersonForm = memo(function PersonForm({
           phone: trimmedPhone.length > 0 ? trimmedPhone : undefined,
           headcount: parseHeadcountInput(headcount),
           childSeat,
+          ...(mealPlanner && {
+            dietaryTags: dietaryTags.length > 0 ? [...dietaryTags] : undefined,
+            dietaryNote: dietaryNote.trim().length > 0 ? dietaryNote.trim() : undefined,
+          }),
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, color, stayDates, notes, phone, headcount, childSeat],
+    [
+      validateForm,
+      doSubmit,
+      name,
+      color,
+      stayDates,
+      notes,
+      phone,
+      headcount,
+      childSeat,
+      mealPlanner,
+      dietaryTags,
+      dietaryNote,
+    ],
   );
 
   // ============================================================================
@@ -602,6 +664,11 @@ const PersonForm = memo(function PersonForm({
                 {t(`childSeats.${childSeat}`)}
               </span>
             )}
+            {mealPlanner && dietaryTags.length > 0 && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                {dietaryTags.map((tag) => t(`diets.${tag}`)).join(' · ')}
+              </span>
+            )}
           </span>
           <ChevronDown
             className={cn('size-4 shrink-0 transition-transform', isExtraOpen && 'rotate-180')}
@@ -675,6 +742,57 @@ const PersonForm = memo(function PersonForm({
                 )}
               </p>
             </div>
+
+            {/* Diet. Counted on every meal of the planner this guest eats. */}
+            {mealPlanner && (
+              <div className="border-t pt-3 space-y-2">
+                <fieldset className="space-y-2" aria-describedby="person-diet-hint">
+                  <legend className="text-sm font-medium leading-none">
+                    {t('diets.label')}
+                  </legend>
+                  <div className="flex flex-wrap gap-2">
+                    {DIETARY_TAGS.map((tag) => {
+                      const isSelected = dietaryTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => handleDietaryTagToggle(tag)}
+                          disabled={isSubmitting}
+                          aria-pressed={isSelected}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm',
+                            'transition-colors',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                            'disabled:opacity-50',
+                            isSelected
+                              ? 'border-primary bg-primary/10 text-foreground'
+                              : 'border-input text-muted-foreground hover:bg-muted',
+                          )}
+                        >
+                          {t(`diets.${tag}`)}
+                          {isSelected && (
+                            <Check className="size-3.5 shrink-0" aria-hidden="true" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+                <p id="person-diet-hint" className="text-xs text-muted-foreground">
+                  {t('diets.hint')}
+                </p>
+                <Label htmlFor="person-dietary-note">{t('diets.noteLabel')}</Label>
+                <Input
+                  id="person-dietary-note"
+                  value={dietaryNote}
+                  onChange={handleDietaryNoteChange}
+                  placeholder={t('diets.notePlaceholder')}
+                  maxLength={MAX_LENGTHS.personDietaryNote}
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

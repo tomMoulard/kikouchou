@@ -17,6 +17,7 @@ import {
 } from '@/features/activities/utils/activity-utils';
 
 import { useOfflineAwareNotify } from '@/hooks';
+import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
@@ -41,10 +42,18 @@ import {
   deleteRoomWithOwnershipCheck,
   deleteTransportWithOwnershipCheck,
   deleteVehicleWithOwnershipCheck,
+  deleteMealWithOwnershipCheck,
+  deleteShoppingItemWithOwnershipCheck,
+  createMeal,
+  createShoppingItem,
+  updateMealWithOwnershipCheck,
+  updateShoppingItemWithOwnershipCheck,
   getActivityById,
   getAssignmentById,
   getExpenseById,
   getGuestGroupById,
+  getMealById,
+  getShoppingItemById,
   getPersonById,
   getPersonsByTripId,
   getRideById,
@@ -67,7 +76,9 @@ import { captureDeletion } from '@/lib/posthog';
 import {
   ActivityFormDataSchema,
   ExpenseFormDataSchema,
+  MealFormDataSchema,
   RideFormDataSchema,
+  ShoppingItemFormDataSchema,
   VehicleFormDataSchema,
 } from '@/lib/validation/schemas';
 import {
@@ -90,6 +101,10 @@ import {
   type GuestGroupMemberId,
   type ISODateString,
   type ISODateTimeString,
+  type MealFormData,
+  type MealId,
+  type MealKind,
+  type MealSlot,
   type PersonId,
   type Ride,
   type RideDirection,
@@ -98,6 +113,8 @@ import {
   type RideId,
   type RoomAssignmentId,
   type RoomId,
+  type ShoppingItemFormData,
+  type ShoppingItemId,
   type TransportId,
   type TransportMode,
   type TransportType,
@@ -106,7 +123,7 @@ import {
   type VehicleId,
 } from '@/types';
 
-import { type LLMAction, validateAction } from '../action-schema';
+import { MEAL_PLANNER_ACTIONS, type LLMAction, validateAction } from '../action-schema';
 import { type AssistantView, isAssistantView } from '../views';
 
 // ============================================================================
@@ -181,6 +198,8 @@ export const DESTRUCTIVE_ACTIONS: ReadonlySet<LLMAction['action']> = new Set<LLM
   'removeVehicle',
   'removeActivity',
   'removeExpense',
+  'removeMeal',
+  'removeShoppingItem',
 ]);
 
 /**
@@ -481,6 +500,10 @@ export function useTripActions(): UseTripActionsReturn {
   // made by hand, so it confirms the same way: offline it says "Saved on this
   // device" rather than claiming a success the network never saw.
   const { notifySuccess } = useOfflineAwareNotify();
+  // The meal planner's actions run only where its flag is on. The prompt does
+  // not offer them elsewhere, but Needle's catalogue is built in its worker
+  // from the whole schema, so this is the gate that holds for every engine.
+  const mealPlanner = useMealPlannerEnabled();
 
   const executeActions = useCallback(
     async (response: string): Promise<ActionExecutionResult> => {
@@ -588,6 +611,10 @@ export function useTripActions(): UseTripActionsReturn {
 
       for (const action of actions) {
         try {
+          if (!mealPlanner && MEAL_PLANNER_ACTIONS.has(action.action)) {
+            notify.error(t('assistant.mealPlannerOff'));
+            continue;
+          }
           switch (action.action) {
             case 'createTrip': {
               const d = action.data as Record<string, unknown>;
@@ -1789,6 +1816,182 @@ export function useTripActions(): UseTripActionsReturn {
               break;
             }
 
+            case 'planMeal': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const date = String(d.date ?? '');
+              const slot = d.slot as MealSlot;
+              if (!isCalendarDayString(date)) {
+                notify.error(t('assistant.invalidMeal'));
+                break;
+              }
+
+              // One meal per slot, found by its day and its meal, so "change
+              // tonight's dinner" edits the dinner that is already there.
+              const existing = (
+                await db.meals
+                  .where('[tripId+date]')
+                  .equals([tid, date])
+                  .toArray()
+              )
+                .filter((meal) => meal.slot === slot)
+                .sort((left, right) => left.id.localeCompare(right.id))[0];
+
+              let organizerIds = existing?.organizerIds ?? [];
+              if (Array.isArray(d.organizerIds)) {
+                const knownGuestIds = await guestIdsFor(tid);
+                const requested = d.organizerIds as string[];
+                organizerIds = requested.filter((id): id is PersonId =>
+                  knownGuestIds.has(id as PersonId),
+                );
+                if (organizerIds.length < requested.length) {
+                  notify.error(t('assistant.guestNotFound'));
+                }
+              }
+
+              const formData: MealFormData = {
+                date: date as ISODateString,
+                slot,
+                kind: (d.kind as MealKind | undefined) ?? existing?.kind ?? 'home',
+                organizerIds,
+                menu:
+                  typeof d.menu === 'string'
+                    ? d.menu.trim() || undefined
+                    : existing?.menu,
+                headcountAdjustment:
+                  typeof d.extra === 'number' && Number.isFinite(d.extra)
+                    ? Math.trunc(d.extra) || undefined
+                    : existing?.headcountAdjustment,
+              };
+
+              const validation = MealFormDataSchema.safeParse(formData);
+              if (!validation.success) {
+                console.warn('[AI Assistant] Rejected planMeal:', validation.error.issues);
+                notify.error(t('assistant.invalidMeal'));
+                break;
+              }
+
+              if (existing) {
+                await updateMealWithOwnershipCheck(existing.id, tid, formData);
+              } else {
+                await createMeal(tid, formData);
+              }
+              notifySuccess(t('meals.saveSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.planMeal', {
+                  slot: t(`meals.slots.${slot}`),
+                  date,
+                  defaultValue: 'Planned: {{slot}} on {{date}}',
+                }),
+              );
+              break;
+            }
+
+            case 'removeMeal': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const mid = action.data.mealId as MealId;
+              const meal = await getMealById(mid);
+              if (!meal || meal.tripId !== tid) {
+                notify.error(t('assistant.mealNotFound'));
+                break;
+              }
+
+              await deleteMealWithOwnershipCheck(mid, tid);
+              captureDeletion('meal_deleted', { source: 'assistant' });
+              notifySuccess(t('meals.clearSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeMeal', {
+                  slot: t(`meals.slots.${meal.slot}`),
+                  date: meal.date,
+                  defaultValue: 'Cleared: {{slot}} on {{date}}',
+                }),
+              );
+              break;
+            }
+
+            case 'addShoppingItem': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const buyerId = await tripPersonId(d.buyerId, tid);
+              if (d.buyerId !== undefined && buyerId === undefined) {
+                notify.error(t('assistant.guestNotFound'));
+              }
+              const quantity = typeof d.quantity === 'string' ? d.quantity.trim() : '';
+              const formData: ShoppingItemFormData = {
+                name: String(d.name ?? '').trim(),
+                checked: false,
+                ...(quantity.length > 0 && { quantity }),
+                ...(buyerId !== undefined && { buyerId }),
+              };
+
+              const validation = ShoppingItemFormDataSchema.safeParse(formData);
+              if (!validation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected addShoppingItem:',
+                  validation.error.issues,
+                );
+                notify.error(t('assistant.invalidShoppingItem'));
+                break;
+              }
+
+              await createShoppingItem(tid, formData);
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addShoppingItem', {
+                  name: formData.name,
+                  defaultValue: 'Added to the shopping list: {{name}}',
+                }),
+              );
+              break;
+            }
+
+            case 'checkShoppingItem':
+            case 'removeShoppingItem': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const iid = action.data.itemId as ShoppingItemId;
+              const item = await getShoppingItemById(iid);
+              if (!item || item.tripId !== tid) {
+                notify.error(t('assistant.shoppingItemNotFound'));
+                break;
+              }
+
+              if (action.action === 'checkShoppingItem') {
+                await updateShoppingItemWithOwnershipCheck(iid, tid, { checked: true });
+              } else {
+                await deleteShoppingItemWithOwnershipCheck(iid, tid);
+                captureDeletion('shopping_item_deleted', { source: 'assistant', count: 1 });
+              }
+              executedCount++;
+              summaries.push(
+                t(`assistant.actionDetails.${action.action}`, {
+                  name: item.name,
+                  defaultValue:
+                    action.action === 'checkShoppingItem'
+                      ? 'Bought: {{name}}'
+                      : 'Removed from the shopping list: {{name}}',
+                }),
+              );
+              break;
+            }
+
             default:
               console.warn('[AI Assistant] Unknown action:', action);
           }
@@ -1802,7 +2005,7 @@ export function useTripActions(): UseTripActionsReturn {
 
       return { count: executedCount, summaries };
     },
-    [currentTrip, notifySuccess, t],
+    [currentTrip, mealPlanner, notifySuccess, t],
   );
 
   return { executeActions };

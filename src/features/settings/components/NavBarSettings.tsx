@@ -84,6 +84,19 @@ const DEFAULT_ORDER: readonly MobileNavPage[] = TRIP_NAV_ITEMS.map((item) => ite
 // Helpers
 // ============================================================================
 
+/**
+ * Whether an order is the default one, among the pages it holds.
+ *
+ * A page behind a flag that is off is left out of the order this list is
+ * given (`hiddenNavPages`), so the default is compared on the same pages.
+ */
+function isDefaultOrderOf(order: readonly MobileNavPage[]): boolean {
+  return isSameOrder(
+    order,
+    DEFAULT_ORDER.filter((page) => order.includes(page)),
+  );
+}
+
 /** Whether two orders list the same pages in the same places. */
 function isSameOrder(a: readonly MobileNavPage[], b: readonly MobileNavPage[]): boolean {
   return a.length === b.length && a.every((page, index) => page === b[index]);
@@ -222,7 +235,7 @@ export const NavBarSettings = memo(function NavBarSettings(): ReactElement {
       return {
         barItems: items.slice(0, MOBILE_NAV_BAR_SLOTS),
         moreItems: items.slice(MOBILE_NAV_BAR_SLOTS),
-        isDefaultOrder: isSameOrder(order, DEFAULT_ORDER),
+        isDefaultOrder: isDefaultOrderOf(order),
       };
     }, [order]),
     saveOrder = useCallback(
@@ -232,7 +245,7 @@ export const NavBarSettings = memo(function NavBarSettings(): ReactElement {
           .then(() => {
             captureEvent('nav_bar_reordered', {
               bar_pages: next.slice(0, MOBILE_NAV_BAR_SLOTS),
-              is_default: isSameOrder(next, DEFAULT_ORDER),
+              is_default: isDefaultOrderOf(next),
             });
           })
           .catch((error: unknown) => {

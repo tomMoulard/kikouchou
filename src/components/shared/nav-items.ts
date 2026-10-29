@@ -19,6 +19,7 @@ import {
   PartyPopper,
   Settings2,
   Users,
+  UtensilsCrossed,
   Wallet,
 } from 'lucide-react';
 
@@ -123,6 +124,9 @@ export const TRIP_NAV_ITEMS: readonly TripNavItem[] = [
   // (`/transports/vehicles`), because a car is only ever entered in order to be
   // picked on a ride and nobody navigates to one for its own sake.
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
+  // Behind the `meal-planner` flag: `hiddenNavPages` takes it out of every
+  // list while the flag is off or undecided.
+  { labelKey: 'nav.meals', pathSuffix: 'meals', icon: UtensilsCrossed, requiresTrip: true },
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
   // The trip's own settings — its name, its dates, who you are on it, and
@@ -177,6 +181,22 @@ export function resolveMobileNavMode(stored: unknown): MobileNavMode {
   return stored === 'bar' || stored === 'menu' || stored === 'auto'
     ? stored
     : DEFAULT_MOBILE_NAV_MODE;
+}
+
+/**
+ * The trip pages this device must not offer, given its feature flags.
+ *
+ * One answer for every list that draws the pages (the sidebar, the bottom
+ * bar, its "More" sheet and the settings that reorder them), so a page
+ * behind a flag cannot leak through one of them.
+ *
+ * @param flags - The flags that gate a page
+ * @returns The pages to leave out
+ */
+export function hiddenNavPages(flags: {
+  readonly mealPlanner: boolean;
+}): ReadonlySet<MobileNavPage> {
+  return new Set<MobileNavPage>(flags.mealPlanner ? [] : ['meals']);
 }
 
 /**

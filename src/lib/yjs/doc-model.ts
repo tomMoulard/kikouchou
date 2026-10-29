@@ -53,7 +53,9 @@ export type DocCollectionName =
   | 'rides'
   | 'vehicles'
   | 'activities'
-  | 'expenses';
+  | 'expenses'
+  | 'meals'
+  | 'shoppingItems';
 
 /** A trip entity as it travels through the document: plain fields, no `tripId`. */
 export type DocRecord = Record<string, unknown>;
@@ -91,6 +93,8 @@ const COLLECTION_ROOT: Readonly<Record<DocCollectionName, string>> = {
   vehicles: 'vehiclesById',
   activities: 'activitiesById',
   expenses: 'expensesById',
+  meals: 'mealsById',
+  shoppingItems: 'shoppingItemsById',
 };
 
 /**
@@ -196,6 +200,19 @@ function compareRecords(
     case 'expenses': {
       const byDate = String(left.date ?? '').localeCompare(String(right.date ?? ''));
       return byDate === 0 ? byId : byDate;
+    }
+    case 'meals': {
+      const byDate = String(left.date ?? '').localeCompare(String(right.date ?? ''));
+      if (byDate !== 0) {
+        return byDate;
+      }
+      // Lunch before dinner, which is also the alphabetical order of the two.
+      const bySlot = String(left.slot ?? '').localeCompare(String(right.slot ?? ''));
+      return bySlot === 0 ? byId : bySlot;
+    }
+    case 'shoppingItems': {
+      const byCreated = Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0);
+      return byCreated === 0 || Number.isNaN(byCreated) ? byId : byCreated;
     }
   }
 }

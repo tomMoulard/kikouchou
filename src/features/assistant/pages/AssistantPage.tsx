@@ -81,7 +81,6 @@ import {
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import { redactAiMessages, redactAiOutput } from '../ai-telemetry';
 import { splitReasoning } from '../reasoning';
-import { ACTION_SCHEMAS } from '../action-schema';
 import { ViewShortcuts } from '../components/ViewShortcuts';
 import { type AssistantView, buildShowViewBlock } from '../views';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
@@ -929,7 +928,7 @@ function AssistantPageComponent(): ReactElement {
     disconnect,
   } = useWebLLM(selectedModel);
   const isCloud = isCloudPreset(selectedModel);
-  const { systemPrompt, buildSystemPrompt } = useTripSystemPrompt();
+  const { systemPrompt, buildSystemPrompt, offeredActions } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
 
   // Asked before the assistant offers a multi-gigabyte download, not after it
@@ -992,6 +991,8 @@ function AssistantPageComponent(): ReactElement {
   systemPromptRef.current = systemPrompt;
   const buildSystemPromptRef = useRef(buildSystemPrompt);
   buildSystemPromptRef.current = buildSystemPrompt;
+  const offeredActionsRef = useRef(offeredActions);
+  offeredActionsRef.current = offeredActions;
   const generateRef = useRef(generate);
   generateRef.current = generate;
   const executeActionsRef = useRef(executeActions);
@@ -1225,10 +1226,11 @@ function AssistantPageComponent(): ReactElement {
 
       // Every action, every turn. The catalogue used to be ranked against the
       // request by Needle 2's retrieval head, which Needle 3 does not carry —
-      // so the prose presets are back to documenting the whole of
-      // `ACTION_SCHEMAS` in their system prompt, and that prompt is what the
+      // so the prose presets are back to documenting every offered action in
+      // their system prompt (`ACTION_SCHEMAS`, minus
+      // the meal planner's where its flag is off), and that prompt is what the
       // character budget in `action-schema.test.ts` guards.
-      const actions = ACTION_SCHEMAS;
+      const actions = offeredActionsRef.current;
 
       // Built before the try/catch so a rejected generate() can still report
       // it in the $ai_generation failure capture below.

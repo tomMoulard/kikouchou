@@ -45,6 +45,7 @@ import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
 import { summaryRoutes } from '@/features/summary/routes';
 import { moneyRoutes } from '@/features/money/routes';
+import { mealRoutes } from '@/features/meals/routes';
 import { authRoutes } from '@/features/auth/routes';
 
 // ============================================================================
@@ -340,6 +341,7 @@ export const appRoutes: RouteObject = {
 
     // The trip's money: the nights each guest owes for, and a bill split by them
     ...moneyRoutes,
+    ...mealRoutes,
 
     // Settings route
     settingsRoute,
