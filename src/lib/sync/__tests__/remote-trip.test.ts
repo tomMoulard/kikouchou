@@ -512,6 +512,58 @@ describe('ensureRemoteTrip, recorded', () => {
     ]);
   });
 
+  it('sends one insert for calls that arrive while the upload runs', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client, inserts } = clientWithRows([]);
+
+    // The wizard's link and the account sweep, at the same moment.
+    const results = await Promise.all([
+      ensureRemoteTrip(client, 'user-1', trip.id),
+      ensureRemoteTrip(client, 'user-1', trip.id),
+    ]);
+
+    expect(results).toEqual([
+      { status: 'ready', remoteTripId: FRESH_ID },
+      { status: 'ready', remoteTripId: FRESH_ID },
+    ]);
+    expect(inserts).toHaveLength(1);
+  });
+
+  it('runs a fresh upload once the last one has finished', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client, inserts } = clientWithRows([]);
+
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+    await db.trips.update(trip.id, { remoteTripId: undefined });
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(inserts).toHaveLength(2);
+  });
+
+  it('keeps the uploads of two accounts apart', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    const { client, inserts } = clientWithRows([]);
+
+    await Promise.all([
+      ensureRemoteTrip(client, 'user-1', trip.id),
+      ensureRemoteTrip(client, 'user-2', trip.id),
+    ]);
+
+    expect(inserts.map((row) => row.owner_id)).toEqual(['user-1', 'user-2']);
+  });
+
   it('clips a long name made only of whitespace without trimming it to nothing', async () => {
     const trip = await createTrip({
       name: TRIP_NAME,

@@ -259,10 +259,24 @@ export async function forgetAccountTrips(userId: string): Promise<void> {
 // ============================================================================
 
 /**
+ * The uploads under way, by account and trip.
+ *
+ * The first-trip wizard asks for the link the moment the trip exists, which is
+ * also the moment the account sweep sees a new trip to upload, and StrictMode
+ * runs the link's effect twice in development. Each caller used to send its
+ * own insert. The server's unique key kept it to one row, but every first trip
+ * cost a refused insert and a read back. A caller that arrives while an upload
+ * runs now waits for that one.
+ */
+const uploadsInFlight = new Map<string, Promise<EnsureRemoteTripResult>>();
+
+/**
  * Makes sure the trip has a server row, creating one if needed.
  *
- * Safe to call repeatedly. Returns the existing id without a write when the trip
- * has already been uploaded.
+ * Safe to call repeatedly, and at the same time: a call made while another
+ * one for the same account and trip is under way gets that call's answer.
+ * Returns the existing id without a write when the trip has already been
+ * uploaded.
  *
  * @param client - An authenticated Supabase client
  * @param userId - The signed-in user, who becomes the trip's owner
@@ -276,6 +290,24 @@ export async function ensureRemoteTrip(
   if (!client || !userId) {
     return { status: 'unauthenticated' };
   }
+
+  const key = `${userId}:${tripId}`;
+  const running = uploadsInFlight.get(key);
+  if (running) {
+    return running;
+  }
+  const upload = uploadTrip(client, userId, tripId).finally(() => {
+    uploadsInFlight.delete(key);
+  });
+  uploadsInFlight.set(key, upload);
+  return upload;
+}
+
+async function uploadTrip(
+  client: TypedSupabaseClient,
+  userId: string,
+  tripId: TripId,
+): Promise<EnsureRemoteTripResult> {
 
   const trip = await db.trips.get(tripId);
   if (!trip) {
