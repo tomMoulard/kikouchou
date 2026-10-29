@@ -18,6 +18,12 @@
 /** The pet's box, square, in CSS pixels. */
 export const PET_SIZE = 60;
 
+/**
+ * The box in the test arm of the `onboarding-small-pet` experiment: two
+ * thirds of the shipped one, still above the 24px touch minimum.
+ */
+export const SMALL_PET_SIZE = 40;
+
 /** Pixels per second squared. Snappy rather than realistic. */
 export const GRAVITY = 2200;
 
@@ -44,6 +50,9 @@ const MIN_SURFACE_WIDTH = 32;
  * the last pixel of a button looks like it is floating.
  */
 const FOOTING = 8;
+
+// Every function below that needs the pet's box takes it as a last `size`
+// argument, defaulting to the shipped `PET_SIZE`.
 
 // ============================================================================
 // Type Definitions
@@ -98,10 +107,11 @@ export function floorOf(viewport: Viewport): number {
  * The highest the pet's feet can go while it stands, so its head stays on
  * screen.
  *
+ * @param size - The pet's box
  * @returns The ceiling's `y`
  */
-export function ceilingOf(): number {
-  return PET_SIZE + 4;
+export function ceilingOf(size: number = PET_SIZE): number {
+  return size + 4;
 }
 
 /**
@@ -111,9 +121,15 @@ export function ceilingOf(): number {
  * @param box - The element's bounding box
  * @param viewport - The viewport
  * @param ref - What to remember the surface by
+ * @param size - The pet's box
  * @returns The surface, or `null`
  */
-export function surfaceFromBox<T>(box: Box, viewport: Viewport, ref?: T): Surface<T> | null {
+export function surfaceFromBox<T>(
+  box: Box,
+  viewport: Viewport,
+  ref?: T,
+  size: number = PET_SIZE,
+): Surface<T> | null {
   const left = Math.max(box.left, 0),
     right = Math.min(box.right, viewport.width);
 
@@ -121,7 +137,7 @@ export function surfaceFromBox<T>(box: Box, viewport: Viewport, ref?: T): Surfac
     return null;
   }
 
-  if (box.top < ceilingOf() || box.top >= floorOf(viewport) || box.bottom <= box.top) {
+  if (box.top < ceilingOf(size) || box.top >= floorOf(viewport) || box.bottom <= box.top) {
     return null;
   }
 
@@ -214,10 +230,11 @@ export function restingPlace<T>(
  *
  * @param x - The centre
  * @param viewport - The viewport
+ * @param size - The pet's box
  * @returns The clamped centre
  */
-export function clampX(x: number, viewport: Viewport): number {
-  const half = PET_SIZE / 2;
+export function clampX(x: number, viewport: Viewport, size: number = PET_SIZE): number {
+  const half = size / 2;
 
   return Math.min(Math.max(x, half), Math.max(half, viewport.width - half));
 }
@@ -227,10 +244,11 @@ export function clampX(x: number, viewport: Viewport): number {
  *
  * @param y - The feet
  * @param viewport - The viewport
+ * @param size - The pet's box
  * @returns The clamped feet
  */
-export function clampY(y: number, viewport: Viewport): number {
-  return Math.min(Math.max(y, ceilingOf()), floorOf(viewport));
+export function clampY(y: number, viewport: Viewport, size: number = PET_SIZE): number {
+  return Math.min(Math.max(y, ceilingOf(size)), floorOf(viewport));
 }
 
 /**
@@ -279,6 +297,7 @@ export function jumpVelocity(
  * @param x - The pet's centre
  * @param y - Its feet
  * @param random - A `[0, 1)` source, injectable for tests
+ * @param size - The pet's box
  * @returns The surface and the spot on it, or `null`
  */
 export function pickJumpTarget<T>(
@@ -286,6 +305,7 @@ export function pickJumpTarget<T>(
   x: number,
   y: number,
   random: () => number,
+  size: number = PET_SIZE,
 ): { readonly surface: Surface<T>; readonly x: number } | null {
   const candidates = surfaces.flatMap((surface) => {
     const rise = y - surface.top;
@@ -294,7 +314,7 @@ export function pickJumpTarget<T>(
       return [];
     }
 
-    const inset = Math.min(FOOTING + PET_SIZE / 2, (surface.right - surface.left) / 2),
+    const inset = Math.min(FOOTING + size / 2, (surface.right - surface.left) / 2),
       landX = Math.min(Math.max(x, surface.left + inset), surface.right - inset);
 
     return Math.abs(landX - x) <= MAX_JUMP_REACH && isOnSurface(surface, landX)

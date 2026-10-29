@@ -624,7 +624,7 @@ or `false`; without an analytics client it is `false` at once. A screen that
 swaps experiences on a flag waits on `undefined` rather than flashing the
 control arm. `localStorage['kikouchou-flag:<key>']` = `on` | `off` forces an
 arm without a PostHog project, which is how the e2e specs reach a flagged
-experience on servers that carry no key. There are two flags.
+experience on servers that carry no key. There are three flags.
 `ent-trip-templates` offers the publish control on a trip's settings screen to
 the static "enterprise customers" cohort. A screen behind a flag keeps one code
 path for the writes, so the arms differ in what they show and not in what they
@@ -643,6 +643,17 @@ opens `/trips/<sample>/calendar` with router state `{ via: 'entry' }`, so
 `trip_created` after exposure. Started on 2026-10-29, after a review of the
 funnel: of 1201 new app visitors in 28 days, 497 opened the first-trip wizard,
 9 opened the sample and 9 created a trip.
+
+`onboarding-small-pet` is the third, an experiment read the same way. Its
+test arm draws the pet at 40px instead of 60px (`SMALL_PET_SIZE`), and fades
+it out while a text field has focus or a drag runs (`features/pet/lib/pet-busy`
+reads both from the DOM: a focused text input, dnd-kit's `aria-pressed` on the
+dragged node, Leaflet's `leaflet-dragging` on `<body>`). `PetMount` reads the
+variant only while the pet is on, and draws nothing until it is known, so the
+big pet never flashes first. The primary metric is the wizard's completion,
+`trip_created` after `trip_wizard_started`. It comes from the activation
+benchmark of 2026-10-29, where the pet was seen in the way of the first-trip
+wizard's first question, which 379 of 389 visitors never answered.
 
 The first-trip wizard was the other flag (`first-trip-wizard`). It went to 100%
 and its flag is gone from the code: a device with no trip of its own always

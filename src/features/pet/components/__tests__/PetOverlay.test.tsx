@@ -1,6 +1,6 @@
 /**
- * @fileoverview Tests for the pet on screen: the mount switch, a tap, the
- * keyboard, and reduced motion.
+ * @fileoverview Tests for the pet on screen: the mount switch, the
+ * `onboarding-small-pet` arms, a tap, the keyboard, and reduced motion.
  *
  * jsdom has no layout, so every box is zero-sized and the pet stands on the
  * bottom of the screen. The walking and landing rules are covered by
@@ -16,6 +16,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@/test/utils';
 import { installLocalStorageDouble } from '@/test/local-storage';
 
+import { FLAG_OVERRIDE_PREFIX } from '@/hooks/useFeatureFlag';
+
+import { SMALL_PET_FLAG } from '../../constants';
 import { storePetEnabled, storePetSpecies } from '../../lib/pet-preferences';
 import { PetMount } from '../PetMount';
 import { PetOverlay } from '../PetOverlay';
@@ -64,6 +67,27 @@ describe('PetMount', () => {
 
     act(() => storePetEnabled(false));
     expect(screen.queryByTestId('pet')).not.toBeInTheDocument();
+  });
+
+  it('draws the shipped pet without the experiment', async () => {
+    storePetEnabled(true);
+    render(<PetMount />, { withProviders: false });
+
+    expect(await screen.findByTestId('pet')).toHaveAttribute('data-pet-size', '60');
+  });
+
+  it('draws the small pet in the test arm, and the shipped one in control', async () => {
+    storePetEnabled(true);
+    localStorage.setItem(`${FLAG_OVERRIDE_PREFIX}${SMALL_PET_FLAG}`, 'on');
+    const { unmount } = render(<PetMount />, { withProviders: false });
+
+    expect(await screen.findByTestId('pet')).toHaveAttribute('data-pet-size', '40');
+    unmount();
+
+    localStorage.setItem(`${FLAG_OVERRIDE_PREFIX}${SMALL_PET_FLAG}`, 'off');
+    render(<PetMount />, { withProviders: false });
+
+    expect(await screen.findByTestId('pet')).toHaveAttribute('data-pet-size', '60');
   });
 });
 
@@ -232,6 +256,69 @@ describe('PetOverlay', () => {
       vi.advanceTimersByTime(2000);
     });
     expect(screen.getByTestId('pet')).not.toHaveAttribute('data-pet-pose', 'fall');
+  });
+
+  it('stays put while the visitor types, unless it is the small pet', () => {
+    const field = document.createElement('input');
+    document.body.append(field);
+    render(<PetOverlay />, { withProviders: false });
+
+    act(() => field.focus());
+
+    expect(screen.getByTestId('pet')).not.toHaveAttribute('data-pet-hidden');
+    expect(screen.getByTestId('pet')).not.toHaveClass('invisible');
+    field.remove();
+  });
+
+  describe('compact, the experiment arm', () => {
+    it('is 40px and lands 40px above the floor', () => {
+      reduceMotion(false);
+      render(<PetOverlay compact />, { withProviders: false });
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(screen.getByTestId('pet')).toHaveAttribute('data-pet-size', '40');
+      expect(screen.getByTestId('pet')).toHaveClass('size-10');
+      expect(petTransform()).toContain(`${window.innerHeight - 40}px`);
+    });
+
+    it('steps aside while a field has focus, and comes back after', () => {
+      const field = document.createElement('input'),
+        box = document.createElement('input');
+
+      box.type = 'checkbox';
+      document.body.append(field, box);
+      render(<PetOverlay compact />, { withProviders: false });
+
+      act(() => box.focus());
+      expect(screen.getByTestId('pet')).not.toHaveAttribute('data-pet-hidden');
+
+      act(() => field.focus());
+      expect(screen.getByTestId('pet')).toHaveAttribute('data-pet-hidden', 'true');
+      expect(screen.getByTestId('pet')).toHaveClass('invisible');
+
+      act(() => field.blur());
+      expect(screen.getByTestId('pet')).not.toHaveAttribute('data-pet-hidden');
+      expect(screen.getByTestId('pet')).not.toHaveClass('invisible');
+      field.remove();
+      box.remove();
+    });
+
+    it('puts its bubble away when it steps aside', () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.9);
+      const field = document.createElement('input');
+      document.body.append(field);
+      render(<PetOverlay compact />, { withProviders: false });
+
+      act(() => screen.getByRole('button', { name: 'pet.label' }).click());
+      expect(screen.getByText('pet.tipLabel')).toBeInTheDocument();
+
+      act(() => field.focus());
+      expect(screen.queryByText('pet.tipLabel')).not.toBeInTheDocument();
+      field.remove();
+    });
   });
 
   it('walks by itself when left alone', () => {

@@ -30,6 +30,12 @@
  * through React state, which only changes when the pose does. That is the
  * computed-geometry carve-out of the inline-style rule.
  *
+ * `compact` is the test arm of the `onboarding-small-pet` experiment: the pet
+ * is 40px instead of 60px, and fades out while the visitor types in a field
+ * or drags something (`lib/pet-busy`). It keeps wandering while hidden, and
+ * `visibility: hidden` takes its button out of the tab order and away from
+ * the pointer, so a hidden pet never eats a tap.
+ *
  * @module features/pet/components/PetOverlay
  */
 
@@ -48,9 +54,11 @@ import { useTranslation } from 'react-i18next';
 import { captureEvent } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 
+import { usePetBusy } from '../hooks/usePetBusy';
 import { usePetPreferences } from '../hooks/usePetPreferences';
 import {
   PET_SIZE,
+  SMALL_PET_SIZE,
   WALK_SPEED,
   ceilingOf,
   clampX,
@@ -77,6 +85,11 @@ import { type PetExpression, PetSprite } from './PetSprite';
 
 /** What the pet is doing, as `data-pet-pose` tells the stylesheet. */
 export type PetPose = 'idle' | 'walk' | 'fall' | 'held' | 'sleep';
+
+interface PetOverlayProps {
+  /** The small pet that steps aside while the visitor types or drags. */
+  readonly compact?: boolean;
+}
 
 interface Simulation {
   x: number;
@@ -195,11 +208,17 @@ function PetHeart(): ReactElement {
 /**
  * The pet overlay. Mounted by `PetMount` only while the pet is on.
  *
+ * @param props - Component props
+ * @param props.compact - The experiment's small pet
  * @returns The overlay
  */
-export const PetOverlay = memo(function PetOverlay(): ReactElement {
+export const PetOverlay = memo(function PetOverlay({
+  compact = false,
+}: PetOverlayProps): ReactElement {
   const { t } = useTranslation(),
     { species, outfit } = usePetPreferences(),
+    size = compact ? SMALL_PET_SIZE : PET_SIZE,
+    hidden = usePetBusy(compact),
     rootRef = useRef<HTMLDivElement>(null),
     simRef = useRef<Simulation | null>(null),
     dragRef = useRef<DragState | null>(null),
@@ -241,15 +260,15 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       node = rootRef.current;
 
     if (sim !== null && node !== null) {
-      node.style.transform = `translate3d(${sim.x - PET_SIZE / 2}px, ${sim.y - PET_SIZE}px, 0)`;
+      node.style.transform = `translate3d(${sim.x - size / 2}px, ${sim.y - size}px, 0)`;
     }
-  }, []);
+  }, [size]);
 
   const refreshSurfaces = useCallback((sim: Simulation, now: number): readonly Surface<Element>[] => {
-    sim.surfaces = collectSurfaces(rootRef.current, readViewport());
+    sim.surfaces = collectSurfaces(rootRef.current, readViewport(), size);
     sim.surfacesAt = now;
     return sim.surfaces;
-  }, []);
+  }, [size]);
 
   const land = useCallback(
     (sim: Simulation, landing: Landing<Element>, now: number): void => {
@@ -294,10 +313,10 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       return null;
     }
 
-    const surface = surfaceFromBox(sim.support.getBoundingClientRect(), viewport);
+    const surface = surfaceFromBox(sim.support.getBoundingClientRect(), viewport, undefined, size);
 
     return surface !== null && isOnSurface(surface, sim.x) ? surface.top : null;
-  }, []);
+  }, [size]);
 
   const decide = useCallback(
     (sim: Simulation, now: number): void => {
@@ -309,7 +328,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       const roll = Math.random();
 
       if (roll < 0.22) {
-        const target = pickJumpTarget(refreshSurfaces(sim, now), sim.x, sim.y, Math.random);
+        const target = pickJumpTarget(refreshSurfaces(sim, now), sim.x, sim.y, Math.random, size);
 
         if (target !== null) {
           const velocity = jumpVelocity(sim.x, sim.y, target.x, target.surface.top);
@@ -335,7 +354,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       sim.decideAt = now + randomBetween(1500, 5000);
       setMode(sim, 'idle');
     },
-    [face, reducedMotion, refreshSurfaces, setMode],
+    [face, reducedMotion, refreshSurfaces, setMode, size],
   );
 
   const tick = useCallback(
@@ -347,7 +366,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       }
 
       const viewport = readViewport();
-      sim.x = clampX(sim.x, viewport);
+      sim.x = clampX(sim.x, viewport, size);
 
       if (sim.mode === 'fall' && reducedMotion) {
         land(sim, restingPlace(refreshSurfaces(sim, now), sim.x, sim.y, viewport), now);
@@ -358,7 +377,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
         sim.vy = fall(sim.vy, dt);
 
         const nextX = sim.x + sim.vx * dt,
-          clampedX = clampX(nextX, viewport);
+          clampedX = clampX(nextX, viewport, size);
 
         if (clampedX !== nextX) {
           sim.vx = -sim.vx * 0.4;
@@ -374,8 +393,8 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
 
         if (landing !== null) {
           land(sim, landing, now);
-        } else if (nextY < ceilingOf()) {
-          sim.y = ceilingOf();
+        } else if (nextY < ceilingOf(size)) {
+          sim.y = ceilingOf(size);
           sim.vy = Math.max(sim.vy, 0);
         } else {
           sim.y = nextY;
@@ -395,7 +414,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
 
       if (sim.mode === 'walk') {
         const next = sim.x + sim.direction * WALK_SPEED * dt,
-          half = PET_SIZE / 2,
+          half = size / 2,
           atWall = next <= half || next >= viewport.width - half,
           box = sim.support?.getBoundingClientRect(),
           atEdge = box !== undefined && !isOnSurface(box, next);
@@ -428,7 +447,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
         decide(sim, now);
       }
     },
-    [decide, face, land, reducedMotion, refreshSurfaces, setMode, startFalling, supportTop],
+    [decide, face, land, reducedMotion, refreshSurfaces, setMode, size, startFalling, supportTop],
   );
 
   // --------------------------------------------------------------------------
@@ -439,8 +458,8 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
     const now = performance.now(),
       viewport = readViewport(),
       sim: Simulation = {
-        x: clampX(viewport.width - 90, viewport),
-        y: ceilingOf(),
+        x: clampX(viewport.width - 90, viewport, size),
+        y: ceilingOf(size),
         vx: 0,
         vy: 0,
         mode: 'fall',
@@ -488,7 +507,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       cancel(frame);
       simRef.current = null;
     };
-  }, [paint, tick]);
+  }, [paint, size, tick]);
 
   useEffect(() => {
     bubbleUpRef.current = bubble !== null;
@@ -528,7 +547,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
     setBubble({
       id: now,
       reaction,
-      placement: sim.y - PET_SIZE < 96 ? 'below' : 'above',
+      placement: sim.y - size < 96 ? 'below' : 'above',
       align:
         sim.x < BUBBLE_EDGE ? 'start' : sim.x > viewport.width - BUBBLE_EDGE ? 'end' : 'center',
     });
@@ -544,7 +563,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       reportedRef.current = true;
       captureEvent('pet_interacted', { species, reaction: reaction.kind });
     }
-  }, [reducedMotion, setMode, species]);
+  }, [reducedMotion, setMode, size, species]);
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLButtonElement>): void => {
     const sim = simRef.current;
@@ -603,12 +622,12 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       drag.lastY = event.clientY;
       drag.lastTime = event.timeStamp;
 
-      sim.x = clampX(event.clientX - drag.offsetX, viewport);
-      sim.y = clampY(event.clientY - drag.offsetY, viewport);
+      sim.x = clampX(event.clientX - drag.offsetX, viewport, size);
+      sim.y = clampY(event.clientY - drag.offsetY, viewport, size);
       sim.lastTouch = performance.now();
       paint();
     },
-    [paint, setMode],
+    [paint, setMode, size],
   );
 
   const release = useCallback(
@@ -659,7 +678,7 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
         const direction = event.key === 'ArrowLeft' ? -1 : 1;
 
         face(sim, direction);
-        sim.x = clampX(sim.x + direction * KEY_STEP, readViewport());
+        sim.x = clampX(sim.x + direction * KEY_STEP, readViewport(), size);
         sim.lastTouch = now;
         sim.decideAt = now + 3000;
         setMode(sim, 'idle');
@@ -677,25 +696,29 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
         }
       }
     },
-    [face, paint, reducedMotion, setMode, startFalling],
+    [face, paint, reducedMotion, setMode, size, startFalling],
   );
 
   // --------------------------------------------------------------------------
   // Render
   // --------------------------------------------------------------------------
 
+  // A bubble does not outlive the pet stepping aside: it would hang over the
+  // field the visitor is typing in.
+  const shownBubble = hidden ? null : bubble;
+
   const expression: PetExpression =
       pose === 'sleep'
         ? 'sleep'
         : pose === 'held'
           ? 'surprised'
-          : bubble !== null
+          : shownBubble !== null
             ? 'happy'
             : 'normal',
     bubbleText =
-      bubble === null
+      shownBubble === null
         ? ''
-        : t(reactionTextKey(bubble.reaction, species), { name: speciesName });
+        : t(reactionTextKey(shownBubble.reaction, species), { name: speciesName });
 
   return (
     <div
@@ -704,7 +727,14 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       data-pet-pose={pose}
       data-pet-hop={hopping ? 'true' : undefined}
       data-pet-landed={landed ? 'true' : undefined}
-      className="pointer-events-none fixed left-0 top-0 z-50 size-15 will-change-transform print:hidden"
+      data-pet-size={size}
+      data-pet-hidden={hidden ? 'true' : undefined}
+      className={cn(
+        'pointer-events-none fixed left-0 top-0 z-50 will-change-transform print:hidden',
+        compact ? 'size-10' : 'size-15',
+        compact && 'transition-[opacity,visibility] duration-200 motion-reduce:transition-none',
+        hidden && 'invisible opacity-0',
+      )}
     >
       <button
         type="button"
@@ -734,23 +764,23 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
         </span>
       </button>
 
-      {bubble !== null && (
+      {shownBubble !== null && (
         <div
-          key={bubble.id}
+          key={shownBubble.id}
           aria-hidden="true"
           className={cn(
             'pet-bubble pointer-events-none absolute w-max max-w-56 rounded-2xl border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lg',
-            bubble.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2',
-            bubble.align === 'center' && 'left-1/2 -translate-x-1/2',
-            bubble.align === 'start' && 'left-0',
-            bubble.align === 'end' && 'right-0',
+            shownBubble.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2',
+            shownBubble.align === 'center' && 'left-1/2 -translate-x-1/2',
+            shownBubble.align === 'start' && 'left-0',
+            shownBubble.align === 'end' && 'right-0',
           )}
         >
-          {bubble.reaction.kind === 'heart' ? (
+          {shownBubble.reaction.kind === 'heart' ? (
             <PetHeart />
           ) : (
             <>
-              {bubble.reaction.kind === 'tip' && (
+              {shownBubble.reaction.kind === 'tip' && (
                 <span className="mb-0.5 block text-xs font-semibold text-primary">
                   {t('pet.tipLabel', 'Tip')}
                 </span>
@@ -762,12 +792,12 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
             aria-hidden="true"
             className={cn(
               'absolute size-2.5 rotate-45 border bg-popover',
-              bubble.placement === 'above'
+              shownBubble.placement === 'above'
                 ? 'top-full -mt-[5px] border-l-0 border-t-0'
                 : 'bottom-full -mb-[5px] border-b-0 border-r-0',
-              bubble.align === 'center' && 'left-1/2 -translate-x-1/2',
-              bubble.align === 'start' && 'left-6',
-              bubble.align === 'end' && 'right-6',
+              shownBubble.align === 'center' && 'left-1/2 -translate-x-1/2',
+              shownBubble.align === 'start' && 'left-6',
+              shownBubble.align === 'end' && 'right-6',
             )}
           />
         </div>

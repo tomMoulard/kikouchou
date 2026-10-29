@@ -42,6 +42,16 @@ export const PET_SLOTS = {
   shoes: PET_SHOES,
 } as const;
 
+/**
+ * The experiment that shrinks the pet and has it step aside while the visitor
+ * types or drags, as the flag is spelled in PostHog. `control` keeps the pet
+ * as it ships; `test` is `PetOverlay`'s `compact`.
+ */
+export const SMALL_PET_FLAG = 'onboarding-small-pet';
+
+/** The variant that draws the small pet. */
+export const SMALL_PET_VARIANT = 'test';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================

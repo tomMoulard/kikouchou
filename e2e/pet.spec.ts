@@ -1,6 +1,8 @@
 /**
  * @fileoverview The pet: turned on from Settings, it lands on the page, answers
  * a tap, can be carried, and never leaves the screen or blocks the nav bar.
+ * In the test arm of `onboarding-small-pet` it is smaller, and steps aside
+ * while a text field has focus.
  *
  * jsdom has no layout, so this is where the walking-on-the-page part is
  * checked: the pet has to come to rest on a real surface, inside the
@@ -156,6 +158,30 @@ test.describe('Pet', () => {
 
     await page.getByRole('button', { name: PET_LABEL }).click();
     await expect(page.locator('.pet-bubble')).toBeVisible();
+  });
+
+  test('in the small-pet arm, is 40px and steps aside while the visitor types', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('kikouchou-flag:onboarding-small-pet', 'on');
+    });
+    await turnPetOn(page);
+
+    const pet = page.getByTestId('pet');
+    await expect(pet).toHaveAttribute('data-pet-size', '40');
+    expect((await pet.boundingBox())?.width).toBe(40);
+
+    // An empty device: the first-trip wizard, which opens on a text field.
+    await page.goto('/trips/new');
+    await waitForRoute(page);
+    const field = page.getByRole('textbox').first();
+
+    await field.focus();
+    await expect(pet).toHaveAttribute('data-pet-hidden', 'true');
+    await expect(pet).toBeHidden();
+
+    await field.blur();
+    await expect(pet).not.toHaveAttribute('data-pet-hidden');
+    await expect(pet).toBeVisible();
   });
 
   test('comes back on the next visit, in its outfit', async ({ page }) => {
