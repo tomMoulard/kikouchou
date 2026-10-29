@@ -10,6 +10,7 @@ import {
   GRAVITY,
   MAX_FALL_SPEED,
   PET_SIZE,
+  SMALL_PET_SIZE,
   ceilingOf,
   clampX,
   clampY,
@@ -46,6 +47,13 @@ describe('surfaceFromBox', () => {
   it('refuses a box so high the pet would lose its head, or below the screen', () => {
     expect(surfaceFromBox({ left: 0, right: 200, top: PET_SIZE - 1, bottom: 200 }, viewport)).toBeNull();
     expect(surfaceFromBox({ left: 0, right: 200, top: 800, bottom: 900 }, viewport)).toBeNull();
+  });
+
+  it('lets the small pet stand higher up, since its head is shorter', () => {
+    const box = { left: 0, right: 200, top: SMALL_PET_SIZE + 4, bottom: 200 };
+
+    expect(surfaceFromBox(box, viewport)).toBeNull();
+    expect(surfaceFromBox(box, viewport, 'card', SMALL_PET_SIZE)?.top).toBe(SMALL_PET_SIZE + 4);
   });
 
   it('refuses a box with no height', () => {
@@ -93,6 +101,13 @@ describe('clamping', () => {
     expect(clampX(999, viewport)).toBe(400 - PET_SIZE / 2);
     expect(clampY(0, viewport)).toBe(ceilingOf());
     expect(clampY(2000, viewport)).toBe(800);
+  });
+
+  it('keeps the small pet inside by its own size', () => {
+    expect(clampX(-50, viewport, SMALL_PET_SIZE)).toBe(SMALL_PET_SIZE / 2);
+    expect(clampX(999, viewport, SMALL_PET_SIZE)).toBe(400 - SMALL_PET_SIZE / 2);
+    expect(clampY(0, viewport, SMALL_PET_SIZE)).toBe(SMALL_PET_SIZE + 4);
+    expect(ceilingOf(SMALL_PET_SIZE)).toBeLessThan(ceilingOf());
   });
 
   it('caps the fall speed', () => {
@@ -143,5 +158,12 @@ describe('jumping', () => {
 
     expect(target?.x).toBeGreaterThan(300);
     expect(isOnSurface(surface(300, 400, 700), target?.x ?? 0)).toBe(true);
+  });
+
+  it('aims as far in as its own half width', () => {
+    const wide = [surface(300, 400, 700)];
+
+    expect(pickJumpTarget(wide, 200, 800, () => 0)?.x).toBe(300 + 8 + PET_SIZE / 2);
+    expect(pickJumpTarget(wide, 200, 800, () => 0, SMALL_PET_SIZE)?.x).toBe(300 + 8 + SMALL_PET_SIZE / 2);
   });
 });

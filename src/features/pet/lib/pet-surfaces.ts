@@ -7,7 +7,7 @@
  * @module features/pet/lib/pet-surfaces
  */
 
-import { type Surface, type Viewport, surfaceFromBox } from './pet-physics';
+import { PET_SIZE, type Surface, type Viewport, surfaceFromBox } from './pet-physics';
 
 // ============================================================================
 // Constants
@@ -48,9 +48,14 @@ const MAX_SURFACES = 300;
  *
  * @param exclude - The pet's own element
  * @param viewport - The viewport
+ * @param size - The pet's box
  * @returns The surfaces
  */
-export function collectSurfaces(exclude: Element | null, viewport: Viewport): Surface<Element>[] {
+export function collectSurfaces(
+  exclude: Element | null,
+  viewport: Viewport,
+  size: number = PET_SIZE,
+): Surface<Element>[] {
   const surfaces: Surface<Element>[] = [];
 
   for (const element of document.querySelectorAll(PET_SURFACE_SELECTOR)) {
@@ -61,7 +66,7 @@ export function collectSurfaces(exclude: Element | null, viewport: Viewport): Su
       continue;
     }
 
-    const surface = surfaceFromBox(element.getBoundingClientRect(), viewport, element);
+    const surface = surfaceFromBox(element.getBoundingClientRect(), viewport, element, size);
 
     if (surface !== null) {
       surfaces.push(surface);
