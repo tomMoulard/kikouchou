@@ -70,7 +70,8 @@ export function readFlagOverride(key: string): boolean | undefined {
  *
  * `on` forces the `test` arm and `off` the `control` arm, the keys every
  * experiment here uses; any other stored value is taken as a variant key
- * (`wizard` reaches the third arm of `onboarding-planning-view`).
+ * (`wizard` and `assistant` reach the other arms of
+ * `onboarding-planning-view`).
  *
  * @param key - The flag key
  * @returns The forced variant key, or undefined

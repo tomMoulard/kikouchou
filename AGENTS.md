@@ -232,9 +232,9 @@ slipped in there would split the turn the history is rebuilt from. A new view
 goes in `ASSISTANT_VIEWS` (`views.ts`), gets a body in `AssistantTripView` and
 its `assistant.views.<view>.*` keys in both locales.
 
-### Three engines, and one of them never talks
+### Four engines, and one of them never talks
 
-The presets in `models.ts` run on three different runtimes, and the `engine`
+The presets in `models.ts` run on four different runtimes, and the `engine`
 field says which:
 
 - `transformers` — the Qwen3 and Gemma 4 presets. A chat model: it answers in
@@ -254,9 +254,49 @@ field says which:
   words and ```action blocks like `transformers`, needs no WebGPU, and is the
   only way a phone too small for Gemma can use the assistant.
 
+- `kikouchou`: the `cloud-kikouchou` preset. Nothing runs on the device
+  either: `useWebLLM` streams from api.kikouchou.app (`server/assistant-api`),
+  which answers on the project's own OpenRouter key. It needs a signed-in
+  account instead of an OpenRouter one, and the server picks the model.
+
 The two local engines each have their own worker and their own Cache Storage
-bucket; `openrouter` has neither. Anything that reads a preset and expects an
-answer in words has to branch on `engine`.
+bucket; the two cloud engines have neither. `isCloudPreset` is true of both
+cloud engines. A screen that asks for a connection branches on `engine`,
+because one needs an OpenRouter key and the other an account. Anything that
+reads a preset and expects an answer in words has to branch on `engine`.
+
+### The account model is paid by the project
+
+`cloud-kikouchou` is the one preset whose answers the project pays for, so
+everything about it is shaped by cost.
+
+- **The server decides, the client asks.** The client sends the Supabase
+  access token and the messages, nothing else. `server/assistant-api` verifies
+  the token against the project's JWKS, bounds the body, takes one request
+  from the account's daily allowance (`consume_assistant_quota`), and only
+  then calls OpenRouter with the model and token cap from its own
+  environment. A client cannot pick a dearer model on the project's key.
+- **An anonymous session is not an account.** The server refuses it (403), and
+  `AssistantPage` does not count one as signed in. The daily limit counts
+  accounts; a session anybody can mint without a form would make it count
+  nothing.
+- **The counter is closed to every client.** `assistant_usage` has RLS on and
+  no client grant, and `consume_assistant_quota` is EXECUTE for `service_role`
+  only, because it authorises nobody: the server has already verified the
+  caller. `function_exposure_test.sql` would flag it if a client could reach
+  it.
+- **A question asked before signing in waits.** A web sign-in leaves the page
+  and comes back to `/`, so a starter tapped while signed out goes to
+  `localStorage['kikouchou-assistant-pending-prompt']` for 30 minutes, and the
+  page sends it once the engine is ready (`pending-prompt.ts`).
+- **The privacy notice names one more hop.** The trip goes to the project's
+  server, then to OpenRouter and the model's vendor. `AccountAssistantCard`
+  says so before the first question, like `CloudConnectCard`.
+- **A build with no Supabase project does not offer it**
+  (`offeredAssistantPresets`), which is why its e2e spec runs in the `sync`
+  project.
+- **`$ai_generation` claims no cost** for it either. The cost is real, but the
+  client does not know it; OpenRouter's activity for the project's key does.
 
 ### A cloud preset sends the trip off the device
 
@@ -346,10 +386,10 @@ How the seed behaves, and why:
   `trip-sharing-sync.spec.ts` fail twice as often under load. For the same reason it has no guest group: a group is synced with the
   account.
 - **A first open lands on the trip list, with the pet on.** `/` redirects
-  to `/trips`, where the sample is the first row. The exceptions are two
+  to `/trips`, where the sample is the first row. The exceptions are three
   arms of the `onboarding-planning-view` experiment: `test` opens the
-  sample's calendar and `wizard` opens the first-trip wizard (see the
-  feature flags section). When the seed
+  sample's calendar, `wizard` opens the first-trip wizard and `assistant`
+  opens the assistant (see the feature flags section). When the seed
   answers `seeded`, `main.tsx` also turns the pet on (`storePetEnabled`). Only
   that outcome does it: a returning device keeps its own choice, because a
   pet turned off with the default animal is stored as nothing at all, and a
@@ -640,20 +680,25 @@ the static "enterprise customers" cohort. `meal-planner` shows the meal planner
 arms differ in what they show and not in what they save.
 
 `onboarding-planning-view` is an experiment, so its flag is multivariate
-(`control`, `test`, `wizard`), and `isFeatureEnabled` answers `true` in every
-arm. Read
+(`control`, `test`, `wizard`, `assistant`), and `isFeatureEnabled` answers
+`true` in every arm. Read
 it with `useFeatureFlagVariant(key)`, which returns the variant key, `false`
 for a person in no arm, or `undefined` while PostHog is asked. The override
-`on` forces `test`, `off` forces `control`, and `wizard` forces `wizard`.
-Reading the variant is what
+`on` forces `test`, `off` forces `control`, and any other value forces the
+variant of that name (`wizard`, `assistant`). Reading the variant is what
 sends `$feature_flag_called`, the exposure the experiment counts, so
 `EntryRedirect` (the `/` route) reads it only for a device whose one trip is
 the sample; anyone else goes to `/trips` without being counted. The test arm
 opens `/trips/<sample>/calendar` with router state `{ via: 'entry' }`, so
 `sample_trip_viewed` tells that view from a click. The wizard arm opens
 `/trips/new`, which on such a device is the first-trip wizard; its cancel
-goes to `/trips`. The arms split 33/33/34, and the wizard arm was added on
-2026-10-29, before the first exposure. The primary metric is
+goes to `/trips`. The assistant arm opens `/assistant` with router state
+`{ via: 'entry' }`, which makes the page offer the account model to a visitor
+with no stored model, with starter questions: two that create a trip and two
+about the sample. Signed out, a starter asks for an account first. The wizard
+arm was added on 2026-10-29, before the first exposure; the assistant arm is
+planned at a 25/25/25/25 split, once api.kikouchou.app is deployed. The
+primary metric is
 `trip_created` after exposure. Started on 2026-10-29, after a review of the
 funnel: of 1201 new app visitors in 28 days, 497 opened the first-trip wizard,
 9 opened the sample and 9 created a trip.

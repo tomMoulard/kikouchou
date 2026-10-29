@@ -58,6 +58,12 @@ vi.mock('@/lib/db', () => ({
   updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
 }));
 
+// The page reads the session for the account model. Signed out here.
+vi.mock('@/features/auth', () => ({ useAuth: () => ({ session: null }) }));
+vi.mock('@/features/auth/components/SignInDialog', () => ({
+  SignInDialog: () => null,
+}));
+
 vi.mock('../../hooks/useTripSystemPrompt', () => ({
   useTripSystemPrompt: () => ({
     systemPrompt: 'system-prompt',

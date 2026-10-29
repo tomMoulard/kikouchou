@@ -1449,6 +1449,29 @@
     "roomNotFound": "Cette chambre est introuvable.",
     "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
+    "account": {
+      "title": "Préparez votre séjour en le demandant",
+      "description": "Décrivez votre séjour à l'assistant et il remplit les dates, les invités et les chambres. Il est inclus avec un compte Kikouchou gratuit, dans une limite quotidienne, et ne demande aucun téléchargement.",
+      "privacyNotice": "Chaque question envoie les détails du séjour, noms des invités compris, au serveur Kikouchou, puis à OpenRouter et à l'entreprise qui fait tourner le modèle.",
+      "signIn": "Se connecter pour commencer",
+      "signInTitle": "Connectez-vous pour interroger l'assistant",
+      "signInReason": "Le serveur Kikouchou répond à vos questions, et il répond aux comptes : un compte gratuit suffit.",
+      "signInDetail": "Votre question est gardée et envoyée dès votre retour.",
+      "errors": {
+        "unauthorized": "Votre session a expiré. Reconnectez-vous pour continuer avec ce modèle.",
+        "dailyLimit": "Vous avez utilisé les questions du jour. Le compteur repart demain, ou choisissez un autre modèle.",
+        "unavailable": "Le serveur Kikouchou ne peut pas répondre pour l'instant. Réessayez dans un moment.",
+        "network": "Impossible de joindre le serveur Kikouchou. Vérifiez votre connexion.",
+        "provider": "Le modèle n'a pas répondu. Réessayez."
+      }
+    },
+    "starters": {
+      "label": "Questions pour commencer",
+      "createWeekend": "Prépare un week-end à la mer avec 6 amis le mois prochain",
+      "exploreRooms": "Qui dort où la première nuit ?",
+      "createFamily": "Crée une semaine à la montagne en août pour ma famille",
+      "explorePlan": "Qu'est-ce qui est prévu le premier jour ?"
+    },
     "cloud": {
       "badge": "Cloud",
       "modelLabel": "Modèle OpenRouter : {{model}}",
@@ -1508,6 +1531,11 @@
         "name": "GPT Sol",
         "description": "Modèle d'OpenAI. Tourne chez OpenAI via votre compte OpenRouter.",
         "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
+      },
+      "cloud-kikouchou": {
+        "name": "Kikouchou",
+        "description": "Inclus avec votre compte Kikouchou, dans une limite quotidienne. Rien à configurer.",
+        "hint": "Demande un compte et une connexion. Fonctionne sur tout appareil."
       }
     },
     "actionDetails": {

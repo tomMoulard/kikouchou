@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { formatBytes } from '@/lib/utils/format-bytes';
 
 import {
+  ACCOUNT_ASSISTANT_MODEL_ID,
   ASSISTANT_MODEL_PRESETS,
   DEFAULT_ASSISTANT_MODEL_ID,
   FALLBACK_ASSISTANT_MODEL_ID,
@@ -28,6 +29,7 @@ describe('assistant model presets', () => {
       'cloud-claude-haiku',
       'cloud-claude-sonnet',
       'cloud-gpt-sol',
+      'cloud-kikouchou',
     ]);
   });
 
@@ -117,7 +119,7 @@ describe('assistant model presets', () => {
     ).toBeUndefined();
   });
 
-  it('runs every cloud preset on OpenRouter, with nothing to download', () => {
+  it('runs every cloud preset off the device, with nothing to download', () => {
     const cloud = ASSISTANT_MODEL_PRESETS.filter(isCloudPreset);
 
     expect(cloud.map((preset) => preset.id)).toEqual([
@@ -125,9 +127,10 @@ describe('assistant model presets', () => {
       'cloud-claude-haiku',
       'cloud-claude-sonnet',
       'cloud-gpt-sol',
+      'cloud-kikouchou',
     ]);
     for (const preset of cloud) {
-      expect(preset.engine).toBe('openrouter');
+      expect(['openrouter', 'kikouchou']).toContain(preset.engine);
       // A WebGPU gate on a model that runs on a server would lock out the very
       // phones the cloud presets exist for.
       expect(preset.device).toBeUndefined();
@@ -138,7 +141,7 @@ describe('assistant model presets', () => {
 
   it('pins every cloud model but the Auto Router, which picks by design', () => {
     const pinned = ASSISTANT_MODEL_PRESETS.filter(
-      (preset) => isCloudPreset(preset) && preset.id !== 'cloud-auto',
+      (preset) => preset.engine === 'openrouter' && preset.id !== 'cloud-auto',
     );
 
     // A vendor/model slug, never OpenRouter's moving `~…-latest`: an answer
@@ -154,10 +157,30 @@ describe('assistant model presets', () => {
     expect(isAssistantModelId('cloud-claude-haiku')).toBe(true);
     expect(isAssistantModelId('cloud-claude-sonnet')).toBe(true);
     expect(isAssistantModelId('cloud-gpt-sol')).toBe(true);
+    expect(isAssistantModelId('cloud-kikouchou')).toBe(true);
+  });
+
+  it('lets the server pick the account model, under a label no other preset shares', () => {
+    const account = getAssistantModelPreset(ACCOUNT_ASSISTANT_MODEL_ID);
+
+    expect(account.engine).toBe('kikouchou');
+    // useWebLLM re-reads its state when the modelId changes, so a shared one
+    // would keep the Auto preset's status after a switch.
+    const others = ASSISTANT_MODEL_PRESETS.filter((preset) => preset.id !== account.id);
+    expect(others.map((preset) => preset.modelId)).not.toContain(account.modelId);
   });
 });
 
 describe('offeredAssistantPresets', () => {
+  it('leaves the account model out of a build with no accounts', () => {
+    expect(offeredAssistantPresets('supported', false).map((preset) => preset.id)).not.toContain(
+      'cloud-kikouchou',
+    );
+    expect(offeredAssistantPresets('no-api', true).map((preset) => preset.id)).toContain(
+      'cloud-kikouchou',
+    );
+  });
+
   it('offers everything while the probe runs, and on a device with WebGPU', () => {
     expect(offeredAssistantPresets(null)).toEqual(ASSISTANT_MODEL_PRESETS);
     expect(offeredAssistantPresets('supported')).toEqual(ASSISTANT_MODEL_PRESETS);

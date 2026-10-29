@@ -1449,6 +1449,29 @@
     "roomNotFound": "That room was not found.",
     "invalidActivity": "Those activity details are invalid, nothing was saved.",
     "tripSwitched": "Switched to {{name}}",
+    "account": {
+      "title": "Plan your trip by asking",
+      "description": "Tell the assistant about your trip and it fills in the dates, the guests and the rooms. It comes with a free Kikouchou account, with a daily limit, and needs no download.",
+      "privacyNotice": "Each question sends your trip details, guest names included, to the Kikouchou server, then to OpenRouter and to the company that runs the model.",
+      "signIn": "Sign in to start",
+      "signInTitle": "Sign in to ask the assistant",
+      "signInReason": "The Kikouchou server answers your questions, and it answers accounts: a free account is all it takes.",
+      "signInDetail": "Your question is kept and sent as soon as you are back.",
+      "errors": {
+        "unauthorized": "Your session has ended. Sign in again to keep using this model.",
+        "dailyLimit": "You have used today's questions. The count starts again tomorrow, or pick another model.",
+        "unavailable": "The Kikouchou server cannot answer right now. Try again in a moment.",
+        "network": "Could not reach the Kikouchou server. Check your connection.",
+        "provider": "The model did not answer. Try again."
+      }
+    },
+    "starters": {
+      "label": "Questions to start with",
+      "createWeekend": "Plan a weekend at the seaside with 6 friends next month",
+      "exploreRooms": "Who sleeps where on the first night?",
+      "createFamily": "Create a week in the mountains in August for my family",
+      "explorePlan": "What is planned for the first day?"
+    },
     "cloud": {
       "badge": "Cloud",
       "modelLabel": "OpenRouter model: {{model}}",
@@ -1508,6 +1531,11 @@
         "name": "GPT Sol",
         "description": "OpenAI model. Runs at OpenAI through your OpenRouter account.",
         "hint": "Works on any device with a connection. Nothing to download."
+      },
+      "cloud-kikouchou": {
+        "name": "Kikouchou",
+        "description": "Included with your Kikouchou account, within a daily limit. Nothing to set up.",
+        "hint": "Needs an account and a connection. Works on any device."
       }
     },
     "actionDetails": {

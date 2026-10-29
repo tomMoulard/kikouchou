@@ -299,8 +299,9 @@ export const appRoutes: RouteObject = {
     // sample trip with the pet turned on (see `main.tsx`), and the first-trip
     // wizard is one "New trip" away. A device whose one trip is the sample
     // takes part in the `onboarding-planning-view` experiment, whose test arm
-    // opens the sample's calendar instead and whose wizard arm opens the
-    // first-trip wizard (`EntryRedirect`).
+    // opens the sample's calendar instead, whose wizard arm opens the
+    // first-trip wizard and whose assistant arm opens the assistant
+    // (`EntryRedirect`).
     {
       index: true,
       element: <EntryRedirect />,

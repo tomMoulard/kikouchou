@@ -87,6 +87,15 @@ describe('EntryRedirect', () => {
     expect(where()).toBe('/trips/new null');
   });
 
+  it('opens the assistant in the assistant arm, saying the app went there itself', () => {
+    withTrips([SAMPLE_ID], SAMPLE_ID);
+    mockedUseFeatureFlagVariant.mockReturnValue('assistant');
+
+    renderEntry();
+
+    expect(where()).toBe('/assistant {"via":"entry"}');
+  });
+
   it('keeps the trip list in the control arm', () => {
     withTrips([SAMPLE_ID], SAMPLE_ID);
 

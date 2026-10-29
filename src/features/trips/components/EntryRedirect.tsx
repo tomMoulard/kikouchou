@@ -1,6 +1,6 @@
 /**
- * @fileoverview Where `/` sends a visitor: the trip list, the sample's plan, or
- * the first-trip wizard.
+ * @fileoverview Where `/` sends a visitor: the trip list, the sample's plan,
+ * the first-trip wizard, or the assistant.
  *
  * Opening the app lands on the trip list, where the sample trip is the first
  * row. Of the visitors who arrive that way almost none open it: they read the
@@ -8,8 +8,9 @@
  * `onboarding-planning-view` experiment asks whether showing the planning
  * view itself does better. Its test arm opens the sample trip's calendar
  * instead of the list; its wizard arm opens `/trips/new`, which for a device
- * with no trip of its own is the first-trip wizard; its control arm keeps the
- * list.
+ * with no trip of its own is the first-trip wizard; its assistant arm opens
+ * `/assistant` on the account model, with starter questions; its control arm
+ * keeps the list.
  *
  * Only a device whose one trip is the sample takes part. Anyone with a trip of
  * their own, or who deleted the sample, goes to the list without the flag
@@ -43,6 +44,9 @@ const PLANNING_VIEW_VARIANT = 'test';
 /** The variant that opens the first-trip wizard. */
 const WIZARD_VARIANT = 'wizard';
 
+/** The variant that opens the assistant. */
+const ASSISTANT_VARIANT = 'assistant';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -73,12 +77,16 @@ const SampleEntry = memo(function SampleEntry({ sampleTripId }: SampleEntryProps
   if (variant === WIZARD_VARIANT) {
     return <Navigate to="/trips/new" replace />;
   }
+  if (variant === ASSISTANT_VARIANT) {
+    // The entry state is what makes the page offer the account model.
+    return <Navigate to="/assistant" replace state={OPENED_ON_ENTRY} />;
+  }
   return <Navigate to="/trips" replace />;
 });
 
 /**
- * The index route: the trip list, the sample's calendar in the test arm, or
- * the first-trip wizard in the wizard arm.
+ * The index route: the trip list, the sample's calendar in the test arm, the
+ * first-trip wizard in the wizard arm, or the assistant in the assistant arm.
  */
 export const EntryRedirect = memo(function EntryRedirect(): ReactElement {
   const { trips, sampleTripId, isLoading } = useTripContext();

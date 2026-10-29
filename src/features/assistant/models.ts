@@ -1,6 +1,7 @@
 /**
- * @fileoverview Assistant model presets: local/browser inference, and cloud
- * models reached through the user's own OpenRouter account.
+ * @fileoverview Assistant model presets: local/browser inference, cloud
+ * models reached through the user's own OpenRouter account, and the one the
+ * project's server answers for a signed-in account.
  *
  * These presets map stable app-level IDs to concrete model identifiers (a
  * Hugging Face repository, or an OpenRouter slug) and runtime options.
@@ -33,8 +34,14 @@ import type { WebGPUSupport } from './webgpu';
  * forwards it to the model's vendor. It answers in words like `transformers`,
  * downloads nothing, and needs a connection and a connected account instead of
  * WebGPU. See `openrouter/auth.ts` for why it is OpenRouter.
+ *
+ * `kikouchou` runs nowhere on the device either. It sends the conversation to
+ * api.kikouchou.app (`server/assistant-api`), which answers on the project's
+ * own OpenRouter key for a signed-in account, within a daily limit. It needs
+ * an account instead of a connected OpenRouter account, and the server, not
+ * the preset, picks the model.
  */
-export type AssistantEngine = 'transformers' | 'needle' | 'openrouter';
+export type AssistantEngine = 'transformers' | 'needle' | 'openrouter' | 'kikouchou';
 
 /**
  * Runtime configuration for one assistant model preset.
@@ -46,7 +53,7 @@ export interface AssistantModelPreset {
   readonly engine: AssistantEngine;
   /**
    * Hugging Face model identifier (the repository the weights come from), or
-   * the OpenRouter model slug on `openrouter`.
+   * the OpenRouter model slug on `openrouter`, or a label on `kikouchou`.
    */
   readonly modelId: string;
   /**
@@ -84,8 +91,8 @@ export interface AssistantModelPreset {
    * Cache Storage bucket holding this preset's downloaded files, so the
    * "already downloaded" probe looks where the files actually landed:
    * Transformers.js owns `transformers-cache`, and the Needle worker writes
-   * its one `.cact` into a bucket of its own. Empty on `openrouter`, which
-   * downloads nothing.
+   * its one `.cact` into a bucket of its own. Empty on the cloud engines, which
+   * download nothing.
    */
   readonly cacheName: string;
   /** Translation key for the preset display name. */
@@ -106,7 +113,7 @@ export interface AssistantModelPreset {
    * files, so they move when a repository is re-exported: they are a size
    * order to warn the user with, not a promise. Rendered with `formatBytes`,
    * the same helper the download counter uses, so the announced size and the
-   * counter agree on units. Zero on `openrouter`.
+   * counter agree on units. Zero on the cloud engines.
    */
   readonly approxDownloadBytes: number;
   /** Short human-readable fallback name. */
@@ -315,6 +322,23 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     fallbackDescription: 'OpenAI model. Runs at OpenAI through your OpenRouter account.',
     fallbackHint: 'Works on any device with a connection. Nothing to download.',
   },
+  {
+    id: 'cloud-kikouchou',
+    engine: 'kikouchou',
+    cacheName: NO_CACHE,
+    // A label, not a slug: api.kikouchou.app chooses the model (OpenRouter's
+    // Auto Router as of 2026-10-29). It must differ from `cloud-auto`'s, because
+    // `useWebLLM` re-reads its state when the `modelId` changes, and a switch
+    // between two presets with one `modelId` would keep the other's status.
+    modelId: 'kikouchou/assistant',
+    approxDownloadBytes: 0,
+    nameKey: 'assistant.models.cloud-kikouchou.name',
+    descriptionKey: 'assistant.models.cloud-kikouchou.description',
+    hintKey: 'assistant.models.cloud-kikouchou.hint',
+    fallbackName: 'Kikouchou',
+    fallbackDescription: 'Included with your Kikouchou account, within a daily limit. Nothing to set up.',
+    fallbackHint: 'Needs an account and a connection. Works on any device.',
+  },
 ] as const;
 
 // ============================================================================
@@ -342,9 +366,6 @@ const REPLACED_ASSISTANT_MODEL_IDS: Readonly<Record<string, AssistantModelId>> =
   };
 
 /**
- * Whether the preset runs off the device, through the user's OpenRouter key.
- */
-/**
  * The model a device falls back to when its stored choice needs WebGPU it does
  * not have: the cloud router, which runs anywhere.
  */
@@ -356,19 +377,36 @@ export const FALLBACK_ASSISTANT_MODEL_ID: AssistantModelId = 'cloud-auto';
  * Every preset while the probe runs (`null`) and when it succeeds. Otherwise
  * the ones that need no GPU: the cloud models and Needle's CPU router.
  *
+ * The account preset needs accounts, so a build with no Supabase project
+ * (a fork, the e2e servers) does not offer it.
+ *
  * @param webgpu - The probe's answer, or `null` while it runs
+ * @param accountsAvailable - Whether this build has a Supabase project
  */
 export function offeredAssistantPresets(
   webgpu: WebGPUSupport | null,
+  accountsAvailable = true,
 ): readonly AssistantModelPreset[] {
-  if (webgpu === null || webgpu === 'supported') {
-    return ASSISTANT_MODEL_PRESETS;
-  }
-  return ASSISTANT_MODEL_PRESETS.filter((preset) => preset.device !== 'webgpu');
+  const runnable =
+    webgpu === null || webgpu === 'supported'
+      ? ASSISTANT_MODEL_PRESETS
+      : ASSISTANT_MODEL_PRESETS.filter((preset) => preset.device !== 'webgpu');
+  return accountsAvailable
+    ? runnable
+    : runnable.filter((preset) => preset.engine !== 'kikouchou');
 }
 
+/** The preset the project's server answers, for a signed-in account. */
+export const ACCOUNT_ASSISTANT_MODEL_ID: AssistantModelId = 'cloud-kikouchou';
+
+/**
+ * Whether the preset runs off the device: nothing to download, no WebGPU, and
+ * a connection needed. True of OpenRouter with the user's key and of the
+ * project's server alike; what each needs before it answers differs, so a
+ * caller that shows a sign-in branches on `engine`.
+ */
 export function isCloudPreset(preset: AssistantModelPreset): boolean {
-  return preset.engine === 'openrouter';
+  return preset.engine === 'openrouter' || preset.engine === 'kikouchou';
 }
 
 /**

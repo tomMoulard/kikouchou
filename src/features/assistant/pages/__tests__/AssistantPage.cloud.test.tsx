@@ -50,6 +50,12 @@ vi.mock('@/lib/db', () => ({
   updateSettings: vi.fn().mockResolvedValue(undefined),
 }));
 
+// The page reads the session for the account model. Signed out here.
+vi.mock('@/features/auth', () => ({ useAuth: () => ({ session: null }) }));
+vi.mock('@/features/auth/components/SignInDialog', () => ({
+  SignInDialog: () => null,
+}));
+
 vi.mock('../../hooks/useTripSystemPrompt', () => ({
   useTripSystemPrompt: () => ({
     systemPrompt: 'system-prompt',
@@ -235,6 +241,7 @@ describe('AssistantPage with a cloud model', () => {
 
     await waitFor(() => expect(mockUseWebLLM).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'cloud-claude-haiku' }),
+      { accountSignedIn: false },
     ));
     await user.type(screen.getByRole('textbox'), 'Who sleeps where?');
     await user.click(screen.getByRole('button', { name: 'assistant.send' }));
