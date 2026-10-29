@@ -2,14 +2,9 @@
  * @fileoverview Splits a model answer into the reasoning it showed and the
  * answer it meant to give.
  *
- * Two producers feed this, and both are handled by the same split so the UI has
- * one shape to render:
- *
- * - the Transformers.js presets, which wrap a chain of thought in a
- *   `<think>` / `<thinking>` / `<reasoning>` tag when the model was trained to
- *   emit one;
- * - the Needle worker, which has no chat channel and puts the rationale it
- *   decoded outside the `<tool_call>` markers (see `needle-tools.ts`).
+ * A model trained to show its chain of thought wraps it in a `<think>` /
+ * `<thinking>` / `<reasoning>` tag, and the server picks the model, so the
+ * answer can carry one. The split gives the UI one shape to render either way.
  *
  * The split runs on every streamed chunk, so it must cope with a block that is
  * still open: while the closing tag has not arrived, everything after the

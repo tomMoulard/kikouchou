@@ -21,7 +21,7 @@ const browser = vi.hoisted(() => {
 
 vi.mock('@capacitor/browser', () => ({ Browser: browser }));
 
-import { closeBrowserSheet, openInBrowserSheet, runNativeOAuth } from '@/lib/native/oauth';
+import { runNativeOAuth } from '@/lib/native/oauth';
 import { deliverAuthCallbackUrl, onAuthCallback } from '@/lib/supabase/auth-callback';
 
 const AUTHORIZE = 'https://ref.supabase.co/auth/v1/authorize?provider=google';
@@ -96,33 +96,5 @@ describe('runNativeOAuth', () => {
     browser.open.mockRejectedValueOnce(new Error('no browser'));
 
     await expect(runNativeOAuth(AUTHORIZE)).resolves.toEqual({ status: 'refused', message: null });
-  });
-});
-
-describe('openInBrowserSheet', () => {
-  it('resolves once the sheet is closed, by the user or by the listener', async () => {
-    let done = false;
-    const opened = openInBrowserSheet('https://openrouter.ai/auth').then(() => {
-      done = true;
-    });
-    await vi.waitFor(() => expect(browser.open).toHaveBeenCalled());
-    expect(done).toBe(false);
-
-    browser.finished.at(-1)?.();
-    await opened;
-
-    expect(done).toBe(true);
-  });
-
-  it('reports a sheet that would not open', async () => {
-    browser.open.mockRejectedValueOnce(new Error('no browser'));
-
-    await expect(openInBrowserSheet('https://openrouter.ai/auth')).rejects.toThrow('no browser');
-  });
-
-  it('closes the sheet without minding one that is already closed', () => {
-    browser.close.mockRejectedValueOnce(new Error('not open'));
-
-    expect(() => closeBrowserSheet()).not.toThrow();
   });
 });

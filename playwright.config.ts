@@ -135,8 +135,8 @@ const PRODUCTION_BUILD_SPECS_PATTERN =
 
 /**
  * Everything the two dev-server projects must not pick up: the production-build
- * specs above, plus the sharing journey and the assistant's account model,
- * which need the stubbed backend of the `sync` project.
+ * specs above, plus the sharing journey and the assistant, which need the
+ * stubbed backend of the `sync` project.
  */
 const DEV_SERVER_IGNORE_PATTERN =
   /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|performance\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|trip-template-link\.spec\.ts|assistant-account\.spec\.ts/;
@@ -281,8 +281,8 @@ const LIVE_URL = process.env.PW_LIVE_URL ?? 'https://app.kikouchou.app';
  *     Supabase project — writes into real rows for the first two, and for the
  *     third a `read_trip_template` for a token that does not exist there, so
  *     it asserts the stub's answer against production's refusal.
- *   - `assistant-account.spec.ts` signs in through the same stub, and its
- *     account model is only offered by a build with a Supabase project.
+ *   - `assistant-account.spec.ts` signs in through the same stub, and the
+ *     assistant answers only in a build with a Supabase project.
  *   - `performance.spec.ts` compares durations against thresholds calibrated on
  *     a loopback dev server. Over the public internet those numbers measure the
  *     tester's link, not the app.

@@ -62,11 +62,6 @@ vi.mock('@/lib/notifications/native-push', () => ({
 }));
 vi.mock('@/lib/notifications/opened', () => ({ reportNotificationOpened: doubles.reportOpened }));
 vi.mock('@/lib/supabase/auth-callback', () => ({ deliverAuthCallbackUrl: doubles.deliver }));
-const sheet = vi.hoisted(() => ({ close: vi.fn(), deliverOpenRouter: vi.fn(() => true) }));
-vi.mock('@/lib/native/oauth', () => ({ closeBrowserSheet: sheet.close }));
-vi.mock('@/features/assistant/openrouter/callback', () => ({
-  deliverOpenRouterCallbackUrl: sheet.deliverOpenRouter,
-}));
 
 import { render } from '@testing-library/react';
 
@@ -106,16 +101,6 @@ describe('openDeepLink', () => {
 
     expect(doubles.deliver).toHaveBeenCalled();
     expect(doubles.navigate).not.toHaveBeenCalled();
-  });
-
-  it('hands the OpenRouter sign-in to the assistant, never to Supabase', () => {
-    const url = 'app.kikouchou://openrouter/callback?code=abc&state=s';
-
-    openDeepLink(url);
-
-    expect(sheet.close).toHaveBeenCalled();
-    expect(sheet.deliverOpenRouter).toHaveBeenCalledWith(url);
-    expect(doubles.deliver).not.toHaveBeenCalled();
   });
 
   it('ignores a link from anywhere else', () => {

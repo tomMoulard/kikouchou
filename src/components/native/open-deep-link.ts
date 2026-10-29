@@ -7,9 +7,7 @@
  * @module components/native/open-deep-link
  */
 
-import { deliverOpenRouterCallbackUrl } from '@/features/assistant/openrouter/callback';
 import { resolveDeepLink } from '@/lib/native/deep-links';
-import { closeBrowserSheet } from '@/lib/native/oauth';
 import { NATIVE_URL_SCHEME, getPublicAppOrigin } from '@/lib/platform';
 import { deliverAuthCallbackUrl } from '@/lib/supabase/auth-callback';
 import { router } from '@/router';
@@ -36,11 +34,6 @@ export function openDeepLink(url: string): void {
       if (target.then !== null) {
         void router.navigate(target.then, { replace: true });
       }
-      return;
-    case 'openrouter':
-      // The assistant page subscribed before it opened the sheet.
-      closeBrowserSheet();
-      deliverOpenRouterCallbackUrl(url);
       return;
     case 'navigate':
       void router.navigate(target.to);

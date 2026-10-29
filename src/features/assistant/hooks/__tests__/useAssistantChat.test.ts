@@ -1,15 +1,14 @@
 /**
- * @fileoverview Tests for the account engine of useWebLLM: api.kikouchou.app.
+ * @fileoverview Tests for useAssistantChat: the assistant's connection to
+ * api.kikouchou.app.
  *
- * @module features/assistant/hooks/__tests__/useWebLLM.kikouchou
+ * @module features/assistant/hooks/__tests__/useAssistantChat
  */
 
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getAssistantModelPreset } from '@/features/assistant/models';
-
-import { useWebLLM } from '../useWebLLM';
+import { useAssistantChat } from '../useAssistantChat';
 
 // ============================================================================
 // Mocks
@@ -46,8 +45,6 @@ vi.mock('@/lib/supabase/client', () => ({
 // Test Helpers
 // ============================================================================
 
-const preset = getAssistantModelPreset('cloud-kikouchou');
-
 function delta(content: string): string {
   return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
 }
@@ -58,7 +55,7 @@ const fetchMock = vi.fn<typeof fetch>();
 // Tests
 // ============================================================================
 
-describe('useWebLLM with the account preset', () => {
+describe('useAssistantChat', () => {
   beforeEach(() => {
     session.token = 'access-token';
     fetchMock.mockReset();
@@ -69,20 +66,9 @@ describe('useWebLLM with the account preset', () => {
     vi.unstubAllGlobals();
   });
 
-  it('is idle while signed out, and loadModel never signs in on its own', async () => {
-    const { result } = renderHook(() => useWebLLM(preset, { accountSignedIn: false }));
-
-    expect(result.current.status).toBe('idle');
-    await act(async () => {
-      await result.current.loadModel();
-    });
-    expect(result.current.status).toBe('idle');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('is ready as soon as an account is signed in, with nothing to download', () => {
+  it('is idle while signed out, and ready as soon as an account signs in', () => {
     const { result, rerender } = renderHook(
-      ({ signedIn }: { signedIn: boolean }) => useWebLLM(preset, { accountSignedIn: signedIn }),
+      ({ signedIn }: { signedIn: boolean }) => useAssistantChat({ accountSignedIn: signedIn }),
       { initialProps: { signedIn: false } },
     );
     expect(result.current.status).toBe('idle');
@@ -90,13 +76,13 @@ describe('useWebLLM with the account preset', () => {
     rerender({ signedIn: true });
 
     expect(result.current.status).toBe('ready');
-    expect(result.current.isCached).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('asks api.kikouchou.app with the session token and streams the answer', async () => {
     fetchMock.mockResolvedValue(new Response(`${delta('A weekend in ')}${delta('Lisbon.')}data: [DONE]\n\n`));
     const onChunk = vi.fn();
-    const { result } = renderHook(() => useWebLLM(preset, { accountSignedIn: true }));
+    const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
 
     let answer = '';
     await act(async () => {
@@ -111,9 +97,9 @@ describe('useWebLLM with the account preset', () => {
     expect(result.current.status).toBe('ready');
   });
 
-  it('says the daily limit is reached, and stays ready for another model or tomorrow', async () => {
+  it('says the daily limit is reached, and stays ready for tomorrow', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 429 }));
-    const { result } = renderHook(() => useWebLLM(preset, { accountSignedIn: true }));
+    const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
 
     await act(async () => {
       await expect(
@@ -127,7 +113,7 @@ describe('useWebLLM with the account preset', () => {
 
   it('asks to sign in again when the server refuses the session', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
-    const { result } = renderHook(() => useWebLLM(preset, { accountSignedIn: true }));
+    const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
 
     await act(async () => {
       await expect(
@@ -136,15 +122,62 @@ describe('useWebLLM with the account preset', () => {
     });
   });
 
-  it('keeps the OpenRouter key out of it: no key is needed or read', async () => {
-    fetchMock.mockResolvedValue(new Response(`${delta('ok')}data: [DONE]\n\n`));
-    const { result } = renderHook(() => useWebLLM(preset, { accountSignedIn: true }));
+  it('reports a server that cannot be reached as a network error', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
 
     await act(async () => {
-      await result.current.generate([{ role: 'user', content: 'Plan it' }]);
+      await expect(
+        result.current.generate([{ role: 'user', content: 'Plan it' }]),
+      ).rejects.toThrow(/Could not reach the Kikouchou server/);
+    });
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('stops an answer in flight and keeps what already arrived', async () => {
+    fetchMock.mockImplementation(async (_url, init) => {
+      const signal = init?.signal;
+      const stream = new ReadableStream<Uint8Array>({
+        start(streamController) {
+          streamController.enqueue(new TextEncoder().encode(delta('Half an ')));
+          signal?.addEventListener('abort', () => {
+            streamController.error(new DOMException('Aborted', 'AbortError'));
+          });
+        },
+      });
+      return new Response(stream);
+    });
+    const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
+
+    let pending: Promise<string> = Promise.resolve('');
+    act(() => {
+      pending = result.current.generate([{ role: 'user', content: 'Plan it' }]);
+    });
+    expect(result.current.status).toBe('generating');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      result.current.interrupt();
     });
 
-    const [url] = fetchMock.mock.calls[0]!;
-    expect(String(url)).not.toContain('openrouter.ai');
+    await expect(pending).resolves.toBe('Half an ');
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('clears the last error once an account signs in again', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+    const { result, rerender } = renderHook(
+      ({ signedIn }: { signedIn: boolean }) => useAssistantChat({ accountSignedIn: signedIn }),
+      { initialProps: { signedIn: true } },
+    );
+    await act(async () => {
+      await result.current.generate([{ role: 'user', content: 'Plan it' }]).catch(() => undefined);
+    });
+    expect(result.current.error).toMatch(/Sign in again/);
+
+    rerender({ signedIn: false });
+    rerender({ signedIn: true });
+
+    expect(result.current.error).toBeNull();
   });
 });

@@ -936,7 +936,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Views ---------------------------------------------------------------
   // Not a write: `useTripActions` skips it and the chat bubble draws the view
   // from the live trip. It lives here so the prompt documents it, the
-  // validator checks it and Needle gets it as a tool, like every action.
+  // validator checks it, like every action.
   {
     action: 'showView',
     label: 'Show a trip view',
@@ -1169,8 +1169,8 @@ function typeHint(type: FieldType): string {
  * prompt used to pay ~100 characters per action to repeat it. They are printed
  * as one line each under a single shared example instead.
  *
- * The test that this saves for is not a style guard: `qwen3-1-7b` allocates
- * `prompt_tokens × 151936` logits, so the catalogue is measured in GPU memory.
+ * The test that this saves for is not a style guard: the catalogue goes out
+ * with every question, and every token of it is paid on the project's key.
  * Roughly half the catalogue is this shape, which is why the saving is worth a
  * second rendering path.
  *

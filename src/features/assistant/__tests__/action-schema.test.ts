@@ -279,14 +279,9 @@ describe('action-schema', () => {
  * The action prompt is paid on **every** turn, before a single byte of trip
  * data, and it is the largest fixed cost in the system prompt.
  *
- * On a model whose ONNX export does not slice the logits — `qwen3-1-7b` has no
- * `num_logits_to_keep` input, and neither did the Gemma 3 1B preset it
- * replaced — prefill computes logits for *every* prompt position, so each
- * prompt token costs `vocab_size` floats of GPU-to-CPU readback. At Qwen3's
- * 151936-token vocabulary that is 297 KiB per prompt token in fp16, against the
- * half a mebibyte Gemma charged, and a 2401-token prompt at the Gemma rate is
- * what took the WebGPU device down with "Failed to allocate memory for buffer
- * mapping". The budget was not raised to spend the difference.
+ * Every token of it is paid on the project's key, on every question. The budget
+ * was set while the models ran on the user's own GPU, where a longer prompt
+ * failed to allocate, and it was not raised when they moved to the server.
  *
  * Characters rather than tokens, so the guard runs without downloading a
  * tokenizer; these tokenizers average ~3.6 chars per token on this text,
@@ -308,9 +303,8 @@ describe('action-schema', () => {
  * is the one thing a person asks it to do while standing in a supermarket.
  *
  * The cost is measurable rather than notional. At ~3.6 characters per token the
- * catalogue went from ~1030 tokens to ~1160, and at half a mebibyte of logits
- * per prompt token that is roughly 65 MiB more readback per turn, against the
- * ~1.9 GiB that actually failed. The ceiling is still a real one: it is 100
+ * catalogue went from ~1030 tokens to ~1160 on every question. The ceiling is
+ * still a real one: it is 100
  * characters above what the catalogue costs today, so the next action pays for
  * itself by trimming, exactly as the ride actions did.
  */
@@ -321,8 +315,8 @@ const MAX_ACTION_PROMPT_CHARS = 4300;
  * offers: everything above, plus the five meal planner actions.
  *
  * Raised rather than trimmed to fit, by the project owner's decision on
- * 2026-10-29: the meal actions cost about 420 characters (~115 tokens, ~33
- * MiB of logits per turn on qwen3-1-7b), and only flagged devices pay it.
+ * 2026-10-29: the meal actions cost about 420 characters (~115 tokens per
+ * turn), and only flagged devices pay it.
  * The ceiling above still holds every device without the flag.
  */
 const MAX_MEAL_PLANNER_ACTION_PROMPT_CHARS = 4750;
@@ -719,8 +713,8 @@ describe('generateActionPrompt narrowing', () => {
 
 /**
  * `showView` is the one entry that writes nothing. It sits in the catalogue so
- * the prompt documents it, the validator holds it to its enum and Needle gets
- * it as a tool, exactly as it would a mutation.
+ * the prompt documents it and the validator holds it to its enum, exactly as
+ * it would a mutation.
  */
 describe('action-schema — showView', () => {
   it('is offered to the LLM with every view the chat can draw', () => {

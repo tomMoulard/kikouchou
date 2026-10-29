@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { redactAiMessages, redactAiOutput } from '@/features/assistant/ai-telemetry';
-import type { ChatMessage } from '@/features/assistant/hooks/useWebLLM';
+import type { ChatMessage } from '@/features/assistant/hooks/useAssistantChat';
 
 // ============================================================================
 // Helpers

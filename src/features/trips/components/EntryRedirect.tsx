@@ -9,7 +9,7 @@
  * view itself does better. Its planning arm opens the sample trip's calendar
  * instead of the list; its wizard arm opens `/trips/new`, which for a device
  * with no trip of its own is the first-trip wizard; its assistant arm opens
- * `/assistant` on the account model, with starter questions; its control arm
+ * `/assistant`, with starter questions; its control arm
  * keeps the list.
  *
  * Only a device whose one trip is the sample takes part. Anyone with a trip of
@@ -78,7 +78,7 @@ const SampleEntry = memo(function SampleEntry({ sampleTripId }: SampleEntryProps
     return <Navigate to="/trips/new" replace />;
   }
   if (variant === ASSISTANT_VARIANT) {
-    // The entry state is what makes the page offer the account model.
+    // The entry state says the app went there itself, not a click.
     return <Navigate to="/assistant" replace state={OPENED_ON_ENTRY} />;
   }
   return <Navigate to="/trips" replace />;

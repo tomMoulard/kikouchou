@@ -64,11 +64,6 @@ function manualChunks(id: string): string | undefined {
     return 'vendor-icons'
   }
 
-  // Hugging Face Transformers.js — large ML runtime, only loaded by the AI assistant page
-  if (id.includes('@huggingface/transformers') || id.includes('onnxruntime')) {
-    return 'vendor-transformers'
-	}
-
   // Supabase client — auth + Postgres + Realtime, loaded on every page that syncs
   if (id.includes('@supabase')) {
     return 'vendor-supabase'
@@ -406,12 +401,7 @@ export default defineConfig({
         // worker source at all; see `src/lib/notifications`.
         importScripts: ['sw-notifications.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Exclude the large Transformers.js bundles from precache — the ML
-        // runtime now lives in the assistant worker, fetched only when someone
-        // actually loads a model.
         globIgnores: [
-          '**/vendor-transformers*.js',
-          '**/llm.worker*.js',
           // Byte-identical to index.html; see githubPagesSpaFallback above.
           '404.html',
           // The link preview cards. Only ever fetched by a crawler resolving

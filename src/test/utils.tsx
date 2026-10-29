@@ -463,7 +463,7 @@ export interface RealI18nRenderResult extends CustomRenderResult {
  *
  * Two boundaries this does **not** move. `@/lib/i18n` stays mocked, so a
  * component reaching translations through `import i18n from '@/lib/i18n'`
- * (`lib/yjs/dexie-bridge`, `features/assistant/hooks/useWebLLM`) still renders
+ * (`lib/yjs/dexie-bridge`, `features/assistant/hooks/useAssistantChat`) still renders
  * keys, silently, alongside the prose from `useTranslation`; unmock that module
  * too if the surface under test uses it. And a call site passing an inline
  * `defaultValue` is backstopped by that default, so an English assertion on it

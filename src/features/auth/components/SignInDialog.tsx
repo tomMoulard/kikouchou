@@ -3,7 +3,7 @@
  *
  * Nothing in the app opens this on launch. It appears only at the moments that
  * genuinely need a server: sharing a trip, joining one, and asking the
- * assistant through the account model. The reason for signing in is therefore
+ * assistant. The reason for signing in is therefore
  * always visible on screen behind it. That is why the copy
  * leads with what the account is *for* rather than with the provider.
  *

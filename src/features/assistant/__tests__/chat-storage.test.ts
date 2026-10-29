@@ -17,7 +17,7 @@ import {
   trimChatHistoryForPrompt,
 } from '../chat-storage';
 import { buildShowViewBlock } from '../views';
-import type { ChatMessage as LLMChatMessage } from '../hooks/useWebLLM';
+import type { ChatMessage as LLMChatMessage } from '../hooks/useAssistantChat';
 
 // ============================================================================
 // Test Helpers
@@ -93,7 +93,7 @@ describe('messagesToLLMChatHistory', () => {
   });
 
   it('drops a prompt whose turn failed, so roles keep alternating', () => {
-    // Two user turns in a row make Gemma's chat template throw, which would
+    // Two user turns in a row make many chat templates throw, which would
     // break every later generation rather than just the failed one.
     const history = messagesToLLMChatHistory([
       message('1', 'user', 'hello'),
@@ -210,7 +210,7 @@ describe('trimChatHistoryForPrompt', () => {
   });
 
   it('drops whole exchanges so the roles keep alternating', () => {
-    // Gemma's chat template rejects two user turns in a row, so a history that
+    // Many chat templates reject two user turns in a row, so a history that
     // starts on an assistant answer would break every later generation.
     const trimmed = trimChatHistoryForPrompt(exchanges(10));
 
