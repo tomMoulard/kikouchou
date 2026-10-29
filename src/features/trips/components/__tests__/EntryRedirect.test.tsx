@@ -68,9 +68,9 @@ describe('EntryRedirect', () => {
     mockedUseFeatureFlagVariant.mockReturnValue('control');
   });
 
-  it('opens the sample calendar in the test arm, saying the app went there itself', () => {
+  it('opens the sample calendar in the planning arm, saying the app went there itself', () => {
     withTrips([SAMPLE_ID], SAMPLE_ID);
-    mockedUseFeatureFlagVariant.mockReturnValue('test');
+    mockedUseFeatureFlagVariant.mockReturnValue('planning');
 
     renderEntry();
 

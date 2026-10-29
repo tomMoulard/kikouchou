@@ -6,7 +6,7 @@
  * row. Of the visitors who arrive that way almost none open it: they read the
  * list, go to "New trip" and leave inside the wizard. The
  * `onboarding-planning-view` experiment asks whether showing the planning
- * view itself does better. Its test arm opens the sample trip's calendar
+ * view itself does better. Its planning arm opens the sample trip's calendar
  * instead of the list; its wizard arm opens `/trips/new`, which for a device
  * with no trip of its own is the first-trip wizard; its assistant arm opens
  * `/assistant` on the account model, with starter questions; its control arm
@@ -39,7 +39,7 @@ import type { TripId } from '@/types';
 export const ONBOARDING_PLANNING_VIEW_FLAG = 'onboarding-planning-view';
 
 /** The variant that opens the sample's calendar. */
-const PLANNING_VIEW_VARIANT = 'test';
+const PLANNING_VIEW_VARIANT = 'planning';
 
 /** The variant that opens the first-trip wizard. */
 const WIZARD_VARIANT = 'wizard';
@@ -85,7 +85,7 @@ const SampleEntry = memo(function SampleEntry({ sampleTripId }: SampleEntryProps
 });
 
 /**
- * The index route: the trip list, the sample's calendar in the test arm, the
+ * The index route: the trip list, the sample's calendar in the planning arm, the
  * first-trip wizard in the wizard arm, or the assistant in the assistant arm.
  */
 export const EntryRedirect = memo(function EntryRedirect(): ReactElement {

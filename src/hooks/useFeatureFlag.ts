@@ -68,10 +68,10 @@ export function readFlagOverride(key: string): boolean | undefined {
 /**
  * A forced variant for one flag, or `undefined` when none is set.
  *
- * `on` forces the `test` arm and `off` the `control` arm, the keys every
- * experiment here uses; any other stored value is taken as a variant key
- * (`wizard` and `assistant` reach the other arms of
- * `onboarding-planning-view`).
+ * `on` forces the `test` arm and `off` the `control` arm, the keys most
+ * experiments here use; any other stored value is taken as a variant key
+ * (`planning`, `wizard` and `assistant` reach the arms of
+ * `onboarding-planning-view`, which has no `test`).
  *
  * @param key - The flag key
  * @returns The forced variant key, or undefined
@@ -196,7 +196,7 @@ export function useFeatureFlag(key: string): boolean | undefined {
  * ```tsx
  * const variant = useFeatureFlagVariant('onboarding-planning-view');
  * if (variant === undefined) return <LoadingState />;
- * return variant === 'test' ? <PlanningView /> : <TripList />;
+ * return variant === 'planning' ? <PlanningView /> : <TripList />;
  * ```
  */
 export function useFeatureFlagVariant(key: string): string | false | undefined {

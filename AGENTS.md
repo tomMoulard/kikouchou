@@ -387,7 +387,7 @@ How the seed behaves, and why:
   account.
 - **A first open lands on the trip list, with the pet on.** `/` redirects
   to `/trips`, where the sample is the first row. The exceptions are three
-  arms of the `onboarding-planning-view` experiment: `test` opens the
+  arms of the `onboarding-planning-view` experiment: `planning` opens the
   sample's calendar, `wizard` opens the first-trip wizard and `assistant`
   opens the assistant (see the feature flags section). When the seed
   answers `seeded`, `main.tsx` also turns the pet on (`storePetEnabled`). Only
@@ -680,25 +680,25 @@ the static "enterprise customers" cohort. `meal-planner` shows the meal planner
 arms differ in what they show and not in what they save.
 
 `onboarding-planning-view` is an experiment, so its flag is multivariate
-(`control`, `test`, `wizard`, `assistant`), and `isFeatureEnabled` answers
+(`control`, `planning`, `wizard`, `assistant`), and `isFeatureEnabled` answers
 `true` in every arm. Read
 it with `useFeatureFlagVariant(key)`, which returns the variant key, `false`
 for a person in no arm, or `undefined` while PostHog is asked. The override
-`on` forces `test`, `off` forces `control`, and any other value forces the
-variant of that name (`wizard`, `assistant`). Reading the variant is what
+`off` forces `control`, and any other value forces the variant of that name
+(`planning`, `wizard`, `assistant`); `on` forces `test`, which this flag does
+not have. Reading the variant is what
 sends `$feature_flag_called`, the exposure the experiment counts, so
 `EntryRedirect` (the `/` route) reads it only for a device whose one trip is
-the sample; anyone else goes to `/trips` without being counted. The test arm
-opens `/trips/<sample>/calendar` with router state `{ via: 'entry' }`, so
+the sample; anyone else goes to `/trips` without being counted. The planning
+arm opens `/trips/<sample>/calendar` with router state `{ via: 'entry' }`, so
 `sample_trip_viewed` tells that view from a click. The wizard arm opens
 `/trips/new`, which on such a device is the first-trip wizard; its cancel
 goes to `/trips`. The assistant arm opens `/assistant` with router state
 `{ via: 'entry' }`, which makes the page offer the account model to a visitor
 with no stored model, with starter questions: two that create a trip and two
 about the sample. Signed out, a starter asks for an account first. The wizard
-arm was added on 2026-10-29, before the first exposure; the assistant arm is
-planned at a 25/25/25/25 split, once api.kikouchou.app is deployed. The
-primary metric is
+and assistant arms were added on 2026-10-29, and the arms split 25/25/25/25.
+The planning arm was keyed `test` until the same day. The primary metric is
 `trip_created` after exposure. Started on 2026-10-29, after a review of the
 funnel: of 1201 new app visitors in 28 days, 497 opened the first-trip wizard,
 9 opened the sample and 9 created a trip.
