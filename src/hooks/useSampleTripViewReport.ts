@@ -60,8 +60,9 @@ export const OPENED_FROM_ASSISTANT: TripPageNavigationState = { via: 'assistant'
 
 /**
  * Reads the way in from router state, which any code can set to anything.
+ * Exported for the other pages `/` can open on (`AssistantPage`).
  */
-function readVia(state: unknown): TripPageOpenedVia | 'other' {
+export function readVia(state: unknown): TripPageOpenedVia | 'other' {
   if (typeof state !== 'object' || state === null || !('via' in state)) {
     return 'other';
   }

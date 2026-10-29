@@ -120,6 +120,12 @@ interface ImportMetaEnv {
   readonly VITE_SHARE_ORIGIN?: string;
 
   /**
+   * Where the assistant API answers, `https://api.kikouchou.app` when absent
+   * (`server/assistant-api`). Points a build at another deploy of it.
+   */
+  readonly VITE_ASSISTANT_API_URL?: string;
+
+  /**
    * The website's origin, `https://app.kikouchou.app` when absent.
    *
    * The store apps load from `capacitor://localhost` or `https://localhost`,

@@ -589,7 +589,8 @@ export type AssistantModelId =
   | 'cloud-auto'
   | 'cloud-claude-haiku'
   | 'cloud-claude-sonnet'
-  | 'cloud-gpt-sol';
+  | 'cloud-gpt-sol'
+  | 'cloud-kikouchou';
 
 // ============================================================================
 // Base Interfaces

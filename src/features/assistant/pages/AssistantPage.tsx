@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
 import {
@@ -57,6 +58,9 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { useAuth } from '@/features/auth';
+import { SignInDialog } from '@/features/auth/components/SignInDialog';
+import { readVia } from '@/hooks/useSampleTripViewReport';
 
 import { cn } from '@/lib/utils';
 import { getSettings, updateSettings } from '@/lib/db';
@@ -82,6 +86,9 @@ import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import { redactAiMessages, redactAiOutput } from '../ai-telemetry';
 import { splitReasoning } from '../reasoning';
 import { ViewShortcuts } from '../components/ViewShortcuts';
+import { StarterPrompts } from '../components/StarterPrompts';
+import type { StarterKind } from '../starters';
+import { storePendingPrompt, takePendingPrompt } from '../pending-prompt';
 import { type AssistantView, buildShowViewBlock } from '../views';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
 import type { WebGPUSupport } from '../webgpu';
@@ -92,6 +99,7 @@ import {
   useWebLLM,
 } from '../hooks/useWebLLM';
 import {
+  ACCOUNT_ASSISTANT_MODEL_ID,
   ASSISTANT_MODEL_PRESETS,
   type AssistantModelPreset,
   DEFAULT_ASSISTANT_MODEL_ID,
@@ -106,6 +114,7 @@ import { consumeOpenRouterCallback, onOpenRouterCallback } from '../openrouter/c
 import posthog, { captureEvent, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { isNativeApp } from '@/lib/platform';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelId } from '@/types';
 
@@ -521,6 +530,82 @@ const CloudConnectCard = memo(function CloudConnectCard({
   );
 });
 
+/**
+ * The card the account preset shows to a signed-out visitor: the questions it
+ * can start with, where the trip goes, and the way to an account.
+ *
+ * The starters are here, and not only in the empty chat, because this is the
+ * first screen of the onboarding experiment's assistant arm. A tap on one asks
+ * for the account and keeps the question, which is sent once the visitor is
+ * back. The privacy line is the same promise `CloudConnectCard` makes, with
+ * the project's server added to the path.
+ */
+const AccountAssistantCard = memo(function AccountAssistantCard({
+  onPick,
+  onSignIn,
+  error,
+}: {
+  readonly onPick: (text: string, kind: StarterKind) => void;
+  readonly onSignIn: () => void;
+  readonly error: string | null;
+}): ReactElement {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-1 items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 mb-2">
+            <Sparkles className="size-7 text-primary" aria-hidden="true" />
+          </div>
+          <CardTitle className="text-lg">
+            {t('assistant.account.title', 'Plan your trip by asking')}
+          </CardTitle>
+          <CardDescription>
+            {t(
+              'assistant.account.description',
+              'Tell the assistant about your trip and it fills in the dates, the guests and the rooms. It comes with a free Kikouchou account, with a daily limit, and needs no download.',
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+          <StarterPrompts onPick={onPick} disabled={false} />
+          <p className="text-xs text-muted-foreground text-center">
+            {t(
+              'assistant.account.privacyNotice',
+              'Each question sends your trip details, guest names included, to the Kikouchou server, then to OpenRouter and to the company that runs the model.',
+            )}
+          </p>
+          <Button className="w-full" onClick={onSignIn}>
+            <LogIn className="size-4 mr-2" aria-hidden="true" />
+            {t('assistant.account.signIn', 'Sign in to start')}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+});
+
+/**
+ * Which `$ai_provider` an answer is reported under.
+ */
+function aiProviderFor(preset: AssistantModelPreset): string {
+  switch (preset.engine) {
+    case 'kikouchou':
+      return 'kikouchou';
+    case 'openrouter':
+      return 'openrouter';
+    case 'transformers':
+    case 'needle':
+      return 'huggingface';
+  }
+}
+
 const ModelLoadingCard = memo(function ModelLoadingCard({
   onLoad,
   onCancel,
@@ -907,6 +992,17 @@ const ChatInput = memo(function ChatInput({
  */
 function AssistantPageComponent(): ReactElement {
   const { t } = useTranslation();
+  const { session } = useAuth();
+  // An anonymous session is not an account: the server refuses it.
+  const accountSignedIn = session !== null && session.user.is_anonymous !== true;
+  const accountsAvailable = isSupabaseConfigured();
+  // The onboarding experiment's assistant arm opens this page from `/`
+  // (`EntryRedirect`). That visitor has chosen no model yet, and is offered
+  // the one that needs no download.
+  const { state: locationState } = useLocation();
+  const openedOnEntry = readVia(locationState) === 'entry';
+  const openedOnEntryRef = useRef(openedOnEntry);
+  const [signInOpen, setSignInOpen] = useState(false);
   const [selectedModelId, setSelectedModelId] =
     useState<AssistantModelId>(DEFAULT_ASSISTANT_MODEL_ID);
   const [cachedModelIds, setCachedModelIds] = useState<Set<AssistantModelId>>(
@@ -926,7 +1022,7 @@ function AssistantPageComponent(): ReactElement {
     unload,
     connect,
     disconnect,
-  } = useWebLLM(selectedModel);
+  } = useWebLLM(selectedModel, { accountSignedIn });
   const isCloud = isCloudPreset(selectedModel);
   const { systemPrompt, buildSystemPrompt, offeredActions } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
@@ -944,8 +1040,8 @@ function AssistantPageComponent(): ReactElement {
   // works anywhere (decided on 2026-10-22). Everything is listed while the
   // probe runs, so the picker does not flicker on a capable device.
   const offeredPresets = useMemo(
-    () => offeredAssistantPresets(webgpuSupport),
-    [webgpuSupport],
+    () => offeredAssistantPresets(webgpuSupport, accountsAvailable),
+    [accountsAvailable, webgpuSupport],
   );
 
   // And it does not open on a model it cannot run. The fallback is shown, not
@@ -1045,12 +1141,13 @@ function AssistantPageComponent(): ReactElement {
     async function loadModelPreference(): Promise<void> {
       try {
         const settings = await getSettings();
-        if (
-          !cancelled &&
-          !hasUserChangedModelRef.current &&
-          settings.assistantModelId
-        ) {
+        if (cancelled || hasUserChangedModelRef.current) return;
+        if (settings.assistantModelId) {
           setSelectedModelId(settings.assistantModelId);
+        } else if (openedOnEntryRef.current && isSupabaseConfigured()) {
+          // Shown, not saved: a visitor who never asks anything keeps the
+          // app's default for the day they open the page on their own.
+          setSelectedModelId(ACCOUNT_ASSISTANT_MODEL_ID);
         }
       } catch (settingsError) {
         console.error('Failed to load assistant model preference:', settingsError);
@@ -1337,14 +1434,15 @@ function AssistantPageComponent(): ReactElement {
           $ai_trace_id: traceId,
           $ai_session_id: sessionIdRef.current,
           $ai_model: selectedModelRef.current.modelId,
-          $ai_provider: ranInCloud ? 'openrouter' : 'huggingface',
+          $ai_provider: aiProviderFor(selectedModelRef.current),
           $ai_input: redactAiMessages(fullMessages),
           $ai_output_choices: redactAiOutput(response),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
-          // An on-device answer has no vendor token cost. A cloud one does, and
-          // it is billed to the user's OpenRouter account rather than to this
-          // project, so no cost is claimed for it here rather than a false 0.
+          // An on-device answer has no vendor token cost. A cloud one does: on
+          // `openrouter` it is billed to the user's account, and on `kikouchou`
+          // to the project, which the server's own OpenRouter activity records.
+          // Neither is known here, so no cost is claimed rather than a false 0.
           ...(ranInCloud
             ? {}
             : {
@@ -1394,9 +1492,7 @@ function AssistantPageComponent(): ReactElement {
           $ai_trace_id: traceId,
           $ai_session_id: sessionIdRef.current,
           $ai_model: selectedModelRef.current.modelId,
-          $ai_provider: isCloudPreset(selectedModelRef.current)
-            ? 'openrouter'
-            : 'huggingface',
+          $ai_provider: aiProviderFor(selectedModelRef.current),
           $ai_input: redactAiMessages(fullMessages),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
@@ -1472,6 +1568,47 @@ function AssistantPageComponent(): ReactElement {
     },
     [drainQueue, selectedModelId, status],
   );
+
+  // A starter tapped before signing in, sent once the account answers. The
+  // take forgets it, so StrictMode's second run finds nothing to send twice.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const pending = takePendingPrompt();
+    if (pending !== null) handleSend(pending.text);
+  }, [handleSend, status]);
+
+  const handleStarterPick = useCallback(
+    (text: string, kind: StarterKind): void => {
+      const needsAccount =
+        selectedModel.engine === 'kikouchou' && !accountSignedIn;
+      captureEvent('assistant_starter_picked', {
+        starter_kind: kind,
+        model_id: selectedModelId,
+        needs_sign_in: needsAccount,
+      });
+      if (!needsAccount) {
+        handleSend(text);
+        return;
+      }
+
+      storePendingPrompt({ text, kind });
+      // Asking is choosing: the account model stays selected through the
+      // sign-in, which can come back on a fresh page load.
+      hasUserChangedModelRef.current = true;
+      void updateSettings({ assistantModelId: selectedModelId }).catch(
+        (settingsError: unknown) => {
+          console.error('Failed to keep the assistant model:', settingsError);
+        },
+      );
+      setSignInOpen(true);
+    },
+    [accountSignedIn, handleSend, selectedModel.engine, selectedModelId],
+  );
+
+  const handleAccountSignIn = useCallback((): void => {
+    captureEvent('assistant_sign_in_requested', { model_id: selectedModelId });
+    setSignInOpen(true);
+  }, [selectedModelId]);
 
   // The engine reloads itself after a crash (see useWebLLM); pick the queue up
   // again as soon as it can answer.
@@ -1610,7 +1747,7 @@ function AssistantPageComponent(): ReactElement {
                 cachedModelIds={cachedModelIds}
                 presets={offeredPresets}
               />
-              {isCloud ? (
+              {selectedModel.engine === 'openrouter' ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1662,7 +1799,13 @@ function AssistantPageComponent(): ReactElement {
               cachedModelIds={cachedModelIds}
               presets={offeredPresets}
             />
-            {isCloud ? (
+            {selectedModel.engine === 'kikouchou' ? (
+              <AccountAssistantCard
+                onPick={handleStarterPick}
+                onSignIn={handleAccountSignIn}
+                error={error}
+              />
+            ) : isCloud ? (
               <CloudConnectCard onConnect={connect} error={error} />
             ) : (
               <ModelLoadingCard
@@ -1702,6 +1845,10 @@ function AssistantPageComponent(): ReactElement {
                     )}
                   </p>
                 </div>
+                <StarterPrompts
+                  onPick={handleStarterPick}
+                  disabled={isAnswering || queuedCount > 0}
+                />
               </div>
             )}
 
@@ -1742,6 +1889,20 @@ function AssistantPageComponent(): ReactElement {
           />
         </>
       )}
+
+      <SignInDialog
+        open={signInOpen}
+        onOpenChange={setSignInOpen}
+        title={t('assistant.account.signInTitle', 'Sign in to ask the assistant')}
+        reason={t(
+          'assistant.account.signInReason',
+          'The Kikouchou server answers your questions, and it answers accounts: a free account is all it takes.',
+        )}
+        detail={t(
+          'assistant.account.signInDetail',
+          'Your question is kept and sent as soon as you are back.',
+        )}
+      />
     </div>
   );
 }

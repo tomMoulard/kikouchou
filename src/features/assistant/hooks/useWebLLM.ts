@@ -41,6 +41,10 @@ import {
   OPENROUTER_CALLBACK_SEGMENT,
 } from '../openrouter/callback';
 import { OpenRouterError, streamOpenRouterChat } from '../openrouter/client';
+import {
+  KikouchouApiError,
+  streamKikouchouChat,
+} from '../kikouchou-api/client';
 import type {
   HubProgressEvent,
   LLMWorkerRequest,
@@ -220,12 +224,24 @@ export interface UseWebLLMReturn {
   /** Unload the model and free resources */
   unload: () => Promise<void>;
   /**
-   * Cloud presets only: sends the user to OpenRouter to sign in. The page
+   * OpenRouter presets only: sends the user to OpenRouter to sign in. The page
    * navigates away, and the callback lands back on the assistant.
    */
   connect: () => Promise<void>;
-  /** Cloud presets only: forgets the OpenRouter key on this device. */
+  /** OpenRouter presets only: forgets the OpenRouter key on this device. */
   disconnect: () => void;
+}
+
+/**
+ * What the hook cannot find out for itself.
+ */
+export interface UseWebLLMOptions {
+  /**
+   * Whether an account is signed in on this device. The `kikouchou` engine is
+   * ready exactly when it is: the server answers accounts, and the account
+   * lives in `AuthContext`, which this hook does not read.
+   */
+  readonly accountSignedIn?: boolean;
 }
 
 interface FileEntry {
@@ -595,6 +611,35 @@ function describeOpenRouterError(error: OpenRouterError): string {
 }
 
 /**
+ * The words a failed answer from api.kikouchou.app is shown with.
+ */
+function describeKikouchouError(error: KikouchouApiError): string {
+  switch (error.kind) {
+    case 'unauthorized':
+      return i18n.t('assistant.account.errors.unauthorized', {
+        defaultValue: 'Your session has ended. Sign in again to keep using this model.',
+      });
+    case 'daily-limit':
+      return i18n.t('assistant.account.errors.dailyLimit', {
+        defaultValue:
+          'You have used today\'s questions. The count starts again tomorrow, or pick another model.',
+      });
+    case 'unavailable':
+      return i18n.t('assistant.account.errors.unavailable', {
+        defaultValue: 'The Kikouchou server cannot answer right now. Try again in a moment.',
+      });
+    case 'network':
+      return i18n.t('assistant.account.errors.network', {
+        defaultValue: 'Could not reach the Kikouchou server. Check your connection.',
+      });
+    case 'provider':
+      return i18n.t('assistant.account.errors.provider', {
+        defaultValue: 'The model did not answer. Try again.',
+      });
+  }
+}
+
+/**
  * Where OpenRouter sends the user back: the assistant page, absolute.
  */
 function getOpenRouterCallbackUrl(): string {
@@ -647,6 +692,7 @@ function sendRequest(
  * via Hugging Face Transformers.js, running in a worker.
  *
  * @param preset - Selected assistant model preset
+ * @param options - What the hook cannot find out for itself
  * @returns Engine state and control functions
  *
  * @example
@@ -661,14 +707,22 @@ function sendRequest(
  * ]);
  * ```
  */
-export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
-  const isCloud = preset.engine === 'openrouter';
-  const cloudConnected = useSyncExternalStore(
+export function useWebLLM(
+  preset: AssistantModelPreset,
+  { accountSignedIn = false }: UseWebLLMOptions = {},
+): UseWebLLMReturn {
+  const isCloud = preset.engine === 'openrouter' || preset.engine === 'kikouchou';
+  const openRouterConnected = useSyncExternalStore(
     subscribeOpenRouterConnection,
     isOpenRouterConnected,
     () => false,
   );
+  // "Connected" is the OpenRouter key on one cloud engine and the account on
+  // the other; past this line both read the same.
+  const cloudConnected =
+    preset.engine === 'kikouchou' ? accountSignedIn : openRouterConnected;
   const [status, setStatus] = useState<EngineStatus>(() => {
+    if (preset.engine === 'kikouchou') return accountSignedIn ? 'ready' : 'idle';
     if (isCloud) return isOpenRouterConnected() ? 'ready' : 'idle';
     return loadedModelId === preset.modelId ? 'ready' : 'idle';
   });
@@ -711,9 +765,10 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     activeModelIdRef.current = preset.modelId;
 
     if (isCloud) {
-      // Nothing to probe or load: the stored key is the whole of "ready". An
-      // error is kept on disconnect, because a revoked key disconnects the
-      // account and the card has to say why the user is back on it.
+      // Nothing to probe or load: the stored key, or the account, is the whole
+      // of "ready". An error is kept on disconnect, because a revoked key
+      // disconnects the account and the card has to say why the user is back
+      // on it.
       cacheProbeVersionRef.current += 1;
       setLoadProgress(null);
       setIsCached(cloudConnected);
@@ -763,6 +818,11 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       // Never a sign-in from here: the auto-load effect calls this, and a
       // redirect the user did not ask for would take them off the page.
       if (isOpenRouterConnected()) setStatus('ready');
+      return;
+    }
+    if (preset.engine === 'kikouchou') {
+      // Same rule: the page asks for the account, never this.
+      if (accountSignedIn) setStatus('ready');
       return;
     }
 
@@ -863,7 +923,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     } finally {
       loadingRef.current = false;
     }
-  }, [isCached, preset]);
+  }, [accountSignedIn, isCached, preset]);
 
   // ------------------------------------------------------------------
   // cancelLoad
@@ -886,8 +946,9 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     messages: ChatMessage[],
     onChunk?: (chunk: string) => void,
   ): Promise<string> => {
-    const apiKey = getOpenRouterKey();
-    if (apiKey === null) {
+    const viaAccount = preset.engine === 'kikouchou';
+    const apiKey = viaAccount ? null : getOpenRouterKey();
+    if (!viaAccount && apiKey === null) {
       throw new Error(
         i18n.t('assistant.cloud.errors.notConnected', {
           defaultValue: 'Connect your OpenRouter account to use this model.',
@@ -902,17 +963,31 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     setError(null);
 
     try {
-      const response = await streamOpenRouterChat({
-        apiKey,
-        model: preset.modelId,
-        messages,
-        referer: window.location.origin,
-        signal: controller.signal,
-        onChunk,
-      });
+      const response = viaAccount
+        ? await streamKikouchouChat({
+            messages,
+            signal: controller.signal,
+            onChunk,
+          })
+        : await streamOpenRouterChat({
+            apiKey: apiKey ?? '',
+            model: preset.modelId,
+            messages,
+            referer: window.location.origin,
+            signal: controller.signal,
+            onChunk,
+          });
       setStatus('ready');
       return response;
     } catch (err) {
+      if (err instanceof KikouchouApiError) {
+        // The account is `AuthContext`'s to end, not this hook's: an expired
+        // session says so and leaves the page where it is.
+        const message = describeKikouchouError(err);
+        setError(message);
+        setStatus('ready');
+        throw new Error(message, { cause: err });
+      }
       if (!(err instanceof OpenRouterError)) {
         setStatus('ready');
         throw err;
@@ -934,7 +1009,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
         cloudAbortController = null;
       }
     }
-  }, [preset.modelId]);
+  }, [preset.engine, preset.modelId]);
 
   // ------------------------------------------------------------------
   // generate
@@ -944,7 +1019,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       messages: ChatMessage[],
       onChunk?: (chunk: string) => void,
     ): Promise<string> => {
-      if (preset.engine === 'openrouter') {
+      if (preset.engine === 'openrouter' || preset.engine === 'kikouchou') {
         return generateInCloud(messages, onChunk);
       }
 
@@ -1029,7 +1104,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // unload
   // ------------------------------------------------------------------
   const unload = useCallback(async (): Promise<void> => {
-    if (preset.engine === 'openrouter') {
+    if (preset.engine === 'openrouter' || preset.engine === 'kikouchou') {
       // Nothing is held on the device. Stopping the answer in flight is all
       // there is; the connection stays, so switching between two cloud models
       // does not sign the user out.

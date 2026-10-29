@@ -5,10 +5,13 @@
  * compute here, only a `fetch` whose body arrives as server-sent events.
  * The contract matches the local workers so `useWebLLM` can treat the cloud
  * like one more engine: `onChunk` receives the **whole answer so far**, and an
- * interrupt resolves with what arrived rather than rejecting.
+ * interrupt resolves with what arrived rather than rejecting. The events are
+ * read by `chat-stream`, which api.kikouchou.app's relay shares.
  *
  * @module features/assistant/openrouter/client
  */
+
+import { isAbortError, readChatStream } from '../chat-stream';
 
 // ============================================================================
 // Type Definitions
@@ -89,44 +92,6 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `OpenRouter answered ${response.status}`;
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
-/**
- * Folds one SSE `data:` payload into the answer.
- *
- * @returns The text it adds, or `null` for a payload that adds none
- * @throws OpenRouterError when the payload reports a mid-stream failure
- */
-function parseDataLine(data: string): string | null {
-  if (data === '[DONE]') return null;
-
-  let payload: {
-    error?: { message?: unknown };
-    choices?: { delta?: { content?: unknown } }[];
-  };
-  try {
-    payload = JSON.parse(data) as typeof payload;
-  } catch {
-    return null;
-  }
-
-  // A provider can fail after the 200 went out; OpenRouter then sends the
-  // error as one more event instead of a status code.
-  if (payload.error !== undefined) {
-    throw new OpenRouterError(
-      'provider',
-      typeof payload.error.message === 'string'
-        ? payload.error.message
-        : 'The model stopped with an error.',
-    );
-  }
-
-  const content = payload.choices?.[0]?.delta?.content;
-  return typeof content === 'string' ? content : null;
-}
-
 // ============================================================================
 // Public API
 // ============================================================================
@@ -179,38 +144,9 @@ export async function streamOpenRouterChat({
     throw new OpenRouterError('provider', 'OpenRouter sent an empty answer.');
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let answer = '';
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // An event can be split across reads, so only complete lines are parsed.
-      let newline = buffer.indexOf('\n');
-      while (newline !== -1) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        newline = buffer.indexOf('\n');
-
-        // Blank lines end an event; `:` lines are keep-alive comments.
-        if (!line.startsWith('data:')) continue;
-        const text = parseDataLine(line.slice('data:'.length).trim());
-        if (text !== null && text.length > 0) {
-          answer += text;
-          onChunk?.(answer);
-        }
-      }
-    }
-  } catch (error) {
-    if (isAbortError(error)) return answer;
-    if (error instanceof OpenRouterError) throw error;
-    throw new OpenRouterError('network', 'The connection to OpenRouter dropped.');
-  }
-
-  return answer;
+  return readChatStream(response.body, onChunk, {
+    provider: (message) => new OpenRouterError('provider', message),
+    dropped: () =>
+      new OpenRouterError('network', 'The connection to OpenRouter dropped.'),
+  });
 }

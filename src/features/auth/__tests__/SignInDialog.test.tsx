@@ -108,6 +108,27 @@ describe('SignInDialog', () => {
     expect(screen.getByText('Sign in to share “Brittany 2026”.')).toBeInTheDocument();
   });
 
+  it('takes a heading and a detail for an account that is not for sharing', () => {
+    mockedUseAuth.mockReturnValue(authState());
+
+    render(
+      <SignInDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Sign in to ask the assistant"
+        detail="Your question is kept."
+      />,
+      isolated,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Sign in to ask the assistant' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Your question is kept.')).toBeInTheDocument();
+    // The upload reassurance only fits the sharing flows.
+    expect(screen.queryByText('auth.signIn.localDataKept')).not.toBeInTheDocument();
+  });
+
   it('still offers a way in when discovery reached nothing', () => {
     mockedUseAuth.mockReturnValue(authState());
 

@@ -1,9 +1,10 @@
 /**
  * @fileoverview The sign-in prompt shown when an action needs an account.
  *
- * Nothing in the app opens this on launch. It appears only at the two moments
- * that genuinely need a server — sharing a trip and joining one — so the reason
- * for signing in is always visible on screen behind it. That is why the copy
+ * Nothing in the app opens this on launch. It appears only at the moments that
+ * genuinely need a server: sharing a trip, joining one, and asking the
+ * assistant through the account model. The reason for signing in is therefore
+ * always visible on screen behind it. That is why the copy
  * leads with what the account is *for* rather than with the provider.
  *
  * It exists alongside `/signin` rather than being replaced by it: sending
@@ -42,6 +43,13 @@ interface SignInDialogProps {
    * "to authenticate". Falls back to a generic line when omitted.
    */
   readonly reason?: string;
+  /** The heading, when the account is for something other than sharing. */
+  readonly title?: string;
+  /**
+   * The line under the reason. Falls back to the reassurance that a trip is
+   * uploaded as it is, which only fits the sharing flows.
+   */
+  readonly detail?: string;
 }
 
 // ============================================================================
@@ -52,6 +60,8 @@ export const SignInDialog = memo(function SignInDialog({
   open,
   onOpenChange,
   reason,
+  title,
+  detail,
 }: SignInDialogProps): ReactElement {
   const { t } = useTranslation();
 
@@ -70,7 +80,7 @@ export const SignInDialog = memo(function SignInDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t('auth.signIn.title', 'Create an account to share')}</DialogTitle>
+          <DialogTitle>{title ?? t('auth.signIn.title', 'Create an account to share')}</DialogTitle>
           <DialogDescription>
             {reason ??
               t(
@@ -81,10 +91,11 @@ export const SignInDialog = memo(function SignInDialog({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          {t(
-            'auth.signIn.localDataKept',
-            'Nothing you have already planned is lost. This trip is uploaded as it is.',
-          )}
+          {detail ??
+            t(
+              'auth.signIn.localDataKept',
+              'Nothing you have already planned is lost. This trip is uploaded as it is.',
+            )}
         </p>
 
         {/* Remounted with the dialog, so each opening asks the project afresh
