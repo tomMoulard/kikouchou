@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { NumberStepper } from '@/components/ui/number-stepper';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { PhotoField, type PhotoChange } from '@/components/shared/PhotoField';
 import { RoomIconDialog } from '@/components/shared/RoomIconDialog';
 import { cn } from '@/lib/utils';
 import { MAX_ROOM_CAPACITY, MIN_ROOM_CAPACITY } from '@/types';
@@ -39,8 +40,14 @@ import type { Room, RoomFormData, RoomIcon } from '@/types';
 interface RoomFormProps {
   /** Existing room for edit mode. If undefined, form is in create mode. */
   readonly room?: Room;
-  /** Callback when form is successfully submitted with validated data. */
-  readonly onSubmit: (data: RoomFormData) => Promise<void>;
+  /**
+   * Callback when form is successfully submitted with validated data. The
+   * second argument is passed only when the photo changed: a new prepared
+   * image, or `null` to remove it.
+   */
+  readonly onSubmit: (data: RoomFormData, photo?: PhotoChange) => Promise<void>;
+  /** The stored photo's address, when the room has one. */
+  readonly photoUrl?: string | undefined;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
   /** Callback when form dirty state changes (for unsaved changes guard). */
@@ -117,6 +124,7 @@ const RoomForm = memo(function RoomForm({
   onSubmit,
   onCancel,
   onDirtyChange,
+  photoUrl,
 }: RoomFormProps) {
   const { t } = useTranslation();
 
@@ -129,6 +137,7 @@ const RoomForm = memo(function RoomForm({
   const [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY);
   const [description, setDescription] = useState(room?.description ?? '');
   const [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon);
+  const [photo, setPhoto] = useState<PhotoChange>(undefined);
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});
@@ -141,6 +150,7 @@ const RoomForm = memo(function RoomForm({
     setCapacity(room?.capacity ?? DEFAULT_CAPACITY);
     setDescription(room?.description ?? '');
     setIcon(room?.icon);
+    setPhoto(undefined);
     setErrors({});
   }
 
@@ -150,8 +160,9 @@ const RoomForm = memo(function RoomForm({
       name !== (room?.name ?? '') ||
       capacity !== (room?.capacity ?? DEFAULT_CAPACITY) ||
       description !== (room?.description ?? '') ||
-      icon !== room?.icon,
-    [name, capacity, description, icon, room],
+      icon !== room?.icon ||
+      photo !== undefined,
+    [name, capacity, description, icon, photo, room],
   );
 
   // Notify parent of dirty state changes
@@ -286,11 +297,17 @@ const RoomForm = memo(function RoomForm({
     setIcon(newIcon);
   }, []);
 
+  /** The form's data, with the photo change when there is one. */
+  const submitWithPhoto = useCallback(
+    (data: RoomFormData) => (photo === undefined ? onSubmit(data) : onSubmit(data, photo)),
+    [onSubmit, photo],
+  );
+
   /**
    * Submission handler via useFormSubmission hook.
    */
   const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<RoomFormData>(
-    onSubmit,
+    submitWithPhoto,
   );
 
   /**
@@ -411,6 +428,16 @@ const RoomForm = memo(function RoomForm({
           rows={3}
         />
       </div>
+
+      {/* Photo: what tells "the red room" from the others at a glance. */}
+      <PhotoField
+        label={t('photos.roomLabel', 'Photo')}
+        storedUrl={photoUrl}
+        value={photo}
+        onChange={setPhoto}
+        alt={t('photos.roomAlt', { name: name.trim() || t('rooms.name') })}
+        disabled={isSubmitting}
+      />
 
       {/* Submission Error */}
       {submitError && (

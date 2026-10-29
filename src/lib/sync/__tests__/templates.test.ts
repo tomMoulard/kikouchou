@@ -105,6 +105,7 @@ const PAYLOAD: TripTemplatePayload = {
   location: 'Chamonix',
   coordinates: { lat: 45.9237, lon: 6.8694 },
   currency: 'EUR',
+  photoId: null,
   rooms: [{ name: 'Attic', capacity: 4, icon: 'bed-double' }],
 };
 
@@ -593,6 +594,7 @@ describe('the published row is bounded to what the server accepts', () => {
     location: 'l'.repeat(250),
     coordinates: null,
     currency: null,
+    photoId: null,
     rooms: Array.from({ length: 60 }, (_, index) => ({
       name: `${index}`.padEnd(150, 'r'),
       capacity: 2,

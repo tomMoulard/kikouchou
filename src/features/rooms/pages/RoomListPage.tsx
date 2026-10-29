@@ -1055,6 +1055,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           roomId={editingRoomId}
           open={isDialogOpen}
           onOpenChange={handleDialogOpenChange}
+          trip={currentTrip ?? undefined}
         />
       </div>
     );
@@ -1174,6 +1175,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
               <DroppableRoom roomId={room.id}>
                 <RoomCard
                   room={room}
+                  trip={currentTrip ?? undefined}
                   occupants={currentOccupants}
                   peakOccupancy={peakOccupancy}
                   availableSpots={availableSpots}
@@ -1263,6 +1265,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         roomId={editingRoomId}
         open={isDialogOpen}
         onOpenChange={handleDialogOpenChange}
+        trip={currentTrip ?? undefined}
       />
 
       {/* The suggested allocation, for review before anything is written */}

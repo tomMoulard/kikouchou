@@ -73,6 +73,7 @@ const TEMPLATE = {
   location: 'Chamonix',
   coordinates: { lat: 45.9237, lon: 6.8694 },
   currency: 'EUR',
+  photoId: null,
   rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' as const }],
 };
 
@@ -82,7 +83,7 @@ function answering(phase: unknown): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  answering({ kind: 'ready', template: TEMPLATE });
+  answering({ kind: 'ready', template: TEMPLATE, photos: new Map() });
 });
 
 // ============================================================================
@@ -111,6 +112,40 @@ describe('TemplateLandingPage', () => {
           currency: 'EUR',
           rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' }],
         },
+      }),
+    );
+  });
+
+  it('hands the wizard the photos the template brought, and leaves out one that did not arrive', () => {
+    const cover = new Blob(['cover'], { type: 'image/webp' });
+    const attic = new Blob(['attic'], { type: 'image/webp' });
+    answering({
+      kind: 'ready',
+      template: {
+        ...TEMPLATE,
+        photoId: 'coverPhoto0001',
+        rooms: [
+          { name: 'Attic', capacity: 4, icon: 'bunk-bed', photoId: 'roomPhoto0001' },
+          { name: 'Suite', capacity: 2, icon: 'bed-double', photoId: 'lostPhoto0001' },
+        ],
+      },
+      photos: new Map([
+        ['coverPhoto0001', cover],
+        ['roomPhoto0001', attic],
+      ]),
+    });
+
+    render(<TemplateLandingPage />, { withProviders: false });
+
+    expect(wizardProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prefill: expect.objectContaining({
+          photo: cover,
+          rooms: [
+            { name: 'Attic', capacity: 4, icon: 'bunk-bed', photo: attic },
+            { name: 'Suite', capacity: 2, icon: 'bed-double' },
+          ],
+        }),
       }),
     );
   });
@@ -192,6 +227,7 @@ describe('TemplateLandingPage', () => {
     answering({
       kind: 'ready',
       template: { ...TEMPLATE, description: null, location: null, coordinates: null },
+      photos: new Map(),
     });
 
     render(<TemplateLandingPage />, { withProviders: false });

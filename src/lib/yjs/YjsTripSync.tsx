@@ -248,6 +248,8 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       // is how a trip nobody ever archived stays free of it; `false` is a real
       // write that says a member took it back out.
       archived: trip.archived,
+      // The cover photo's id. The bytes go through Storage (`lib/photos`).
+      photoId: trip.photoId,
     });
   }, [
     readOnly,
@@ -259,6 +261,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     trip?.endDate,
     trip?.location,
     trip?.name,
+    trip?.photoId,
     trip?.startDate,
     trip?.updatedAt,
     tripId,

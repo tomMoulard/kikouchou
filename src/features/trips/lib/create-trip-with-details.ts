@@ -23,6 +23,7 @@ import {
   createTrip,
   setCurrentTrip,
 } from '@/lib/db';
+import { setRoomPhoto, setTripPhoto } from '@/lib/db/repositories/photo-repository';
 import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { markTripOrganised } from '@/features/trips/hooks/usePlanOwnTripPrompt';
 import type { PersonId, Trip, TripFormData, TripId } from '@/types';
@@ -37,6 +38,8 @@ export interface TripDraft {
   readonly form: TripFormData;
   readonly guests: readonly NewTripGuest[];
   readonly rooms: readonly NewTripRoom[];
+  /** The cover photo, already prepared: picked in the form, or a template's. */
+  readonly photo?: Blob;
   /** A previous trip whose rooms are copied, when the user picked one. */
   readonly importSourceTripId?: TripId | null;
   /**
@@ -51,7 +54,7 @@ export interface TripDraft {
 }
 
 /** What went wrong after the trip itself was saved. */
-export type TripCreationWarning = 'rooms-import' | 'guests' | 'rooms' | 'identity';
+export type TripCreationWarning = 'rooms-import' | 'guests' | 'rooms' | 'photos' | 'identity';
 
 export interface TripCreationOutcome {
   readonly trip: Trip;
@@ -89,6 +92,16 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
   }
 
   const warnings: TripCreationWarning[] = [];
+  let photosFailed = false;
+
+  if (draft.photo) {
+    try {
+      await setTripPhoto(trip.id, draft.photo);
+    } catch (error) {
+      reportError(error, { source: 'create-trip-with-details.photo' });
+      photosFailed = true;
+    }
+  }
 
   let importedRooms = false;
   if (draft.importSourceTripId) {
@@ -140,18 +153,29 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
   let rooms = 0;
   for (const room of draft.rooms) {
     try {
-      await createRoom(trip.id, {
+      const created = await createRoom(trip.id, {
         name: room.name,
         capacity: room.capacity,
         icon: room.icon,
       });
       rooms += 1;
+      if (room.photo) {
+        try {
+          await setRoomPhoto(trip.id, created.id, room.photo);
+        } catch (error) {
+          reportError(error, { source: 'create-trip-with-details.room-photo' });
+          photosFailed = true;
+        }
+      }
     } catch (error) {
       reportError(error, { source: 'create-trip-with-details.room' });
     }
   }
   if (rooms < draft.rooms.length) {
     warnings.push('rooms');
+  }
+  if (photosFailed) {
+    warnings.push('photos');
   }
 
   // Become the person the "You" row created. Nothing to store when the user

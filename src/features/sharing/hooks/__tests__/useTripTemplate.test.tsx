@@ -14,7 +14,9 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { useTripTemplate } from '../useTripTemplate';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { downloadPhoto } from '@/lib/photos/storage';
 import { readTripTemplate } from '@/lib/sync/templates';
+import type { PhotoId } from '@/types';
 
 // ============================================================================
 // Test doubles
@@ -25,8 +27,15 @@ vi.mock('@/lib/supabase/client', () => ({
   isSupabaseConfigured: vi.fn(() => true),
 }));
 
-vi.mock('@/lib/sync/templates', () => ({
+vi.mock('@/lib/sync/templates', async (importOriginal) => ({
+  // The real `templatePhotoIds`: it reads the payload and touches nothing.
+  ...(await importOriginal<typeof import('@/lib/sync/templates')>()),
   readTripTemplate: vi.fn(),
+}));
+
+vi.mock('@/lib/photos/storage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/photos/storage')>()),
+  downloadPhoto: vi.fn(),
 }));
 
 const TEMPLATE = {
@@ -35,6 +44,7 @@ const TEMPLATE = {
   location: null,
   coordinates: null,
   currency: null,
+  photoId: null,
   rooms: [],
 };
 
@@ -47,6 +57,7 @@ beforeEach(() => {
   // `clearAllMocks` clears the calls, not the implementations, so the default
   // is restated here rather than left to whichever test ran last.
   vi.mocked(readTripTemplate).mockResolvedValue({ status: 'ok', template: TEMPLATE });
+  vi.mocked(downloadPhoto).mockResolvedValue(null);
 });
 
 // ============================================================================
@@ -61,6 +72,34 @@ describe('useTripTemplate', () => {
       expect(result.current.phase.kind).toBe('ready');
     });
     expect(vi.mocked(readTripTemplate)).toHaveBeenCalledWith({}, TOKEN);
+  });
+
+  it('downloads the photos the template names, from its own prefix, and skips one that fails', async () => {
+    const cover = new Blob(['cover'], { type: 'image/webp' });
+    vi.mocked(readTripTemplate).mockResolvedValue({
+      status: 'ok',
+      template: {
+        ...TEMPLATE,
+        photoId: 'coverPhoto0001' as PhotoId,
+        rooms: [
+          { name: 'Red room', capacity: 2, icon: 'bed-double', photoId: 'roomPhoto0001' as PhotoId },
+        ],
+      },
+    });
+    vi.mocked(downloadPhoto).mockImplementation(async (_client, path) =>
+      path === `templates/${TOKEN}/coverPhoto0001` ? cover : null,
+    );
+
+    const { result } = renderHook(() => useTripTemplate(TOKEN));
+
+    await waitFor(() => {
+      expect(result.current.phase.kind).toBe('ready');
+    });
+    const { phase } = result.current;
+    expect(phase.kind === 'ready' && [...phase.photos.entries()]).toEqual([
+      ['coverPhoto0001', cover],
+    ]);
+    expect(vi.mocked(downloadPhoto)).toHaveBeenCalledWith({}, `templates/${TOKEN}/roomPhoto0001`);
   });
 
   it('refuses a token that is not shaped like one, without asking the server', async () => {

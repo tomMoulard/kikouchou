@@ -13,6 +13,7 @@ import {
 } from '@/features/rooms/utils/room-naming';
 import { db } from '@/lib/db/database';
 import { sanitizeRoomData } from '@/lib/db/sanitize';
+import { copyPhotosToTrip } from '@/lib/db/repositories/photo-repository';
 import { createRoomId } from '@/lib/db/utils';
 import { MAX_ROOM_CAPACITY, MIN_ROOM_CAPACITY } from '@/types';
 import type { Room, RoomFormData, RoomId, TripId } from '@/types';
@@ -402,12 +403,19 @@ export async function cloneRoomsToTrip(
       capacity: sourceRoom.capacity,
       description: sourceRoom.description,
       icon: sourceRoom.icon,
+      ...(sourceRoom.photoId === undefined ? {} : { photoId: sourceRoom.photoId }),
       order: baseOrder + index,
     }));
 
     await db.transaction('rw', db.rooms, async () => {
       await db.rooms.bulkAdd(clonedRooms);
     });
+
+    await copyPhotosToTrip(
+      sourceTripId,
+      targetTripId,
+      clonedRooms.flatMap((room) => (room.photoId === undefined ? [] : [room.photoId])),
+    );
 
     return clonedRooms;
   } catch (error) {
@@ -507,6 +515,8 @@ export async function duplicateRoomWithOwnershipCheck(
       capacity: source.capacity,
       description: source.description,
       icon: source.icon,
+      // Same trip, so the same bytes: the copy names the original's photo.
+      ...(source.photoId === undefined ? {} : { photoId: source.photoId }),
       order: source.order + 1,
     },
 

@@ -54,6 +54,7 @@ import { markdownToPlainText } from '@/lib/utils/markdown';
 import type { Person, Trip } from '@/types';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { usePhotoUrl } from '@/hooks/usePhotoUrl';
 
 // ============================================================================
 // Utility Functions
@@ -128,6 +129,7 @@ const TripCard = memo(function TripCard({
   isDisabled = false,
   persons,
 }: TripCardProps) {
+  const photoUrl = usePhotoUrl(trip, trip.photoId);
   const { t, i18n } = useTranslation(),
 
   // Get locale based on current language
@@ -277,11 +279,31 @@ const TripCard = memo(function TripCard({
         )}
       />
 
+      {/*
+        The cover photo, edge to edge across the top. `-mt-6` cancels the
+        card's own top padding so the photo meets the border. Decorative for
+        the activation button, which already names the trip, so `alt` names
+        it once more only for a reader moving through images.
+      */}
+      {photoUrl && (
+        <img
+          src={photoUrl}
+          alt={t('photos.tripAlt', { name: trip.name })}
+          loading="lazy"
+          decoding="async"
+          className="-mt-6 h-36 w-full rounded-t-xl object-cover"
+        />
+      )}
+
       {/* Share + overflow menu — top-right */}
       {showCornerActions && (
       // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the share or overflow button. The interactive elements are the ones inside it.
       <div
-        className="absolute top-2 right-2 z-20 flex items-center gap-0.5"
+        className={cn(
+          'absolute top-2 right-2 z-20 flex items-center gap-0.5',
+          // Over a photo the ghost buttons need a ground of their own to read.
+          photoUrl && 'rounded-md bg-background/80 backdrop-blur-sm',
+        )}
         onClick={handleMenuTriggerClick}
         onKeyDown={(e) => e.stopPropagation()}
       >

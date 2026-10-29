@@ -45,6 +45,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { MarkdownEditor } from '@/components/shared/MarkdownEditor';
+import { PhotoField, type PhotoChange } from '@/components/shared/PhotoField';
 import { cn } from '@/lib/utils';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toISODateStringFromString } from '@/lib/db/utils';
@@ -164,6 +165,14 @@ interface TripFormProps {
    */
   readonly onRoomsChange?: (rooms: readonly NewTripRoom[]) => void;
   /**
+   * The cover photo the form holds, already prepared, or `null` for none.
+   *
+   * Create mode only, and reported out like the rooms: the photo is written
+   * once the trip exists. On an existing trip the settings page has its own
+   * photo card, as it has for the description.
+   */
+  readonly onPhotoChange?: (photo: Blob | null) => void;
+  /**
    * Handle for pushing guests into the list from outside — see
    * {@link TripFormHandle}.
    */
@@ -222,6 +231,8 @@ export interface NewTripRoom {
   readonly capacity: number;
   /** Which glyph the room shows in every list and timeline. */
   readonly icon: RoomIcon;
+  /** A photo saved with the room: a template's, carried through the wizard. */
+  readonly photo?: Blob;
 }
 
 /**
@@ -378,6 +389,7 @@ const TripForm = memo(function TripForm({
   currentUserName,
   onGuestsChange,
   onRoomsChange,
+  onPhotoChange,
   ref,
   children,
 }: TripFormProps) {
@@ -430,6 +442,7 @@ const TripForm = memo(function TripForm({
     initialValues.coordinates,
   );
   const [currency, setCurrency] = useState(initialValues.currency);
+  const [photo, setPhoto] = useState<Blob | null>(null);
   const [guests, setGuests] = useState<readonly GuestRow[]>(buildInitialGuests);
   const [hasEditedFirstGuest, setHasEditedFirstGuest] = useState(false);
   /*
@@ -495,8 +508,10 @@ const TripForm = memo(function TripForm({
       currency !== initialValues.currency ||
       !isSameCoordinates(coordinates, initialValues.coordinates) ||
       isGuestListDirty ||
-      isRoomListDirty,
+      isRoomListDirty ||
+      photo !== null,
     [
+      photo,
       name,
       location,
       startDate,
@@ -555,6 +570,16 @@ const TripForm = memo(function TripForm({
     onRoomsChange?.(roomsToCreate);
   }, [isCreateMode, roomsToCreate, onRoomsChange]);
 
+  useEffect(() => {
+    if (isCreateMode) {
+      onPhotoChange?.(photo);
+    }
+  }, [isCreateMode, onPhotoChange, photo]);
+
+  const handlePhotoChange = useCallback((next: PhotoChange) => {
+    setPhoto(next ?? null);
+  }, []);
+
   /*
     The arithmetic the form used to leave to the user.
 
@@ -603,6 +628,7 @@ const TripForm = memo(function TripForm({
     setGuests(buildInitialGuests());
     setHasEditedFirstGuest(false);
     setRooms([]);
+    setPhoto(null);
     setErrors({});
   }
 
@@ -1142,6 +1168,17 @@ const TripForm = memo(function TripForm({
             maxLength={DESCRIPTION_MAX_LENGTH}
           />
         </div>
+      )}
+
+      {/* Cover photo. Create mode only, for the reason the description is. */}
+      {isCreateMode && (
+        <PhotoField
+          label={t('photos.tripLabel', 'Cover photo')}
+          value={photo}
+          onChange={handlePhotoChange}
+          alt={t('photos.tripAlt', { name: name.trim() || t('trips.name') })}
+          disabled={isSubmitting}
+        />
       )}
 
       {/* Currency — what the money page labels every amount with. One per

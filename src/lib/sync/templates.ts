@@ -33,6 +33,9 @@
 import { nanoid } from 'nanoid';
 
 import { getRoomsByTripId } from '@/lib/db';
+import { getPhoto, toPhotoId } from '@/lib/db/repositories/photo-repository';
+import { fetchTripPhoto } from '@/lib/photos/photo-sync';
+import { PHOTO_BUCKET, templatePhotoPath, uploadPhoto } from '@/lib/photos/storage';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import {
   DEFAULT_ROOM_ICON,
@@ -42,7 +45,7 @@ import {
   type CurrencyCode,
   type RoomIcon,
 } from '@/types';
-import type { Trip } from '@/types';
+import type { PhotoId, Trip } from '@/types';
 
 // ============================================================================
 // Constants
@@ -94,6 +97,8 @@ export interface TemplateRoom {
   readonly name: string;
   readonly capacity: number;
   readonly icon: RoomIcon;
+  /** The room's photo, read from `templates/<token>/<photoId>`. */
+  readonly photoId?: PhotoId;
 }
 
 /** Everything a template link hands to whoever opens it. */
@@ -103,6 +108,8 @@ export interface TripTemplatePayload {
   readonly location: string | null;
   readonly coordinates: { readonly lat: number; readonly lon: number } | null;
   readonly currency: CurrencyCode | null;
+  /** The trip's cover photo, read from `templates/<token>/<photoId>`. */
+  readonly photoId: PhotoId | null;
   readonly rooms: readonly TemplateRoom[];
 }
 
@@ -280,10 +287,12 @@ export async function buildTemplatePayload(trip: Trip): Promise<TripTemplatePayl
     location: trip.location ?? null,
     coordinates: trip.coordinates ?? null,
     currency: trip.currency ?? null,
+    photoId: trip.photoId ?? null,
     rooms: rooms.map((room) => ({
       name: room.name,
       capacity: room.capacity,
       icon: room.icon ?? DEFAULT_ROOM_ICON,
+      ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
     })),
   };
 }
@@ -302,10 +311,12 @@ function toTemplateRow(payload: TripTemplatePayload) {
     latitude: payload.coordinates?.lat ?? null,
     longitude: payload.coordinates?.lon ?? null,
     currency: payload.currency ?? null,
+    photo_id: payload.photoId,
     rooms: payload.rooms.slice(0, MAX_ROOMS).map((room) => ({
       name: room.name.slice(0, MAX_ROOM_NAME),
       capacity: room.capacity,
       icon: room.icon,
+      ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
     })),
     updated_at: new Date().toISOString(),
   };
@@ -358,7 +369,13 @@ function parseRoom(raw: unknown): TemplateRoom | null {
   }
   const capacity = Math.min(Math.max(Math.round(capacityRaw), 1), MAX_ROOM_CAPACITY);
 
-  return { name, capacity, icon: normalizeRoomIcon(record.icon) };
+  const photoId = toPhotoId(record.photoId);
+  return {
+    name,
+    capacity,
+    icon: normalizeRoomIcon(record.icon),
+    ...(photoId === undefined ? {} : { photoId }),
+  };
 }
 
 /**
@@ -417,6 +434,7 @@ function parsePayload(data: unknown): TripTemplatePayload | null {
     location: boundedText(record.location, MAX_LOCATION),
     coordinates,
     currency: typeof currencyRaw === 'string' ? normalizeCurrency(currencyRaw) : null,
+    photoId: toPhotoId(record.photoId) ?? null,
     rooms,
   };
 }
@@ -630,6 +648,83 @@ export async function readTripTemplate(
     // Offline: the fetch rejects rather than returning an error.
     return { status: 'error', message: toMessage(error) };
   }
+}
+
+// ============================================================================
+// Photos
+// ============================================================================
+
+/**
+ * Every photo a payload names, cover first, without repeats.
+ *
+ * @param payload - A template payload
+ * @returns The photo ids
+ */
+export function templatePhotoIds(payload: TripTemplatePayload): PhotoId[] {
+  const ids = [
+    ...(payload.photoId === null ? [] : [payload.photoId]),
+    ...payload.rooms.flatMap((room) => (room.photoId === undefined ? [] : [room.photoId])),
+  ];
+  return [...new Set(ids)];
+}
+
+/**
+ * Copies the photos a published payload names into the template's prefix,
+ * `templates/<token>/`, where a link holder can read them.
+ *
+ * The trip's own photos are readable by its members only, so the template
+ * gets copies under its token: the token is the credential for the photos
+ * exactly as it is for the rest of the payload. Called after the payload row
+ * is written, because the read rule checks the payload; a photo already
+ * there is not sent again.
+ *
+ * @param client - The owner's signed-in client
+ * @param trip - The local trip, whose cache holds the bytes
+ * @param payload - The payload just written
+ * @returns How many photos could not be copied
+ */
+export async function uploadTemplatePhotos(
+  client: TypedSupabaseClient,
+  trip: Pick<Trip, 'id' | 'remoteTripId'>,
+  payload: TripTemplatePayload,
+): Promise<number> {
+  const photoIds = templatePhotoIds(payload);
+  if (photoIds.length === 0 || trip.remoteTripId === undefined) {
+    return 0;
+  }
+
+  const state = await readTemplateState(client, trip.remoteTripId);
+  if (state.status !== 'ok' || !state.state.isTemplate || state.state.token === null) {
+    return 0;
+  }
+  const token = state.state.token;
+
+  const { data: listed } = await client.storage
+    .from(PHOTO_BUCKET)
+    .list(`templates/${token}`, { limit: 100 });
+  const present = new Set((listed ?? []).map((object) => object.name));
+
+  let failed = 0;
+  for (const photoId of photoIds) {
+    if (present.has(photoId)) {
+      continue;
+    }
+    try {
+      let row = await getPhoto(trip.id, photoId);
+      if (!row && (await fetchTripPhoto(client, trip.id, trip.remoteTripId, photoId))) {
+        row = await getPhoto(trip.id, photoId);
+      }
+      if (!row) {
+        failed += 1;
+        continue;
+      }
+      await uploadPhoto(client, templatePhotoPath(token, photoId), row.blob);
+    } catch (error: unknown) {
+      failed += 1;
+      console.warn('[templates] could not copy a photo:', toMessage(error));
+    }
+  }
+  return failed;
 }
 
 // ============================================================================

@@ -616,6 +616,10 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       // updateTrip label in action-schema.ts spells out.
       `- Map pin: ${hasValidCoordinates(currentTrip.coordinates) ? formatCoordinates(currentTrip.coordinates) : 'Not pinned on the map'}`,
       `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
+      // The cards show the photos, so the model must know they exist. It cannot
+      // make one: no action carries an image. Printed only when set, because
+      // the trip-independent floor has no room for a "none" line.
+      ...(currentTrip.photoId ? ['- Cover photo: yes (only the app changes photos)'] : []),
       // Sharing is now visible in the UI (the sync badge), so the assistant has
       // to be able to answer "is this trip shared?" — per the AGENTS.md rule that
       // a feature missing from this prompt makes the assistant claim it has no
@@ -649,7 +653,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Rooms');
       for (const room of rooms) {
         parts.push(
-          `- "${toPromptText(room.name)}" (id: ${room.id}): ${room.capacity} bed(s)${room.description ? ` — ${toPromptText(room.description)}` : ''}`,
+          `- "${toPromptText(room.name)}" (id: ${room.id}): ${room.capacity} bed(s)${room.photoId ? ', has a photo' : ''}${room.description ? ` — ${toPromptText(room.description)}` : ''}`,
         );
       }
     } else {

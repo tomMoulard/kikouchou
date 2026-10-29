@@ -2185,5 +2185,25 @@
       "boots": "Rain boots",
       "socks": "Socks"
     }
+  },
+  "photos": {
+    "add": "Add a photo",
+    "change": "Change photo",
+    "remove": "Remove photo",
+    "preparing": "Preparing the photo",
+    "tripLabel": "Cover photo",
+    "tripFieldLabel": "Photo shown on the trip card",
+    "roomLabel": "Photo",
+    "tripAlt": "Photo of {{name}}",
+    "roomAlt": "Photo of the room {{name}}",
+    "saved": "Photo saved",
+    "removed": "Photo removed",
+    "saveFailed": "The photo could not be saved",
+    "saveFailedOnCreate": "Trip created but a photo could not be saved",
+    "errors": {
+      "notAnImage": "This file is not an image.",
+      "tooLarge": "This photo is too large, even after resizing.",
+      "decodeFailed": "This photo could not be read. Try another one."
+    }
   }
 }

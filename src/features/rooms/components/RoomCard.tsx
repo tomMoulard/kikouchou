@@ -38,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { usePhotoUrl, type PhotoTrip } from '@/hooks/usePhotoUrl';
 import { cn } from '@/lib/utils';
 import type { Person, Room } from '@/types';
 
@@ -105,6 +106,11 @@ export interface RoomCardProps {
   readonly readOnly?: boolean;
   /** Content to render when expanded (typically RoomAssignmentSection) */
   readonly expandedContent?: ReactNode;
+  /**
+   * The trip the room belongs to, which is where its photo is read from.
+   * Without it the card shows no photo.
+   */
+  readonly trip?: PhotoTrip | undefined;
 }
 
 // ============================================================================
@@ -159,7 +165,9 @@ const RoomCard = memo(function RoomCard({
   claimsForSelf = false,
   readOnly = false,
   expandedContent,
+  trip,
 }: RoomCardProps) {
+  const photoUrl = usePhotoUrl(trip, room.photoId);
   const { t } = useTranslation(),
 
   // State for delete confirmation dialog
@@ -339,7 +347,11 @@ const RoomCard = memo(function RoomCard({
         {!readOnly && (
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the menu. The interactive elements are the ones inside it.
         <div
-          className="absolute top-2 right-2 z-30"
+          className={cn(
+            'absolute top-2 right-2 z-30',
+            // Over a photo the ghost trigger needs a ground of its own to read.
+            photoUrl && 'rounded-md bg-background/80 backdrop-blur-sm',
+          )}
           onClick={handleMenuAreaClick}
           onKeyDown={handleMenuAreaKeyDown}
         >
@@ -376,6 +388,21 @@ const RoomCard = memo(function RoomCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        )}
+
+        {/*
+          The room's photo, edge to edge across the top, so a guest told "the
+          red room" can see which one that is. `-mt-6` cancels the card's top
+          padding so the photo meets the border.
+        */}
+        {photoUrl && (
+          <img
+            src={photoUrl}
+            alt={t('photos.roomAlt', { name: room.name })}
+            loading="lazy"
+            decoding="async"
+            className="-mt-6 h-28 w-full rounded-t-xl object-cover"
+          />
         )}
 
         {/* Card Header - Room name and capacity badge */}

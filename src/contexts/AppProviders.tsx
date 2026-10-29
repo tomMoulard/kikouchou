@@ -15,6 +15,7 @@ import { TransportProvider } from '@/contexts/TransportContext';
 import { RideProvider } from '@/contexts/RideContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
+import { PhotoUploadSync } from '@/lib/photos/PhotoUploadSync';
 import { AccountTripSync } from '@/lib/sync/AccountTripSync';
 import { GuestGroupSync } from '@/lib/sync/GuestGroupSync';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
@@ -119,6 +120,9 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
         makes it obvious that nothing below depends on it having finished.
       */}
       <AccountTripSync />
+
+      {/* A sibling for the same reason: it sends the photos this device holds alone. */}
+      <PhotoUploadSync />
 
       {/*
         A wrapper rather than a sibling, unlike `AccountTripSync` directly above,

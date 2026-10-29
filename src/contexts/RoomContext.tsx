@@ -140,7 +140,9 @@ const compareRooms = (a: Room, b: Room): boolean =>
   // The room's icon. Listed because the comparator must cover every mutable
   // field — without it, changing a room's icon left `rooms` holding the old
   // one until some unrelated field changed too.
-  a.icon === b.icon;
+  a.icon === b.icon &&
+  // The room's photo, for the same reason.
+  a.photoId === b.photoId;
 
 /**
  * Compares two room arrays for equality based on IDs and all mutable properties.

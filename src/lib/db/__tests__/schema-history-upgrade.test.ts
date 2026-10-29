@@ -317,7 +317,7 @@ describe('two tabs on different schema versions', () => {
     await current.open();
 
     const newer = new Dexie(DB_NAME);
-    newer.version(13).stores(V11);
+    newer.version(14).stores(V11);
     await newer.open();
 
     expect(current.isOpen()).toBe(false);
