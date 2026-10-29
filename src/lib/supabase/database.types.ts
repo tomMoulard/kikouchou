@@ -25,7 +25,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   graphql_public: {
     Tables: {
@@ -91,6 +91,7 @@ export type Database = {
           created_at: string
           endpoint: string
           id: string
+          invite_token: string | null
           last_seen_at: string
           locale: string
           p256dh: string | null
@@ -101,13 +102,14 @@ export type Database = {
         }
         Insert: {
           analytics_id?: string | null
-          auth: string | null
+          auth?: string | null
           created_at?: string
           endpoint: string
           id?: string
+          invite_token?: string | null
           last_seen_at?: string
           locale?: string
-          p256dh: string | null
+          p256dh?: string | null
           person_id?: string | null
           transport?: string
           trip_id: string
@@ -119,6 +121,7 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
+          invite_token?: string | null
           last_seen_at?: string
           locale?: string
           p256dh?: string | null
@@ -128,6 +131,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_invite_token_fkey"
+            columns: ["invite_token"]
+            isOneToOne: false
+            referencedRelation: "trip_invites"
+            referencedColumns: ["token"]
+          },
           {
             foreignKeyName: "push_subscriptions_trip_id_fkey"
             columns: ["trip_id"]
@@ -160,6 +170,13 @@ export type Database = {
           subscription_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reminder_log_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "live_push_subscriptions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reminder_log_subscription_id_fkey"
             columns: ["subscription_id"]
@@ -385,10 +402,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      live_push_subscriptions: {
+        Row: {
+          analytics_id: string | null
+          auth: string | null
+          endpoint: string | null
+          id: string | null
+          locale: string | null
+          p256dh: string | null
+          person_id: string | null
+          transport: string | null
+          trip_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      delete_my_account: { Args: Record<PropertyKey, never>; Returns: undefined }
+      delete_my_account: { Args: never; Returns: undefined }
       publish_trip_snapshot: {
         Args: { p_state: string; p_through_id: number; p_trip_id: string }
         Returns: number
@@ -403,6 +441,7 @@ export type Database = {
       store_push_subscription: {
         Args: {
           p_analytics_id: string
+          p_invite_token?: string
           p_locale: string
           p_person_id: string
           p_subscription: Json
