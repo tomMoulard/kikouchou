@@ -7,6 +7,8 @@
 
 import {
   type ReactNode,
+  Suspense,
+  lazy,
   memo,
   useCallback,
   useEffect,
@@ -73,7 +75,6 @@ import {
 import { formatDateRange } from '@/lib/utils/date-format';
 import { MOBILE_NAV_BAR_SLOTS, type Trip } from '@/types';
 
-import { TripGlancePanel } from '@/features/summary/components/TripGlancePanel';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 
 import { SyncStatusBadge } from './SyncStatusBadge';
@@ -122,6 +123,17 @@ interface LayoutProps {
 // ============================================================================
 // Constants
 // ============================================================================
+
+/**
+ * Loaded once a trip page is on screen: the trip list, the sign-in and the
+ * invite pages never show the panel, and it brings the money and room maths
+ * with it.
+ */
+const TripGlancePanel = lazy(() =>
+  import('@/features/summary/components/TripGlancePanel').then((module) => ({
+    default: module.TripGlancePanel,
+  })),
+);
 
 /**
  * Navigation items that don't require a trip (always visible).
@@ -1321,10 +1333,12 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
           {showGlancePanel && currentTrip !== null ? (
             <div className="xl:flex xl:items-start xl:gap-6">
               <div className="min-w-0 xl:flex-1">{children}</div>
-              <TripGlancePanel
-                trip={currentTrip}
-                className="hidden xl:sticky xl:top-6 xl:block xl:w-80 xl:shrink-0"
-              />
+              <Suspense fallback={null}>
+                <TripGlancePanel
+                  trip={currentTrip}
+                  className="hidden xl:sticky xl:top-6 xl:block xl:w-80 xl:shrink-0"
+                />
+              </Suspense>
             </div>
           ) : (
             children

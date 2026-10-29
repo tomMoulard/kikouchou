@@ -812,9 +812,12 @@ echo keys back. When you add a `t()` call, add the key to **both**
 `en` and `fr`. Screen-reader-only text is user-facing text.
 
 **Both locale bundles are static imports, and an attempt to make them lazy was
-reverted.** They are 200 KB of JSON in the render-blocking entry chunk — 94 KB
+reverted.** They are 200 KB of JSON that loads before the first render — 94 KB
 of English and 106 KB of French — so every visitor downloads a language they
 never read, and splitting them measured at 52 KB off the gzipped entry script.
+`manualChunks` in `vite.config.ts` puts each one in its own chunk
+(`locale-en`, `locale-fr`). They still load at start-up, but a deploy that
+changes code and no copy no longer invalidates them.
 It was still reverted, and the reason is worth keeping: a dynamic
 `import('@/locales/<lng>/translation.json')` makes the Vite **dev** server
 reload the page when it first executes, which lands in the middle of whichever

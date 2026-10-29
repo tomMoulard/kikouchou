@@ -258,7 +258,7 @@ describe('Layout load-time tables', () => {
     });
   }
 
-  it('links the app-wide pages, gives the trip pages their column, and clears the shell for the new-trip form', () => {
+  it('links the app-wide pages, gives the trip pages their column, and clears the shell for the new-trip form', async () => {
     mockPersons.mockReturnValue([]);
     mockAssignments.mockReturnValue([]);
 
@@ -284,11 +284,15 @@ describe('Layout load-time tables', () => {
     setViewport(true, false);
     for (const suffix of ['calendar', 'rooms', 'persons', 'activities', 'money', 'edit', 'edit/']) {
       const { unmount } = renderLayoutAt(`/trips/${mockTrip.id}/${suffix}`);
-      expect(document.querySelector('aside[aria-label="glance.title"]'), suffix).toBeInTheDocument();
+      // The panel is a lazy chunk, so the first page waits for it.
+      await waitFor(() => {
+        expect(document.querySelector('aside[aria-label="glance.title"]'), suffix).toBeInTheDocument();
+      });
       unmount();
     }
     // Only a trailing slash is trimmed: a slash inside the suffix is another
-    // route, even one that would spell a glance page without it.
+    // route, even one that would spell a glance page without it. The chunk is
+    // loaded by now, so a panel that should not be there would render at once.
     for (const path of [
       `/trips/${mockTrip.id}/transports`,
       `/trips/${mockTrip.id}/analytics`,

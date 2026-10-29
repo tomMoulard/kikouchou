@@ -25,6 +25,15 @@ const base = '/'
  * Strategy: Split stable vendor libraries into long-lived cacheable chunks
  */
 function manualChunks(id: string): string | undefined {
+  // The two locale bundles, 200KB of JSON, one chunk each. They are still
+  // static imports, so they still load before the first render: this only
+  // keeps a deploy that changes code and no copy from invalidating them. Do not
+  // turn them into dynamic imports here: AGENTS.md says why that was reverted.
+  const locale = /\/src\/locales\/([a-z]+)\/translation\.json$/.exec(id)
+  if (locale) {
+    return `locale-${locale[1]}`
+  }
+
   if (!id.includes('node_modules')) {
     return undefined
   }
@@ -84,6 +93,22 @@ function manualChunks(id: string): string | undefined {
     id.includes('lib0')
   ) {
     return 'vendor-yjs'
+  }
+
+  // Class merging behind cn(), which every component calls
+  if (id.includes('node_modules/tailwind-merge') || id.includes('node_modules/clsx')) {
+    return 'vendor-classnames'
+  }
+
+  // Toasts: App mounts the Toaster, and lib/notifications calls it
+  if (id.includes('node_modules/sonner')) {
+    return 'vendor-toast'
+  }
+
+  // Capacitor's runtime, which lib/platform reads on every target. Only the
+  // core: each plugin's web implementation is its own lazy chunk already.
+  if (id.includes('node_modules/@capacitor/core')) {
+    return 'vendor-capacitor'
   }
 
   // Let Rollup handle the rest to avoid circular dependencies
