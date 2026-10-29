@@ -1,5 +1,6 @@
 /**
- * @fileoverview `EntryRedirect`: `/` goes to the list, or to the sample's plan.
+ * @fileoverview `EntryRedirect`: `/` goes to the list, the sample's plan, or the
+ * first-trip wizard.
  *
  * @module features/trips/components/__tests__/EntryRedirect.test
  */
@@ -75,6 +76,15 @@ describe('EntryRedirect', () => {
 
     expect(where()).toBe(`/trips/${SAMPLE_ID}/calendar {"via":"entry"}`);
     expect(mockedUseFeatureFlagVariant).toHaveBeenCalledWith(ONBOARDING_PLANNING_VIEW_FLAG);
+  });
+
+  it('opens the first-trip wizard in the wizard arm', () => {
+    withTrips([SAMPLE_ID], SAMPLE_ID);
+    mockedUseFeatureFlagVariant.mockReturnValue('wizard');
+
+    renderEntry();
+
+    expect(where()).toBe('/trips/new null');
   });
 
   it('keeps the trip list in the control arm', () => {

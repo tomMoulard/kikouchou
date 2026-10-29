@@ -104,6 +104,17 @@ test.describe('Sample trip', () => {
     });
   });
 
+  test('the wizard arm opens the first-trip wizard from /', async ({ page }) => {
+    await firstOpenIn(page, 'en');
+    await page.addInitScript(() => {
+      localStorage.setItem('kikouchou-flag:onboarding-planning-view', 'wizard');
+    });
+
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/trips\/new$/);
+    await expect(page.locator('#wizard-trip-name')).toBeVisible({ timeout: 15_000 });
+  });
+
   test('a first open selects the sample, so the bottom bar works', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await firstOpenIn(page, 'en');
