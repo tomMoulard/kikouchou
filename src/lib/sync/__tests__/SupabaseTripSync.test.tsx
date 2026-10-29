@@ -304,7 +304,16 @@ describe('SupabaseTripSync, the template copy', () => {
       remoteTripId: 'remote-1',
       userId: 'user-1',
       online: true,
+      ready: false,
     });
+  });
+
+  it('tells it the trip is ready once sync has caught up with the server', () => {
+    memberState = state('synced');
+
+    render(ui());
+
+    expect(lastOptions(mocks.useTemplateRefresh)).toMatchObject({ online: true, ready: true });
   });
 
   it('tells it the connection is down while sync is offline', () => {

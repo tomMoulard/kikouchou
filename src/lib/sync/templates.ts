@@ -22,10 +22,13 @@
  * reader can reach.
  *
  * The copy follows the trip. `useTemplateRefresh` rewrites it from the owner's
- * device after each edit of the trip or of its rooms, so a customer who opens
- * the link reads what the trip says now. It is still a copy: an edit made on a
- * device that is offline reaches the link when that device reconnects, and an
- * edit a member makes reaches it once the owner's device has received it.
+ * device after each edit of the trip or of its rooms (the name, the
+ * description, the cover photo, the rooms and their photos), and once more
+ * whenever the owner opens the trip and it has synced, so a template published
+ * before a field existed catches up too. A customer who opens the link reads
+ * what the trip says now. It is still a copy: an edit made on a device that is
+ * offline reaches the link when that device reconnects, and an edit a member
+ * makes reaches it once the owner's device has received it.
  *
  * @module lib/sync/templates
  */
