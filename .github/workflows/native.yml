@@ -13,7 +13,8 @@ name: Native apps
 #   for F-Droid and sideloading, and an IPA for the App Store. It uploads the
 #   AAB to the Play internal track and the IPA to TestFlight, and attaches all
 #   four files to a GitHub release, which is where the F-Droid repository in
-#   deploy.yml and IzzyOnDroid read the APK from.
+#   deploy.yml and IzzyOnDroid read the APK from. The Play upload is a job of
+#   its own, so a refused upload never holds the release back.
 # - A manual run does what a tag does, and publishes only when asked to.
 #
 # Every credential is optional. A missing one skips the step that needs it and
@@ -132,7 +133,6 @@ jobs:
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
 
@@ -212,8 +212,35 @@ jobs:
           path: out/
           retention-days: 30
 
+  # ==========================================================================
+  # Google Play: a job of its own, beside the GitHub release
+  # ==========================================================================
+  # Play refuses the API upload of a new app's first AAB, and can refuse later
+  # ones for reasons of its own. As a step of the Android job, that refusal
+  # failed the job, so the release job, which needs it, was skipped: v0.1.0
+  # shipped no APK on GitHub, and F-Droid and IzzyOnDroid had nothing to read.
+  # Here a refusal fails this job alone.
+  play:
+    name: Google Play
+    runs-on: ubuntu-latest
+    needs: [android]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish == true }}
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - name: Warn when Play is unconfigured
+        if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON == '' || env.ANDROID_KEYSTORE_BASE64 == '' }}
+        run: echo "::warning title=No Play upload::PLAY_SERVICE_ACCOUNT_JSON or ANDROID_KEYSTORE_BASE64 is unset, so the AAB is not uploaded to Google Play."
+
+      - uses: actions/download-artifact@v4
+        if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
+        with:
+          name: android
+          path: out/
+
       - name: Upload to the Play internal track
-        if: ${{ env.IS_RELEASE == 'true' && env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}

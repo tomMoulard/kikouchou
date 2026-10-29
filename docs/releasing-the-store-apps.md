@@ -293,9 +293,14 @@ in step 2.3, and the F-Droid key in step 2.7. Separate them with commas.
    ```
 
 The run builds the web bundle, both Android flavors and the IPA. It uploads
-the IPA to TestFlight and creates the GitHub release `v0.1.0`. The Play upload
-fails on this first run, because a new app takes its first AAB by hand. That
-is expected.
+the IPA to TestFlight and creates the GitHub release `v0.1.0`. The Google Play
+job fails on this first run with `Package not found: app.kikouchou`, because
+a new app takes its first AAB by hand. That is expected, and the release is
+created all the same.
+
+The Google Play job can also say that the Google Play Android Developer API is
+not enabled. If it does, open the link in the error and turn the API on. Then
+rerun the failed job.
 
 If the tag and `package.json` disagree, the run stops at once. Fix the version
 and tag again.
