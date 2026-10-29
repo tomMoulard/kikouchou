@@ -7,7 +7,7 @@
  * page, with the page and the way the user got there: `list` from the trip
  * list, `nav` from the bottom bar, the "More" sheet or the sidebar, `entry`
  * when opening the app went straight to it (the `onboarding-planning-view`
- * experiment's test arm, `features/trips/components/EntryRedirect`), `other`
+ * experiment's planning arm, `features/trips/components/EntryRedirect`), `other`
  * for anything else (a typed URL, a reload of a page reached some other way).
  *
  * The way in travels as router state, `{ via }`, set by the link that was

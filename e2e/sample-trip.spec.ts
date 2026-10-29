@@ -90,7 +90,7 @@ test.describe('Sample trip', () => {
   test('the planning-view arm opens the sample calendar from /', async ({ page }) => {
     await firstOpenIn(page, 'en');
     await page.addInitScript(() => {
-      localStorage.setItem('kikouchou-flag:onboarding-planning-view', 'on');
+      localStorage.setItem('kikouchou-flag:onboarding-planning-view', 'planning');
     });
 
     await page.goto('/');
