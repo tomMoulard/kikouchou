@@ -13,17 +13,38 @@
  * into the link by itself; reading it here too would put a second copy of
  * the link on top of the first.
  *
+ * The dialog is a lazy chunk. This component is in the entry chunk, because
+ * `App` mounts it for every visit, and the dialog brings the QR code renderer
+ * and the sign-in forms with it. Only a visit that comes back from a sign-in
+ * started in the wizard ever opens it.
+ *
  * @module features/sharing/components/PendingInviteDialog
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type ReactElement,
+  Suspense,
+  lazy,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { useAuth } from '@/features/auth/AuthContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { captureEvent } from '@/lib/posthog';
 import type { TripId } from '@/types';
 import { forgetPendingInvite, readPendingInvite } from '../utils/pending-invite';
-import { ShareDialog } from './ShareDialog';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const ShareDialog = lazy(() =>
+  import('./ShareDialog').then((module) => ({ default: module.ShareDialog })),
+);
 
 // ============================================================================
 // Component
@@ -65,5 +86,9 @@ export const PendingInviteDialog = memo(function PendingInviteDialog(): ReactEle
   if (trip === undefined) {
     return null;
   }
-  return <ShareDialog open={open} onOpenChange={handleOpenChange} trip={trip} />;
+  return (
+    <Suspense fallback={null}>
+      <ShareDialog open={open} onOpenChange={handleOpenChange} trip={trip} />
+    </Suspense>
+  );
 });

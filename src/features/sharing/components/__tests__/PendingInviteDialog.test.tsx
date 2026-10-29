@@ -72,10 +72,10 @@ beforeEach(() => {
 // ============================================================================
 
 describe('PendingInviteDialog', () => {
-  it('opens the link for the remembered trip once signed in, and forgets it', () => {
+  it('opens the link for the remembered trip once signed in, and forgets it', async () => {
     render(<PendingInviteDialog />);
 
-    expect(screen.getByRole('dialog', { name: 'Lake house' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Lake house' })).toBeInTheDocument();
     expect(vi.mocked(forgetPendingInvite)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(captureEvent)).toHaveBeenCalledWith('trip_invite_resumed');
   });
@@ -84,7 +84,7 @@ describe('PendingInviteDialog', () => {
     const user = userEvent.setup();
     const { rerender } = render(<PendingInviteDialog />);
 
-    await user.click(screen.getByRole('button', { name: 'close' }));
+    await user.click(await screen.findByRole('button', { name: 'close' }));
     rerender(<PendingInviteDialog />);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
