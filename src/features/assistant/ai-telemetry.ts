@@ -16,14 +16,13 @@
  * are not, and they were travelling verbatim.
  *
  * So each redacted message keeps its length. Length is what the interesting
- * questions are actually about — prefill memory is linear in prompt length, and
- * `qwen3-1-7b` reads back 297 KiB of logits per prompt token — and a number
- * answers them without naming anybody.
+ * questions are actually about, since every prompt token is paid on the
+ * project's key, and a number answers them without naming anybody.
  *
  * @module features/assistant/ai-telemetry
  */
 
-import type { ChatMessage } from './hooks/useWebLLM';
+import type { ChatMessage } from './hooks/useAssistantChat';
 
 // ============================================================================
 // Type Definitions

@@ -1,9 +1,7 @@
 /**
- * @fileoverview AI Assistant page that runs a selectable model: a local one
- * on-device via @huggingface/transformers (Transformers.js) or Needle, or a
- * cloud one through the user's own OpenRouter account. Users can ask questions
- * about their trip and request modifications to trip attributes (guests,
- * rooms, transports, assignments).
+ * @fileoverview AI Assistant page. Users ask questions about their trip and
+ * request changes to it (guests, rooms, transports, assignments) in plain
+ * words. api.kikouchou.app answers, for a signed-in account.
  *
  * @module features/assistant/pages/AssistantPage
  */
@@ -18,24 +16,17 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
 import {
   Bot,
-  Check,
-  Cloud,
-  Download,
+  CloudOff,
   ListPlus,
-  Loader2,
   LogIn,
-  LogOut,
-  RotateCw,
   Send,
   Square,
   Sparkles,
   Trash2,
-  X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -46,24 +37,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useAuth } from '@/features/auth';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
-import { readVia } from '@/hooks/useSampleTripViewReport';
 
 import { cn } from '@/lib/utils';
-import { getSettings, updateSettings } from '@/lib/db';
 
 import {
   ChatMessage,
@@ -90,293 +71,39 @@ import { StarterPrompts } from '../components/StarterPrompts';
 import type { StarterKind } from '../starters';
 import { storePendingPrompt, takePendingPrompt } from '../pending-prompt';
 import { type AssistantView, buildShowViewBlock } from '../views';
-import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
-import type { WebGPUSupport } from '../webgpu';
 import {
   type ChatMessage as LLMChatMessage,
-  type LoadProgress,
-  isFatalEngineError,
-  useWebLLM,
-} from '../hooks/useWebLLM';
-import {
-  ACCOUNT_ASSISTANT_MODEL_ID,
-  ASSISTANT_MODEL_PRESETS,
-  type AssistantModelPreset,
-  DEFAULT_ASSISTANT_MODEL_ID,
-  FALLBACK_ASSISTANT_MODEL_ID,
-  getAssistantModelPreset,
-  isAssistantModelId,
-  isCloudPreset,
-  offeredAssistantPresets,
-} from '../models';
-import { type OpenRouterCallback, completeOpenRouterConnect } from '../openrouter/auth';
-import { consumeOpenRouterCallback, onOpenRouterCallback } from '../openrouter/callback';
+  useAssistantChat,
+} from '../hooks/useAssistantChat';
 import posthog, { captureEvent, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
-import { isNativeApp } from '@/lib/platform';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
-import { formatBytes } from '@/lib/utils/format-bytes';
-import type { AssistantModelId } from '@/types';
 
 // ============================================================================
-// Model Selection UI
+// Constants
 // ============================================================================
 
 /**
- * Which presets already have their files on the device.
- *
- * Each engine downloads into its own Cache Storage bucket, so the buckets are
- * opened once each and every preset is matched inside the one its own
- * `cacheName` names — looking for a Needle image in the Transformers.js bucket
- * would report every tiny model as never downloaded.
+ * The `model_id` the assistant's events carry. It named the preset the user
+ * picked while there were several; it stays, so the events before and after
+ * the picker went away still line up.
  */
-async function getCachedAssistantModelIds(): Promise<Set<AssistantModelId>> {
-  const cached = new Set<AssistantModelId>();
-  if (typeof caches === 'undefined') return cached;
-
-  const keysByCache = new Map<string, readonly Request[]>();
-
-  for (const preset of ASSISTANT_MODEL_PRESETS) {
-    // A cloud preset has no files and no bucket to look in.
-    if (isCloudPreset(preset)) continue;
-    try {
-      let keys = keysByCache.get(preset.cacheName);
-      if (keys === undefined) {
-        const cache = await caches.open(preset.cacheName);
-        keys = await cache.keys();
-        keysByCache.set(preset.cacheName, keys);
-      }
-
-      const encoded = preset.modelId.replace('/', '%2F');
-      const found = keys.some(
-        (req) => req.url.includes(encoded) || req.url.includes(preset.modelId),
-      );
-      if (found) {
-        cached.add(preset.id);
-      }
-    } catch {
-      // Ignore cache read failures and leave this preset out.
-    }
-  }
-
-  return cached;
-}
-
-const CachedModelIcon = memo(function CachedModelIcon(): ReactElement {
-  return (
-    <span
-      className="relative inline-flex size-4 items-center justify-center text-muted-foreground"
-      aria-hidden="true"
-    >
-      <RotateCw className="size-4" strokeWidth={2.25} />
-      <Check
-        className="absolute size-2.5 text-foreground"
-        strokeWidth={3}
-      />
-    </span>
-  );
-});
+const ASSISTANT_MODEL_ID = 'cloud-kikouchou';
 
 /**
- * What the picker shows after a preset's name: its download size, or that it
- * runs in the cloud and downloads nothing.
+ * The `$ai_model` an answer is reported under. api.kikouchou.app picks the
+ * real model, so the client only knows it asked the server.
  */
-const PresetSizeLabel = memo(function PresetSizeLabel({
-  preset,
-}: {
-  readonly preset: AssistantModelPreset;
-}): ReactElement {
-  const { t } = useTranslation();
-
-  if (isCloudPreset(preset)) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <Cloud className="size-3.5" aria-hidden="true" />
-        {t('assistant.cloud.badge', 'Cloud')}
-      </span>
-    );
-  }
-
-  return (
-    <span className="text-xs text-muted-foreground tabular-nums">
-      {formatBytes(preset.approxDownloadBytes)}
-    </span>
-  );
-});
-
-/**
- * A preset's name in the picker. A local preset carries its id, which tells
- * the models apart for whoever reports a bug. A cloud preset does not: its
- * name is already the model, and the cloud badge beside it says the rest.
- */
-function presetOptionLabel(
-  preset: AssistantModelPreset,
-  t: (key: string, fallback: string) => string,
-): string {
-  const name = t(preset.nameKey, preset.fallbackName);
-  return isCloudPreset(preset) ? name : `${name} (${preset.id})`;
-}
-
-/**
- * Compact model picker for the header when the engine is ready (replaces the full card).
- */
-const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
-  selectedModelId,
-  onModelChange,
-  disabled,
-  cachedModelIds,
-  presets,
-}: {
-  readonly selectedModelId: AssistantModelId;
-  readonly onModelChange: (value: string) => void;
-  readonly disabled: boolean;
-  readonly cachedModelIds: ReadonlySet<AssistantModelId>;
-  /** The models this device can run (`offeredPresets`). */
-  readonly presets: readonly AssistantModelPreset[];
-}): ReactElement {
-  const { t } = useTranslation();
-
-  return (
-    <Select
-      value={selectedModelId}
-      onValueChange={onModelChange}
-      disabled={disabled}
-    >
-      <SelectTrigger
-        id="assistant-model-select-compact"
-        size="sm"
-        className="max-w-[12rem] sm:max-w-[16rem]"
-        aria-label={t('assistant.modelLabel', 'Assistant model')}
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent align="end">
-        {presets.map((preset) => (
-          <SelectItem key={preset.id} value={preset.id}>
-            <span className="inline-flex items-center gap-1.5">
-              <span>{presetOptionLabel(preset, t)}</span>
-              {/* The size belongs next to the name: this list is where the
-                  user picks what gets downloaded. */}
-              <PresetSizeLabel preset={preset} />
-              {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-});
-
-const AssistantModelPanel = memo(function AssistantModelPanel({
-  selectedModelId,
-  onModelChange,
-  disabled,
-  isCached,
-  cachedModelIds,
-  presets,
-}: {
-  readonly selectedModelId: AssistantModelId;
-  readonly onModelChange: (value: string) => void;
-  readonly disabled: boolean;
-  readonly isCached: boolean | null;
-  readonly cachedModelIds: ReadonlySet<AssistantModelId>;
-  /** The models this device can run (`offeredPresets`). */
-  readonly presets: readonly AssistantModelPreset[];
-}): ReactElement {
-  const { t } = useTranslation();
-  const selectedModel = getAssistantModelPreset(selectedModelId);
-  const downloadSize = formatBytes(selectedModel.approxDownloadBytes);
-  const isCloud = isCloudPreset(selectedModel);
-
-  return (
-    <Card className="mb-4">
-      <CardContent className="space-y-3 pt-4">
-        <div className="space-y-1">
-          <Label htmlFor="assistant-model-select">
-            {t('assistant.modelLabel', 'Assistant model')}
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              'assistant.modelDescription',
-              'Pick a smaller model for weaker devices or a bigger one for better quality. The size next to each name is what the first use downloads. A cloud model downloads nothing and runs on any device.',
-            )}
-          </p>
-        </div>
-
-        <Select
-          value={selectedModelId}
-          onValueChange={onModelChange}
-          disabled={disabled}
-        >
-          <SelectTrigger
-            id="assistant-model-select"
-            className="w-full"
-            aria-label={t('assistant.modelLabel', 'Assistant model')}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {presets.map((preset) => (
-              <SelectItem key={preset.id} value={preset.id}>
-                <span className="inline-flex items-center gap-1.5">
-                  <span>{presetOptionLabel(preset, t)}</span>
-                  <PresetSizeLabel preset={preset} />
-                  {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground font-mono break-all">
-          {isCloud
-            ? t('assistant.cloud.modelLabel', {
-                defaultValue: 'OpenRouter model: {{model}}',
-                model: selectedModel.modelId,
-              })
-            : t('assistant.hubModelLabel', {
-                defaultValue: 'HF model: {{model}}',
-                model: selectedModel.modelId,
-              })}
-        </p>
-
-        <div className="space-y-1">
-          <p className="text-sm text-foreground">
-            {t(selectedModel.descriptionKey, selectedModel.fallbackDescription)}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {t(selectedModel.hintKey, selectedModel.fallbackHint)}
-          </p>
-          {!isCloud && isCached !== true && (
-            <p className="text-xs text-muted-foreground">
-              {t('assistant.modelDownloadSize', {
-                defaultValue: 'First use downloads about {{size}}.',
-                size: downloadSize,
-              })}
-            </p>
-          )}
-          {!isCloud && isCached === true && (
-            <p className="text-xs text-primary">
-              {t(
-                'assistant.modelCached',
-                'This model is already cached on this device.',
-              )}
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
+const ASSISTANT_AI_MODEL = 'kikouchou/assistant';
 
 // ============================================================================
 // Helper
 // ============================================================================
 
 /**
- * How one queued turn ended. `engine-lost` means the inference session died and
- * is being rebuilt, so nothing else can run until it is back.
+ * How one queued turn ended.
  */
-type TurnOutcome = 'answered' | 'failed' | 'abandoned' | 'engine-lost';
+type TurnOutcome = 'answered' | 'failed' | 'abandoned';
 
 /**
  * A prompt accepted by the UI and waiting for the assistant to reach it.
@@ -416,129 +143,15 @@ function nextMessageId(): string {
 // ============================================================================
 
 /**
- * Whether this device can run the selected preset at all.
- *
- * One prop rather than "does it need WebGPU" plus "does it have WebGPU": the
- * two can disagree, and the card has no way to notice when they do.
- */
-type DeviceSupport = 'probing' | 'supported' | 'unsupported';
-
-/**
- * Folds "does this preset need WebGPU" and "can this device supply it" into the
- * single verdict the card renders from.
- *
- * A preset with no `device` runs on the Transformers.js default (WASM/CPU) and
- * is never gated — the probe's answer is irrelevant to it.
- */
-function resolveDeviceSupport(
-  requiresWebGPU: boolean,
-  webgpuSupport: WebGPUSupport | null,
-): DeviceSupport {
-  if (!requiresWebGPU) return 'supported';
-  if (webgpuSupport === null) return 'probing';
-  return webgpuSupport === 'supported' ? 'supported' : 'unsupported';
-}
-
-/**
- * Model loading card shown before the engine is ready.
- */
-/**
- * The card a cloud preset shows instead of the download: what connecting
- * means, where the trip goes, and the button that starts the sign-in.
- *
- * The privacy line is not small print. The system prompt carries every
- * guest's name, phone and notes, and those people never agreed to anything,
- * so the user reads where it goes before the first byte leaves the device.
- */
-const CloudConnectCard = memo(function CloudConnectCard({
-  onConnect,
-  error,
-}: {
-  /**
-   * Starts the sign-in. On the website it resolves as the page leaves for
-   * openrouter.ai. In a store app it resolves when the browser sheet closes,
-   * which hands the button back, whether or not the user signed in.
-   */
-  readonly onConnect: () => Promise<void>;
-  readonly error: string | null;
-}): ReactElement {
-  const { t } = useTranslation();
-  const [isStarting, setIsStarting] = useState(false);
-
-  // A failed start reports an error, which hands the button back.
-  const isBusy = isStarting && error === null;
-
-  // Back from openrouter.ai without signing in: the browser can restore this
-  // page from its back-forward cache, spinner and all.
-  useEffect(() => {
-    const handlePageShow = (event: PageTransitionEvent): void => {
-      if (event.persisted) setIsStarting(false);
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, []);
-
-  const handleConnect = useCallback((): void => {
-    setIsStarting(true);
-    void onConnect().finally(() => {
-      if (isNativeApp()) {
-        setIsStarting(false);
-      }
-    });
-  }, [onConnect]);
-
-  return (
-    <div className="flex flex-1 items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 mb-2">
-            <Cloud className="size-7 text-primary" aria-hidden="true" />
-          </div>
-          <CardTitle className="text-lg">
-            {t('assistant.cloud.connectTitle', 'Connect your OpenRouter account')}
-          </CardTitle>
-          <CardDescription>
-            {t(
-              'assistant.cloud.connectDescription',
-              'OpenRouter gives you Claude and GPT models with one account. You sign in on openrouter.ai, and the app gets a key that belongs to you. Answers are billed to your OpenRouter account.',
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground text-center">
-            {t(
-              'assistant.cloud.privacyNotice',
-              'Each question sends your trip details, guest names included, to OpenRouter and to the company that runs the model. The key stays on this device. To revoke it, delete it on openrouter.ai.',
-            )}
-          </p>
-          <Button className="w-full" onClick={handleConnect} disabled={isBusy}>
-            {isBusy ? (
-              <Loader2 className="size-4 mr-2 animate-spin" aria-hidden="true" />
-            ) : (
-              <LogIn className="size-4 mr-2" aria-hidden="true" />
-            )}
-            {t('assistant.cloud.connect', 'Connect with OpenRouter')}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-});
-
-/**
- * The card the account preset shows to a signed-out visitor: the questions it
- * can start with, where the trip goes, and the way to an account.
+ * The card a signed-out visitor sees: the questions the assistant can start
+ * with, where the trip goes, and the way to an account.
  *
  * The starters are here, and not only in the empty chat, because this is the
  * first screen of the onboarding experiment's assistant arm. A tap on one asks
  * for the account and keeps the question, which is sent once the visitor is
- * back. The privacy line is the same promise `CloudConnectCard` makes, with
- * the project's server added to the path.
+ * back. The privacy line is not small print: the system prompt carries every
+ * guest's name, phone and notes, and those people never agreed to anything,
+ * so the user reads where it goes before the first question leaves the device.
  */
 const AccountAssistantCard = memo(function AccountAssistantCard({
   onPick,
@@ -592,268 +205,34 @@ const AccountAssistantCard = memo(function AccountAssistantCard({
 });
 
 /**
- * Which `$ai_provider` an answer is reported under.
+ * The card a build with no Supabase project shows. The assistant answers for
+ * an account, and such a build (a fork, most e2e servers) has none to offer.
  */
-function aiProviderFor(preset: AssistantModelPreset): string {
-  switch (preset.engine) {
-    case 'kikouchou':
-      return 'kikouchou';
-    case 'openrouter':
-      return 'openrouter';
-    case 'transformers':
-    case 'needle':
-      return 'huggingface';
-  }
-}
-
-const ModelLoadingCard = memo(function ModelLoadingCard({
-  onLoad,
-  onCancel,
-  status,
-  loadProgress,
-  error,
-  deviceSupport,
-  downloadSize,
-}: {
-  readonly onLoad: () => void;
-  readonly onCancel: () => void;
-  readonly status: string;
-  readonly loadProgress: LoadProgress | null;
-  readonly error: string | null;
-  readonly deviceSupport: DeviceSupport;
-  /** Approximate download size of the selected preset, already formatted. */
-  readonly downloadSize: string;
-}): ReactElement {
+const AssistantUnavailableCard = memo(function AssistantUnavailableCard(): ReactElement {
   const { t } = useTranslation();
-  const activeFiles = loadProgress?.files.filter((f) => !f.done) ?? [];
 
   return (
     <div className="flex flex-1 items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 mb-2">
-            <Sparkles className="size-7 text-primary" aria-hidden="true" />
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted mb-2">
+            <CloudOff className="size-7 text-muted-foreground" aria-hidden="true" />
           </div>
           <CardTitle className="text-lg">
-            {t('assistant.title', 'AI Assistant')}
+            {t('assistant.unavailable.title', 'The assistant is not available here')}
           </CardTitle>
           <CardDescription>
             {t(
-              'assistant.description',
-              'Run Gemma locally on your device to manage your trip with natural language.',
+              'assistant.unavailable.description',
+              'The assistant answers through a Kikouchou account, and this copy of the app has no account service.',
             )}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {status === 'loading' && loadProgress && (
-            <div className="space-y-3">
-              <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                <Loader2
-                  className="size-4 shrink-0 animate-spin mt-0.5"
-                  aria-hidden="true"
-                />
-                <span className="min-w-0 text-left leading-snug">
-                  {loadProgress.text}
-                </span>
-              </div>
-
-              {loadProgress.files.length > 0 ? (
-                <>
-                  <div className="space-y-1.5">
-                    <div
-                      className="h-2 w-full overflow-hidden rounded-full bg-muted"
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={Math.round(loadProgress.progress * 100)}
-                      aria-label={t(
-                        'assistant.loadingOverallProgressAria',
-                        'Overall model download progress',
-                      )}
-                    >
-                      <div
-                        className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                        style={{
-                          width: `${Math.round(loadProgress.progress * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <p className="text-right text-xs tabular-nums text-muted-foreground">
-                      {Math.round(loadProgress.progress * 100)}%
-                    </p>
-                  </div>
-
-                  {activeFiles.length > 0 ? (
-                    <ul
-                      className="list-none space-y-3 p-0"
-                      aria-label={t(
-                        'assistant.modelFilesListAria',
-                        'Per-file download progress',
-                      )}
-                    >
-                      {activeFiles.map((f) => (
-                        <li key={f.fileKey} className="space-y-1.5">
-                          <div className="flex min-w-0 items-center justify-between gap-2">
-                            <p
-                              className="truncate text-xs font-medium text-foreground"
-                              title={f.fileName}
-                            >
-                              {f.fileName}
-                            </p>
-                          </div>
-                          <div
-                            className="h-2 w-full overflow-hidden rounded-full bg-muted"
-                            role="progressbar"
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-valuenow={Math.round(f.progress * 100)}
-                            aria-label={t('assistant.fileDownloadProgressAria', {
-                              defaultValue: 'Download progress for {{file}}',
-                              file: f.fileName,
-                            })}
-                          >
-                            <div
-                              className={cn(
-                                'h-full rounded-full bg-primary transition-[width] duration-300 ease-out',
-                              )}
-                              style={{
-                                width: `${Math.round(f.progress * 100)}%`,
-                              }}
-                            />
-                          </div>
-                          {f.bytesHint ? (
-                            <p className="text-xs text-muted-foreground tabular-nums">
-                              {f.bytesHint}
-                            </p>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <div
-                    className="h-2 w-full overflow-hidden rounded-full bg-muted"
-                    role="progressbar"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(loadProgress.progress * 100)}
-                    aria-label={t(
-                      'assistant.loadingProgressAria',
-                      'Download progress for the current file',
-                    )}
-                  >
-                    <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                      style={{
-                        width: `${Math.round(loadProgress.progress * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  {loadProgress.bytesHint ? (
-                    <p className="text-center text-xs text-muted-foreground tabular-nums">
-                      {loadProgress.bytesHint}
-                    </p>
-                  ) : null}
-                </>
-              )}
-
-              {loadProgress.files.length > 0 ? (
-                <p className="text-center text-xs text-balance text-muted-foreground">
-                  {t(
-                    'assistant.loadingProgressCaption',
-                    'Top bar: overall model download progress. List: only files currently downloading.',
-                  )}
-                </p>
-              ) : null}
-
-              {/* A multi-gigabyte download started on the wrong network is the
-                  reason this exists: without it the only way out is to leave
-                  the page. */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={onCancel}
-              >
-                <X className="size-4 mr-2" aria-hidden="true" />
-                {t('assistant.cancelLoad', 'Cancel')}
-              </Button>
-            </div>
-          )}
-
-          {status === 'cancelled' && (
-            <p className="text-center text-sm text-muted-foreground" role="status">
-              {t(
-                'assistant.loadCancelled',
-                'Loading cancelled. Files already downloaded stay in your browser cache.',
-              )}
-            </p>
-          )}
-
-          {error && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-
-          {(status === 'idle' ||
-            status === 'error' ||
-            status === 'cancelled') &&
-            deviceSupport === 'unsupported' && (
-              <div
-                className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 space-y-1"
-                role="alert"
-              >
-                <p className="text-sm font-medium text-destructive">
-                  {t(
-                    'assistant.deviceUnsupportedTitle',
-                    'This device cannot run the assistant',
-                  )}
-                </p>
-                <p className="text-sm text-destructive/90">
-                  {t(
-                    'assistant.deviceUnsupportedDescription',
-                    'The assistant runs the model entirely on your own device, which needs WebGPU, and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.',
-                  )}
-                </p>
-              </div>
-            )}
-
-          {/* Nothing while the probe is in flight: offering a download that is
-              about to be withdrawn is worse than a beat of empty card. */}
-          {(status === 'idle' ||
-            status === 'error' ||
-            status === 'cancelled') &&
-            deviceSupport === 'supported' && (
-              <>
-                {/* The size, before the button, and in the same place the
-                    user decides: a phone on mobile data pays for this. */}
-                <p className="text-xs text-muted-foreground text-center">
-                  {t('assistant.loadHint', {
-                    defaultValue:
-                      'The model is about {{size}}. It is downloaded once, then cached in your browser. It needs WebGPU.',
-                    size: downloadSize,
-                  })}
-                </p>
-                <p className="text-xs text-muted-foreground text-center">
-                  {t('assistant.loadDataWarning', {
-                    defaultValue:
-                      'If you are on mobile data, connect to Wi-Fi first: {{size}} is a large download.',
-                    size: downloadSize,
-                  })}
-                </p>
-                <Button className="w-full" onClick={onLoad}>
-                  <Download className="size-4 mr-2" aria-hidden="true" />
-                  {t('assistant.loadModel', 'Load Model')}
-                </Button>
-              </>
-            )}
-        </CardContent>
       </Card>
     </div>
   );
 });
+
 
 /**
  * Chat input area with a textarea, a send button and — while the assistant is
@@ -983,7 +362,7 @@ const ChatInput = memo(function ChatInput({
  * AI Assistant page component.
  *
  * Features:
- * - On-device Gemma model via @huggingface/transformers (WebGPU)
+ * - Answers from api.kikouchou.app, for a signed-in account
  * - Chat interface with streaming responses
  * - Trip context injected as system prompt
  * - Automatic action execution for trip modifications
@@ -996,61 +375,12 @@ function AssistantPageComponent(): ReactElement {
   // An anonymous session is not an account: the server refuses it.
   const accountSignedIn = session !== null && session.user.is_anonymous !== true;
   const accountsAvailable = isSupabaseConfigured();
-  // The onboarding experiment's assistant arm opens this page from `/`
-  // (`EntryRedirect`). That visitor has chosen no model yet, and is offered
-  // the one that needs no download.
-  const { state: locationState } = useLocation();
-  const openedOnEntry = readVia(locationState) === 'entry';
-  const openedOnEntryRef = useRef(openedOnEntry);
   const [signInOpen, setSignInOpen] = useState(false);
-  const [selectedModelId, setSelectedModelId] =
-    useState<AssistantModelId>(DEFAULT_ASSISTANT_MODEL_ID);
-  const [cachedModelIds, setCachedModelIds] = useState<Set<AssistantModelId>>(
-    () => new Set(),
-  );
-  const [isModelPreferenceReady, setIsModelPreferenceReady] = useState(false);
-  const selectedModel = getAssistantModelPreset(selectedModelId);
-  const {
-    status,
-    loadProgress,
-    error,
-    isCached,
-    loadModel,
-    cancelLoad,
-    generate,
-    interrupt,
-    unload,
-    connect,
-    disconnect,
-  } = useWebLLM(selectedModel, { accountSignedIn });
-  const isCloud = isCloudPreset(selectedModel);
+  const { status, error, generate, interrupt } = useAssistantChat({
+    accountSignedIn,
+  });
   const { systemPrompt, buildSystemPrompt, offeredActions } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
-
-  // Asked before the assistant offers a multi-gigabyte download, not after it
-  // fails.
-  const webgpuSupport = useWebGPUSupport();
-  const deviceSupport = resolveDeviceSupport(
-    selectedModel.device === 'webgpu',
-    webgpuSupport,
-  );
-
-  // A device without WebGPU is offered the models it can run: the cloud ones,
-  // and Needle, which runs on the CPU. The page stays, because a cloud model
-  // works anywhere (decided on 2026-10-22). Everything is listed while the
-  // probe runs, so the picker does not flicker on a capable device.
-  const offeredPresets = useMemo(
-    () => offeredAssistantPresets(webgpuSupport, accountsAvailable),
-    [accountsAvailable, webgpuSupport],
-  );
-
-  // And it does not open on a model it cannot run. The fallback is shown, not
-  // saved: the stored choice comes back on a device that has WebGPU.
-  useEffect(() => {
-    if (!offeredPresets.some((preset) => preset.id === selectedModelId)) {
-      setSelectedModelId(FALLBACK_ASSISTANT_MODEL_ID);
-    }
-  }, [offeredPresets, selectedModelId]);
 
   const [messages, setMessages] = useState<ChatMessageData[]>(() =>
     loadAssistantChatMessages(),
@@ -1059,7 +389,6 @@ function AssistantPageComponent(): ReactElement {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
   const chatHistoryRef = useRef<LLMChatMessage[]>([]);
-  const hasUserChangedModelRef = useRef(false);
 
   /** Prompts accepted while an answer was in flight, oldest first. */
   const queueRef = useRef<QueuedPrompt[]>([]);
@@ -1130,74 +459,8 @@ function AssistantPageComponent(): ReactElement {
         'The assistant wants to make {{count}} deletion(s): {{list}}. A deletion reaches every member of the trip.',
     });
   }, [pendingDeletions, t]);
-  const selectedModelRef = useRef(selectedModel);
-  selectedModelRef.current = selectedModel;
   const tRef = useRef(t);
   tRef.current = t;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadModelPreference(): Promise<void> {
-      try {
-        const settings = await getSettings();
-        if (cancelled || hasUserChangedModelRef.current) return;
-        if (settings.assistantModelId) {
-          setSelectedModelId(settings.assistantModelId);
-        } else if (openedOnEntryRef.current && isSupabaseConfigured()) {
-          // Shown, not saved: a visitor who never asks anything keeps the
-          // app's default for the day they open the page on their own.
-          setSelectedModelId(ACCOUNT_ASSISTANT_MODEL_ID);
-        }
-      } catch (settingsError) {
-        console.error('Failed to load assistant model preference:', settingsError);
-      } finally {
-        if (!cancelled) {
-          setIsModelPreferenceReady(true);
-        }
-      }
-    }
-
-    void loadModelPreference();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Back from openrouter.ai: exchange the code for the key. Once per page load,
-  // which consumeOpenRouterCallback enforces across StrictMode's remount.
-  useEffect(() => {
-    const finish = (callback: OpenRouterCallback): void => {
-      void completeOpenRouterConnect(callback).then((result) => {
-        if (result.ok) {
-          captureEvent('assistant_provider_connected', { provider: 'openrouter' });
-          // Deliberately a raw confirmation: the key is a device preference.
-          notify.success(
-            tRef.current('assistant.cloud.connected', 'OpenRouter account connected'),
-          );
-          return;
-        }
-
-        captureEvent('assistant_provider_connect_failed', {
-          provider: 'openrouter',
-          reason: result.reason,
-        });
-        notify.error(
-          tRef.current(
-            'assistant.cloud.connectFailed',
-            'Could not connect your OpenRouter account. Try again.',
-          ),
-        );
-      });
-    };
-
-    const callback = consumeOpenRouterCallback();
-    if (callback !== null) {
-      finish(callback);
-    }
-    // A store app's sign-in returns as a link while this page stays mounted.
-    return onOpenRouterCallback(finish);
-  }, []);
 
   // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
   useLayoutEffect(() => {
@@ -1214,61 +477,6 @@ function AssistantPageComponent(): ReactElement {
     }, 400);
     return () => window.clearTimeout(id);
   }, [messages]);
-
-  // Auto-load the model if it's already cached in the browser
-  useEffect(() => {
-    if (!isModelPreferenceReady) {
-      return;
-    }
-
-    // Cached weights say the download once succeeded, not that the session can
-    // be built now — a phone that cached the files on a supported browser would
-    // otherwise auto-load straight into the failure the gate exists to prevent.
-    if (deviceSupport !== 'supported') {
-      return;
-    }
-
-    if (isCached === true && status === 'idle') {
-      loadModel();
-    }
-  }, [isCached, isModelPreferenceReady, status, loadModel, deviceSupport]);
-
-  // The gate is where the failure surfaces now, so it is also where it has to
-  // be counted: hiding the button without this would take the one signal that
-  // something is wrong — a load that fails — and replace it with silence.
-  const reportedUnsupportedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (deviceSupport !== 'unsupported' || webgpuSupport === null) {
-      return;
-    }
-
-    // Once per (device verdict, preset), not once per render.
-    const key = `${webgpuSupport}:${selectedModel.modelId}`;
-    if (reportedUnsupportedRef.current === key) {
-      return;
-    }
-    reportedUnsupportedRef.current = key;
-
-    captureEvent('assistant_device_unsupported', {
-      reason: webgpuSupport,
-      model_id: selectedModel.modelId,
-      device: selectedModel.device ?? 'default',
-    });
-  }, [deviceSupport, webgpuSupport, selectedModel.modelId, selectedModel.device]);
-
-  useEffect(() => {
-    void getCachedAssistantModelIds().then(setCachedModelIds);
-  }, []);
-
-  useEffect(() => {
-    if (isCached !== true) return;
-    setCachedModelIds((prev) => {
-      if (prev.has(selectedModelId)) return prev;
-      const next = new Set(prev);
-      next.add(selectedModelId);
-      return next;
-    });
-  }, [isCached, selectedModelId]);
 
   // Follow the conversation only while the reader is already at the bottom, and
   // jump instantly rather than animating — a smooth scroll restarted on every
@@ -1292,10 +500,8 @@ function AssistantPageComponent(): ReactElement {
    */
   const runTurn = useCallback(
     async ({ messageId, text }: QueuedPrompt): Promise<TurnOutcome> => {
-      // Wall clock, for the only performance question that matters here: how
-      // long somebody waits for an answer on their own hardware. The model runs
-      // in the browser, so this varies by device in a way no server metric would
-      // show.
+      // Wall clock: how long somebody waits for an answer, connection
+      // included, which no server metric shows.
       const startedAt = Date.now();
       const conversationVersion = conversationVersionRef.current;
       const isSameConversation = (): boolean =>
@@ -1321,21 +527,17 @@ function AssistantPageComponent(): ReactElement {
         { id: assistantId, role: 'assistant', content: '' },
       ]);
 
-      // Every action, every turn. The catalogue used to be ranked against the
-      // request by Needle 2's retrieval head, which Needle 3 does not carry —
-      // so the prose presets are back to documenting every offered action in
-      // their system prompt (`ACTION_SCHEMAS`, minus
-      // the meal planner's where its flag is off), and that prompt is what the
-      // character budget in `action-schema.test.ts` guards.
+      // Every offered action, every turn (`ACTION_SCHEMAS`, minus the meal
+      // planner's where its flag is off). That prompt is what the character
+      // budget in `action-schema.test.ts` guards.
       const actions = offeredActionsRef.current;
 
       // Built before the try/catch so a rejected generate() can still report
       // it in the $ai_generation failure capture below.
       //
-      // The transcript keeps growing; the prompt must not. Prefill memory is
-      // linear in prompt length and the models run on the user's own GPU, so an
-      // uncapped history eventually fails to allocate rather than just slowing
-      // down — hence the trim to the most recent exchanges.
+      // The transcript keeps growing; the prompt must not. Every token of it
+      // is paid on the project's key, so the history is trimmed to the most
+      // recent exchanges.
       const fullMessages: LLMChatMessage[] = [
         { role: 'system', content: buildSystemPromptRef.current(actions) },
         ...trimChatHistoryForPrompt(chatHistoryRef.current),
@@ -1384,10 +586,8 @@ function AssistantPageComponent(): ReactElement {
           ? await executeActionsRef.current(answer)
           : { count: 0, summaries: [] };
 
-        // A router preset answers with actions and a rationale and never with
-        // words, so an empty answer there is the normal shape of "nothing to
-        // do" rather than a failure — say so instead of showing an empty
-        // bubble.
+        // An answer with nothing in it, not even reasoning, says nothing was
+        // done rather than showing an empty bubble.
         const content =
           answer.length === 0 && reasoning.length === 0
             ? tRef.current('assistant.noActionTaken', {
@@ -1429,49 +629,33 @@ function AssistantPageComponent(): ReactElement {
 
         // One $ai_generation per turn, sharing the turn's trace id and the
         // conversation's session id so PostHog groups them into a trace tree.
-        const ranInCloud = isCloudPreset(selectedModelRef.current);
         posthog?.capture('$ai_generation', {
           $ai_trace_id: traceId,
           $ai_session_id: sessionIdRef.current,
-          $ai_model: selectedModelRef.current.modelId,
-          $ai_provider: aiProviderFor(selectedModelRef.current),
+          $ai_model: ASSISTANT_AI_MODEL,
+          $ai_provider: 'kikouchou',
           $ai_input: redactAiMessages(fullMessages),
           $ai_output_choices: redactAiOutput(response),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
-          // An on-device answer has no vendor token cost. A cloud one does: on
-          // `openrouter` it is billed to the user's account, and on `kikouchou`
-          // to the project, which the server's own OpenRouter activity records.
-          // Neither is known here, so no cost is claimed rather than a false 0.
-          ...(ranInCloud
-            ? {}
-            : {
-                $ai_input_cost_usd: 0,
-                $ai_output_cost_usd: 0,
-                $ai_total_cost_usd: 0,
-              }),
+          // The answer is billed to the project, which the server's own
+          // OpenRouter activity records. The client does not know the cost, so
+          // it claims none rather than a false 0.
         });
 
         return 'answered';
       } catch (err) {
-        const fatal = isFatalEngineError(err);
-
-        if (!isSameConversation()) return fatal ? 'engine-lost' : 'abandoned';
+        if (!isSameConversation()) return 'abandoned';
 
         // The exchange never happened: leaving the prompt in the history would
-        // send two user turns in a row, which Gemma's chat template rejects.
+        // send two user turns in a row.
         chatHistoryRef.current.pop();
 
         const detail = err instanceof Error ? err.message : String(err);
-        const content = fatal
-          ? tRef.current('assistant.engineCrashed', {
-              defaultValue:
-                'The model ran out of GPU resources and had to restart. Reloading it now. Send your request again in a moment.',
-            })
-          : tRef.current('assistant.generationFailed', {
-              defaultValue: 'Could not answer that: {{error}}',
-              error: detail,
-            });
+        const content = tRef.current('assistant.generationFailed', {
+          defaultValue: 'Could not answer that: {{error}}',
+          error: detail,
+        });
 
         console.error('Assistant generation failed:', err);
         setMessages((prev) =>
@@ -1482,17 +666,13 @@ function AssistantPageComponent(): ReactElement {
 
         captureEvent('assistant_answer_failed', {
           duration_ms: Date.now() - startedAt,
-          // A crashed engine and a refused generation need different fixes: the
-          // first is the device running out of GPU, the second is the model or
-          // the prompt.
-          fatal,
         });
 
         posthog?.capture('$ai_generation', {
           $ai_trace_id: traceId,
           $ai_session_id: sessionIdRef.current,
-          $ai_model: selectedModelRef.current.modelId,
-          $ai_provider: aiProviderFor(selectedModelRef.current),
+          $ai_model: ASSISTANT_AI_MODEL,
+          $ai_provider: 'kikouchou',
           $ai_input: redactAiMessages(fullMessages),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
@@ -1500,7 +680,7 @@ function AssistantPageComponent(): ReactElement {
           $ai_error: detail,
         });
 
-        return fatal ? 'engine-lost' : 'failed';
+        return 'failed';
       }
     },
     [askBeforeDeleting],
@@ -1518,12 +698,7 @@ function AssistantPageComponent(): ReactElement {
     try {
       let next = queueRef.current.shift();
       while (next !== undefined) {
-        const outcome = await runTurn(next);
-        if (outcome === 'engine-lost') {
-          // Every further prompt would hit the same dead session. Leave them
-          // queued; the reload effect below restarts the drain.
-          return;
-        }
+        await runTurn(next);
         next = queueRef.current.shift();
       }
     } finally {
@@ -1548,7 +723,7 @@ function AssistantPageComponent(): ReactElement {
       captureUsage('assistant_prompt_sent', {
         prompt: text,
         prompt_length: text.length,
-        model_id: selectedModelId,
+        model_id: ASSISTANT_MODEL_ID,
         // Read before the push below, so this is the depth the prompt waited
         // behind rather than including itself.
         queue_depth: queueRef.current.length,
@@ -1566,7 +741,7 @@ function AssistantPageComponent(): ReactElement {
       queueRef.current.push({ messageId, text });
       void drainQueue();
     },
-    [drainQueue, selectedModelId, status],
+    [drainQueue, status],
   );
 
   // A starter tapped before signing in, sent once the account answers. The
@@ -1579,11 +754,10 @@ function AssistantPageComponent(): ReactElement {
 
   const handleStarterPick = useCallback(
     (text: string, kind: StarterKind): void => {
-      const needsAccount =
-        selectedModel.engine === 'kikouchou' && !accountSignedIn;
+      const needsAccount = !accountSignedIn;
       captureEvent('assistant_starter_picked', {
         starter_kind: kind,
-        model_id: selectedModelId,
+        model_id: ASSISTANT_MODEL_ID,
         needs_sign_in: needsAccount,
       });
       if (!needsAccount) {
@@ -1592,31 +766,15 @@ function AssistantPageComponent(): ReactElement {
       }
 
       storePendingPrompt({ text, kind });
-      // Asking is choosing: the account model stays selected through the
-      // sign-in, which can come back on a fresh page load.
-      hasUserChangedModelRef.current = true;
-      void updateSettings({ assistantModelId: selectedModelId }).catch(
-        (settingsError: unknown) => {
-          console.error('Failed to keep the assistant model:', settingsError);
-        },
-      );
       setSignInOpen(true);
     },
-    [accountSignedIn, handleSend, selectedModel.engine, selectedModelId],
+    [accountSignedIn, handleSend],
   );
 
   const handleAccountSignIn = useCallback((): void => {
-    captureEvent('assistant_sign_in_requested', { model_id: selectedModelId });
+    captureEvent('assistant_sign_in_requested', { model_id: ASSISTANT_MODEL_ID });
     setSignInOpen(true);
-  }, [selectedModelId]);
-
-  // The engine reloads itself after a crash (see useWebLLM); pick the queue up
-  // again as soon as it can answer.
-  useEffect(() => {
-    if (status !== 'ready') return;
-    if (queueRef.current.length === 0) return;
-    void drainQueue();
-  }, [status, drainQueue]);
+  }, []);
 
   const handleClearQueue = useCallback((): void => {
     const dropped = queueRef.current;
@@ -1672,50 +830,7 @@ function AssistantPageComponent(): ReactElement {
     notify.success(t('assistant.conversationCleared'));
   }, [interrupt, t]);
 
-  const handleModelChange = useCallback(
-    async (value: string): Promise<void> => {
-      if (!isAssistantModelId(value) || value === selectedModelId) {
-        return;
-      }
-
-      const previousModelId = selectedModelId;
-      hasUserChangedModelRef.current = true;
-      setSelectedModelId(value);
-
-      try {
-        if (status !== 'idle') {
-          await unload();
-        }
-        await updateSettings({ assistantModelId: value });
-        // Deliberately a raw confirmation: the chosen model is a device preference
-        // that never syncs, so "Saved on this device" adds nothing while
-        // dropping the model name the user needs to see.
-        notify.success(
-          t('assistant.modelChanged', {
-            model: t(
-              getAssistantModelPreset(value).nameKey,
-              getAssistantModelPreset(value).fallbackName,
-            ),
-            defaultValue: 'Assistant model set to {{model}}',
-          }),
-        );
-      } catch (changeError) {
-        console.error('Failed to update assistant model:', changeError);
-        setSelectedModelId(previousModelId);
-        notify.error(
-          t(
-            'assistant.modelChangeFailed',
-            'Could not switch the assistant model. Please try again.',
-          ),
-        );
-      }
-    },
-    [selectedModelId, status, t, unload],
-  );
-
   const isReady = status === 'ready' || status === 'generating';
-  const isModelSelectionLocked =
-    status === 'loading' || status === 'generating' || isAnswering;
   const queuedCount = useMemo(
     () => messages.reduce((count, msg) => (msg.queued ? count + 1 : count), 0),
     [messages],
@@ -1736,34 +851,7 @@ function AssistantPageComponent(): ReactElement {
           'Ask questions or modify your trip using natural language',
         )}
         action={
-          isReady ? (
-            <>
-              <AssistantModelCompactSelect
-                selectedModelId={selectedModelId}
-                onModelChange={(value) => {
-                  void handleModelChange(value);
-                }}
-                disabled={isModelSelectionLocked}
-                cachedModelIds={cachedModelIds}
-                presets={offeredPresets}
-              />
-              {selectedModel.engine === 'openrouter' ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  aria-label={t('assistant.cloud.disconnect', 'Disconnect OpenRouter')}
-                  onClick={disconnect}
-                  disabled={isAnswering}
-                >
-                  <LogOut className="size-4" aria-hidden="true" />
-                  <span className="hidden sm:inline">
-                    {t('assistant.cloud.disconnect', 'Disconnect OpenRouter')}
-                  </span>
-                </Button>
-              ) : null}
-              {messages.length > 0 ? (
+          isReady && messages.length > 0 ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1777,49 +865,20 @@ function AssistantPageComponent(): ReactElement {
                     {t('assistant.clearConversation')}
                   </span>
                 </Button>
-              ) : null}
-            </>
           ) : undefined
         }
       />
 
-      {!isReady ? (
-        <>
-          {/* The picker scrolls with the card under it. On a phone the picker
-              fills most of the screen, and a strip of its own under it hid the
-              connect button: a scroll over the picker moved nothing. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-            <AssistantModelPanel
-              selectedModelId={selectedModelId}
-              onModelChange={(value) => {
-                void handleModelChange(value);
-              }}
-              disabled={isModelSelectionLocked}
-              isCached={isCached}
-              cachedModelIds={cachedModelIds}
-              presets={offeredPresets}
-            />
-            {selectedModel.engine === 'kikouchou' ? (
-              <AccountAssistantCard
-                onPick={handleStarterPick}
-                onSignIn={handleAccountSignIn}
-                error={error}
-              />
-            ) : isCloud ? (
-              <CloudConnectCard onConnect={connect} error={error} />
-            ) : (
-              <ModelLoadingCard
-                onLoad={loadModel}
-                onCancel={cancelLoad}
-                status={status}
-                loadProgress={loadProgress}
-                error={error}
-                deviceSupport={deviceSupport}
-                downloadSize={formatBytes(selectedModel.approxDownloadBytes)}
-              />
-            )}
-          </div>
-        </>
+      {!accountsAvailable ? (
+        <AssistantUnavailableCard />
+      ) : !isReady ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          <AccountAssistantCard
+            onPick={handleStarterPick}
+            onSignIn={handleAccountSignIn}
+            error={error}
+          />
+        </div>
       ) : (
         <>
           {/* Messages area — only this region scrolls; input stays visible above mobile nav */}
@@ -1859,10 +918,9 @@ function AssistantPageComponent(): ReactElement {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Disabled while an answer runs or a prompt waits, a crashed engine
-              included: the answer lands after the prompt that asked for it,
-              and a view slipped in between would split the pair the model's
-              history is rebuilt from. */}
+          {/* Disabled while an answer runs or a prompt waits: the answer lands
+              after the prompt that asked for it, and a view slipped in between
+              would split the pair the model's history is rebuilt from. */}
           <ViewShortcuts
             onShowView={handleShowView}
             disabled={isAnswering || queuedCount > 0}

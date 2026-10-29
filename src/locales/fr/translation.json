@@ -1372,33 +1372,7 @@
       }
     },
     "title": "Assistant IA",
-    "description": "Exécutez un modèle localement sur votre appareil pour gérer votre voyage en langage naturel.",
     "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",
-    "modelLabel": "Modèle de l'assistant",
-    "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité. La taille indiquée à côté de chaque nom est ce que télécharge la première utilisation. Un modèle cloud ne télécharge rien et fonctionne sur tout appareil.",
-    "modelDownloadSize": "La première utilisation télécharge environ {{size}}.",
-    "hubModelLabel": "Modèle HF : {{model}}",
-    "modelCached": "Ce modèle est déjà en cache sur cet appareil.",
-    "modelChanged": "Modèle de l'assistant défini sur {{model}}",
-    "modelChangeFailed": "Impossible de changer le modèle de l'assistant. Veuillez réessayer.",
-    "loadModel": "Charger le modèle",
-    "loadHint": "Le modèle pèse environ {{size}}. Il est téléchargé une fois, puis mis en cache dans votre navigateur. Il nécessite WebGPU.",
-    "loadDataWarning": "Si vous êtes en données mobiles, connectez-vous d'abord au Wi-Fi : {{size}}, c'est un gros téléchargement.",
-    "deviceUnsupportedTitle": "Cet appareil ne peut pas exécuter l'assistant",
-    "deviceUnsupportedDescription": "L'assistant exécute le modèle entièrement sur votre appareil, ce qui nécessite WebGPU, et ce navigateur ne peut pas l'utiliser ici. Ouvrez l'application dans une version récente de Chrome, Edge ou Safari sur ordinateur pour en profiter.",
-    "initializingLoader": "Initialisation…",
-    "downloadingModelFiles": "Téléchargement des fichiers du modèle…",
-    "downloadingFile": "Téléchargement de {{file}} : {{percent}} % pour ce fichier",
-    "preparingFile": "Préparation de {{file}}…",
-    "fileDownloadDone": "Terminé : {{file}}",
-    "loadingProgressCaption": "Barre du haut : progression globale du modèle. Liste : uniquement les fichiers en cours de téléchargement.",
-    "cancelLoad": "Annuler",
-    "loadCancelled": "Chargement annulé. Les fichiers déjà téléchargés restent dans le cache de votre navigateur.",
-    "loadingOverallProgressAria": "Progression globale du téléchargement du modèle",
-    "modelFilesListAria": "Progression du téléchargement par fichier",
-    "fileDownloadProgressAria": "Progression du téléchargement pour {{file}}",
-    "fileShardDone": "Terminé",
-    "loadingProgressAria": "Progression du téléchargement du fichier en cours",
     "placeholder": "Posez une question sur votre voyage ou demandez des modifications...",
     "send": "Envoyer le message",
     "stop": "Arrêter la génération",
@@ -1432,7 +1406,6 @@
     "clearQueue": "Vider la file d'attente",
     "queueCleared_one": "1 demande en attente supprimée",
     "queueCleared_other": "{{count}} demandes en attente supprimées",
-    "engineCrashed": "Le modèle a manqué de ressources GPU et a dû redémarrer. Rechargement en cours. Renvoyez votre demande dans un instant.",
     "generationFailed": "Impossible de répondre : {{error}}",
     "emptyTitle": "Prêt à vous aider avec votre voyage !",
     "emptyHint": "Essayez de demander « Qui reste ce soir ? » ou « Ajouter un invité nommé Alice »",
@@ -1458,8 +1431,8 @@
       "signInReason": "Le serveur Kikouchou répond à vos questions, et il répond aux comptes : un compte gratuit suffit.",
       "signInDetail": "Votre question est gardée et envoyée dès votre retour.",
       "errors": {
-        "unauthorized": "Votre session a expiré. Reconnectez-vous pour continuer avec ce modèle.",
-        "dailyLimit": "Vous avez utilisé les questions du jour. Le compteur repart demain, ou choisissez un autre modèle.",
+        "unauthorized": "Votre session a expiré. Reconnectez-vous pour continuer à utiliser l'assistant.",
+        "dailyLimit": "Vous avez utilisé les questions du jour. Le compteur repart demain.",
         "unavailable": "Le serveur Kikouchou ne peut pas répondre pour l'instant. Réessayez dans un moment.",
         "network": "Impossible de joindre le serveur Kikouchou. Vérifiez votre connexion.",
         "provider": "Le modèle n'a pas répondu. Réessayez."
@@ -1471,72 +1444,6 @@
       "exploreRooms": "Qui dort où la première nuit ?",
       "createFamily": "Crée une semaine à la montagne en août pour ma famille",
       "explorePlan": "Qu'est-ce qui est prévu le premier jour ?"
-    },
-    "cloud": {
-      "badge": "Cloud",
-      "modelLabel": "Modèle OpenRouter : {{model}}",
-      "connectTitle": "Connectez votre compte OpenRouter",
-      "connectDescription": "OpenRouter donne accès aux modèles Claude et GPT avec un seul compte. Vous vous connectez sur openrouter.ai, et l'application reçoit une clé qui vous appartient. Les réponses sont facturées sur votre compte OpenRouter.",
-      "privacyNotice": "Chaque question envoie les détails du séjour, noms des invités compris, à OpenRouter et à l'entreprise qui fait tourner le modèle. La clé reste sur cet appareil. Pour la révoquer, supprimez-la sur openrouter.ai.",
-      "connect": "Se connecter avec OpenRouter",
-      "disconnect": "Déconnecter OpenRouter",
-      "connected": "Compte OpenRouter connecté",
-      "connectFailed": "Impossible de connecter votre compte OpenRouter. Réessayez.",
-      "errors": {
-        "unauthorized": "Votre connexion OpenRouter n'est plus valide. Reconnectez-vous pour continuer avec ce modèle.",
-        "insufficientCredits": "Votre compte OpenRouter n'a plus de crédits. Ajoutez-en sur openrouter.ai, puis réessayez.",
-        "rateLimited": "Trop de requêtes pour le moment. Patientez un instant, puis réessayez.",
-        "network": "Impossible de joindre OpenRouter. Vérifiez votre connexion.",
-        "notConnected": "Connectez votre compte OpenRouter pour utiliser ce modèle.",
-        "connectFailed": "Impossible de lancer la connexion à OpenRouter. Réessayez."
-      }
-    },
-    "models": {
-      "needle-v3": {
-        "name": "Minuscule",
-        "description": "Fait les modifications seulement, et r\u00e9fl\u00e9chit d'abord. Il ne sait pas r\u00e9pondre avec des mots.",
-        "hint": "Fonctionne sur tout appareil, sans WebGPU, et t\u00e9l\u00e9charge environ 40 fois moins que L\u00e9ger."
-      },
-      "qwen3-1-7b": {
-        "name": "Léger",
-        "description": "L'option la plus petite qui répond avec des mots, pensée pour les appareils plus modestes.",
-        "hint": "Nécessite WebGPU. C'est celle qui a le plus de chances d'être fluide sur un matériel limité."
-      },
-      "gemma-4-e2b": {
-        "name": "Équilibré",
-        "description": "Un meilleur niveau de raisonnement et de qualité tout en restant plus léger que E4B.",
-        "hint": "Nécessite WebGPU. Bon choix par défaut pour les laptops et desktops récents."
-      },
-      "gemma-4-e4b": {
-        "name": "Meilleure qualité",
-        "description": "Le plus gros preset de l'application, avec la meilleure qualité de raisonnement.",
-        "hint": "Nécessite un appareil WebGPU plus puissant, et c'est le plus gros téléchargement des trois."
-      },
-      "cloud-auto": {
-        "name": "Auto",
-        "description": "OpenRouter choisit un modèle pour chaque question, parmi les moins coûteux.",
-        "hint": "Fonctionne sur tout appareil connecté. Le modèle, et son entreprise, peuvent changer d'une réponse à l'autre."
-      },
-      "cloud-claude-haiku": {
-        "name": "Claude Haiku",
-        "description": "Rapide et peu coûteux. Tourne chez Anthropic via votre compte OpenRouter.",
-        "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
-      },
-      "cloud-claude-sonnet": {
-        "name": "Claude Sonnet",
-        "description": "Les meilleures réponses. Tourne chez Anthropic via votre compte OpenRouter.",
-        "hint": "Fonctionne sur tout appareil connecté. Coûte plus cher par réponse que Haiku."
-      },
-      "cloud-gpt-sol": {
-        "name": "GPT Sol",
-        "description": "Modèle d'OpenAI. Tourne chez OpenAI via votre compte OpenRouter.",
-        "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
-      },
-      "cloud-kikouchou": {
-        "name": "Kikouchou",
-        "description": "Inclus avec votre compte Kikouchou, dans une limite quotidienne. Rien à configurer.",
-        "hint": "Demande un compte et une connexion. Fonctionne sur tout appareil."
-      }
     },
     "actionDetails": {
       "createTrip": "Voyage créé : {{name}}",
@@ -1581,8 +1488,6 @@
       "checkShoppingItem": "Acheté : {{name}}",
       "removeShoppingItem": "Retiré de la liste de courses : {{name}}"
     },
-    "initializingCachedLoader": "Initialisation du modèle en cache…",
-    "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…",
     "rideNotFound": "Ce trajet est introuvable.",
     "vehicleNotFound": "Cette voiture est introuvable.",
     "transportNotFound": "Cette arrivée ou ce départ est introuvable.",
@@ -1595,7 +1500,11 @@
     "mealNotFound": "Je n'ai pas trouvé ce repas.",
     "invalidMeal": "Je n'ai pas pu organiser ce repas : le jour ou le repas n'est pas valide.",
     "shoppingItemNotFound": "Je n'ai pas trouvé cet article dans la liste de courses.",
-    "invalidShoppingItem": "Je n'ai pas pu ajouter cet article : il lui faut un nom."
+    "invalidShoppingItem": "Je n'ai pas pu ajouter cet article : il lui faut un nom.",
+    "unavailable": {
+      "title": "L'assistant n'est pas disponible ici",
+      "description": "L'assistant répond via un compte Kikouchou, et cette version de l'application n'a pas de service de comptes."
+    }
   },
   "auth": {
     "account": {

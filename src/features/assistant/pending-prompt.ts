@@ -2,7 +2,7 @@
  * @fileoverview A question asked before signing in, kept until the account
  * exists.
  *
- * The account preset needs a session, and a web sign-in leaves the page: the
+ * The assistant needs a session, and a web sign-in leaves the page: the
  * provider's redirect, or a magic link opened in a new tab, comes back to the
  * app's root. The question the visitor tapped would be lost on the way. It
  * waits here instead, and the assistant page sends it once it is ready.

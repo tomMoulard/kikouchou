@@ -1,8 +1,8 @@
 /**
  * @fileoverview Streams one chat completion from api.kikouchou.app.
  *
- * The `kikouchou` engine: the project's own server answers, on the project's
- * OpenRouter key, for a signed-in account (`server/api`). The
+ * The project's own server answers, on the project's OpenRouter key, for a
+ * signed-in account (`server/api`). The
  * request carries the Supabase access token and the messages, nothing else.
  * The server picks the model and caps the answer, so a client cannot spend
  * the project's key on something dearer. Its answer is OpenRouter's stream,

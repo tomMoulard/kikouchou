@@ -2,7 +2,7 @@
  * @fileoverview The row of shortcuts that opens a view of the trip in the chat
  * without a model turn.
  *
- * Typing "show me the planning" works, but a local model can take seconds to
+ * Typing "show me the planning" works, but the model can take seconds to
  * answer it and some people would rather tap than type. A shortcut writes the
  * same `showView` block the model would, so both draw the same view.
  *

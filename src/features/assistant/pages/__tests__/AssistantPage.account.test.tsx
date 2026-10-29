@@ -1,6 +1,6 @@
 /**
- * @fileoverview AssistantPage with the account model: the onboarding arm's
- * landing, the starter questions and the sign-in they lead to.
+ * @fileoverview AssistantPage and the account it answers for: the starter
+ * questions, the sign-in they lead to, and a build with no accounts at all.
  * @module features/assistant/pages/__tests__/AssistantPage.account.test
  */
 
@@ -14,13 +14,11 @@ import { installLocalStorageDouble } from '@/test/local-storage';
 import { PENDING_PROMPT_STORAGE_KEY } from '../../pending-prompt';
 
 const mockGenerate = vi.fn();
-const mockGetSettings = vi.fn();
-const mockUpdateSettings = vi.fn();
 const mockCapture = vi.fn();
-const mockUseWebLLM = vi.fn();
+const mockUseAssistantChat = vi.fn();
 
 const auth = vi.hoisted(() => ({ session: null as unknown }));
-const entry = vi.hoisted(() => ({ via: 'other' as string }));
+const supabase = vi.hoisted(() => ({ configured: true }));
 
 vi.mock('@/lib/posthog', () => ({
   reportError: vi.fn(),
@@ -44,14 +42,9 @@ vi.mock('@/components/shared/PageHeader', () => ({
   ),
 }));
 
-vi.mock('@/lib/db', () => ({
-  getSettings: (...args: unknown[]) => mockGetSettings(...args),
-  updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
-}));
-
 vi.mock('@/lib/supabase/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/supabase/client')>()),
-  isSupabaseConfigured: () => true,
+  isSupabaseConfigured: () => supabase.configured,
 }));
 
 vi.mock('@/features/auth', () => ({ useAuth: () => ({ session: auth.session }) }));
@@ -73,10 +66,6 @@ vi.mock('@/features/auth/components/SignInDialog', () => ({
     ) : null,
 }));
 
-vi.mock('@/hooks/useSampleTripViewReport', () => ({
-  readVia: () => entry.via,
-}));
-
 vi.mock('../../hooks/useTripSystemPrompt', () => ({
   useTripSystemPrompt: () => ({
     systemPrompt: 'system-prompt',
@@ -91,97 +80,54 @@ vi.mock('../../hooks/useTripActions', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('../../openrouter/callback', () => ({
-  consumeOpenRouterCallback: () => null,
-  onOpenRouterCallback: () => () => {},
-}));
-
-vi.mock('../../openrouter/auth', () => ({
-  completeOpenRouterConnect: vi.fn(),
-}));
-
-vi.mock('../../hooks/useWebLLM', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../hooks/useWebLLM')>()),
-  useWebLLM: (...args: unknown[]) => mockUseWebLLM(...args),
+vi.mock('../../hooks/useAssistantChat', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../hooks/useAssistantChat')>()),
+  useAssistantChat: (...args: unknown[]) => mockUseAssistantChat(...args),
 }));
 
 import { AssistantPage } from '../AssistantPage';
 
 const storage = installLocalStorageDouble();
 
-function engine(overrides: Record<string, unknown> = {}) {
+function chat(overrides: Record<string, unknown> = {}) {
   return {
     status: 'idle',
-    loadProgress: null,
     error: null,
-    isCached: false,
-    loadModel: vi.fn().mockResolvedValue(undefined),
-    cancelLoad: vi.fn(),
     generate: mockGenerate,
     interrupt: vi.fn(),
-    unload: vi.fn().mockResolvedValue(undefined),
-    connect: vi.fn(),
-    disconnect: vi.fn(),
     ...overrides,
   };
 }
 
-function lastPresetId(): string | undefined {
-  const call = mockUseWebLLM.mock.calls.at(-1) as [{ id: string }] | undefined;
-  return call?.[0].id;
-}
-
-describe('AssistantPage with the account model', () => {
+describe('AssistantPage and the account', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage.clear();
     Element.prototype.scrollIntoView = vi.fn();
     auth.session = null;
-    entry.via = 'other';
-    mockGetSettings.mockResolvedValue({});
-    mockUpdateSettings.mockResolvedValue(undefined);
+    supabase.configured = true;
     mockGenerate.mockResolvedValue('Done.');
-    mockUseWebLLM.mockReturnValue(engine());
+    mockUseAssistantChat.mockReturnValue(chat());
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('opens on the account model, with the starters, when `/` sent the visitor here', async () => {
-    entry.via = 'entry';
-
+  it('offers the starters and an account to a signed-out visitor, with no model to pick', () => {
     render(<AssistantPage />, { withProviders: false });
 
-    await waitFor(() => expect(lastPresetId()).toBe('cloud-kikouchou'));
     expect(
       screen.getByRole('group', { name: 'assistant.starters.label' }),
     ).toBeInTheDocument();
     expect(screen.getByText('assistant.account.privacyNotice')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'assistant.loadModel' })).not.toBeInTheDocument();
-    // Shown, not saved: nothing was asked yet.
-    expect(mockUpdateSettings).not.toHaveBeenCalled();
-  });
-
-  it('keeps the stored model over the arm, and the default for anyone else', async () => {
-    entry.via = 'entry';
-    mockGetSettings.mockResolvedValue({ assistantModelId: 'cloud-auto' });
-    const { unmount } = render(<AssistantPage />, { withProviders: false });
-    await waitFor(() => expect(lastPresetId()).toBe('cloud-auto'));
-    unmount();
-
-    entry.via = 'other';
-    mockGetSettings.mockResolvedValue({});
-    mockUseWebLLM.mockClear();
-    render(<AssistantPage />, { withProviders: false });
-    await waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(2));
-    expect(lastPresetId()).not.toBe('cloud-kikouchou');
+    expect(screen.getByRole('button', { name: 'assistant.account.signIn' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(mockUseAssistantChat).toHaveBeenLastCalledWith({ accountSignedIn: false });
   });
 
   it('asks for an account on a starter tap, and keeps the question for later', async () => {
-    entry.via = 'entry';
     const { user } = render(<AssistantPage />, { withProviders: false });
-    await waitFor(() => expect(lastPresetId()).toBe('cloud-kikouchou'));
 
     await user.click(screen.getByRole('button', { name: 'assistant.starters.createWeekend' }));
 
@@ -192,8 +138,6 @@ describe('AssistantPage with the account model', () => {
       text: 'assistant.starters.createWeekend',
       kind: 'create',
     });
-    // The account model stays chosen through a sign-in that reloads the page.
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ assistantModelId: 'cloud-kikouchou' });
     expect(mockGenerate).not.toHaveBeenCalled();
     expect(mockCapture).toHaveBeenCalledWith('assistant_starter_picked', {
       starter_kind: 'create',
@@ -203,9 +147,7 @@ describe('AssistantPage with the account model', () => {
   });
 
   it('opens the sign-in from its own button too', async () => {
-    entry.via = 'entry';
     const { user } = render(<AssistantPage />, { withProviders: false });
-    await waitFor(() => expect(lastPresetId()).toBe('cloud-kikouchou'));
 
     await user.click(screen.getByRole('button', { name: 'assistant.account.signIn' }));
 
@@ -215,10 +157,17 @@ describe('AssistantPage with the account model', () => {
     });
   });
 
+  it('shows why the last answer failed on the sign-in card', () => {
+    mockUseAssistantChat.mockReturnValue(chat({ error: 'Your session has ended.' }));
+
+    render(<AssistantPage />, { withProviders: false });
+
+    expect(screen.getByText('Your session has ended.')).toBeInTheDocument();
+  });
+
   it('sends the kept question once the account answers', async () => {
     auth.session = { user: { is_anonymous: false } };
-    mockGetSettings.mockResolvedValue({ assistantModelId: 'cloud-kikouchou' });
-    mockUseWebLLM.mockReturnValue(engine({ status: 'ready', isCached: true }));
+    mockUseAssistantChat.mockReturnValue(chat({ status: 'ready' }));
     storage.entries.set(
       PENDING_PROMPT_STORAGE_KEY,
       JSON.stringify({ text: 'Plan a weekend at the seaside', kind: 'create', at: Date.now() }),
@@ -231,16 +180,12 @@ describe('AssistantPage with the account model', () => {
     expect(messages.at(-1)).toEqual({ role: 'user', content: 'Plan a weekend at the seaside' });
     expect(storage.entries.has(PENDING_PROMPT_STORAGE_KEY)).toBe(false);
     // The hook is told the account is there.
-    expect(mockUseWebLLM).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: 'cloud-kikouchou' }),
-      { accountSignedIn: true },
-    );
+    expect(mockUseAssistantChat).toHaveBeenLastCalledWith({ accountSignedIn: true });
   });
 
   it('sends a starter straight away once the chat is ready', async () => {
     auth.session = { user: { is_anonymous: false } };
-    mockGetSettings.mockResolvedValue({ assistantModelId: 'cloud-kikouchou' });
-    mockUseWebLLM.mockReturnValue(engine({ status: 'ready', isCached: true }));
+    mockUseAssistantChat.mockReturnValue(chat({ status: 'ready' }));
     const { user } = render(<AssistantPage />, { withProviders: false });
 
     await user.click(
@@ -256,24 +201,17 @@ describe('AssistantPage with the account model', () => {
     });
   });
 
-  it('does not count an anonymous session as an account', async () => {
+  it('does not count an anonymous session as an account', () => {
     auth.session = { user: { is_anonymous: true } };
-    mockGetSettings.mockResolvedValue({ assistantModelId: 'cloud-kikouchou' });
 
     render(<AssistantPage />, { withProviders: false });
 
-    await waitFor(() =>
-      expect(mockUseWebLLM).toHaveBeenLastCalledWith(
-        expect.objectContaining({ id: 'cloud-kikouchou' }),
-        { accountSignedIn: false },
-      ),
-    );
+    expect(mockUseAssistantChat).toHaveBeenLastCalledWith({ accountSignedIn: false });
   });
 
-  it('reports an answer under the kikouchou provider', async () => {
+  it('reports an answer under the kikouchou provider, with no made-up cost', async () => {
     auth.session = { user: { is_anonymous: false } };
-    mockGetSettings.mockResolvedValue({ assistantModelId: 'cloud-kikouchou' });
-    mockUseWebLLM.mockReturnValue(engine({ status: 'ready', isCached: true }));
+    mockUseAssistantChat.mockReturnValue(chat({ status: 'ready' }));
     const { user } = render(<AssistantPage />, { withProviders: false });
 
     await user.click(
@@ -285,8 +223,18 @@ describe('AssistantPage with the account model', () => {
     });
     const generation = mockCapture.mock.calls.find(([name]) => name === '$ai_generation')![1] as Record<string, unknown>;
     expect(generation.$ai_provider).toBe('kikouchou');
+    expect(generation.$ai_model).toBe('kikouchou/assistant');
     expect(generation).not.toHaveProperty('$ai_total_cost_usd');
-    // No OpenRouter disconnect on an account model.
-    expect(screen.queryByRole('button', { name: 'assistant.cloud.disconnect' })).not.toBeInTheDocument();
+  });
+
+  it('says the assistant is unavailable in a build with no accounts', () => {
+    supabase.configured = false;
+
+    render(<AssistantPage />, { withProviders: false });
+
+    expect(screen.getByText('assistant.unavailable.title')).toBeInTheDocument();
+    expect(screen.getByText('assistant.unavailable.description')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'assistant.account.signIn' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 });

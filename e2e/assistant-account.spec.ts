@@ -1,14 +1,14 @@
 /**
  * @fileoverview The onboarding experiment's assistant arm, and the account
- * model it opens on.
+ * the assistant answers for.
  *
  * A first open whose one trip is the sample goes from `/` to the assistant,
- * which offers starter questions on the account model. Signed out, a starter
+ * which offers starter questions. Signed out, a starter
  * asks for an account and keeps the question; signed in, the kept question is
  * sent to api.kikouchou.app with the session token.
  *
  * Runs in the `sync` project, the one whose build has a Supabase project (the
- * stub): a build without accounts does not offer the account model at all.
+ * stub): a build without accounts shows no chat at all.
  * api.kikouchou.app is routed to a canned answer; the server itself is tested
  * in `server/api`.
  *

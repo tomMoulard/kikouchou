@@ -8,7 +8,7 @@
 import { nanoid } from 'nanoid';
 
 import type { ChatMessageData } from './components/ChatMessage';
-import type { ChatMessage as LLMChatMessage } from './hooks/useWebLLM';
+import type { ChatMessage as LLMChatMessage } from './hooks/useAssistantChat';
 
 // ============================================================================
 // Constants
@@ -21,12 +21,9 @@ const SESSION_STORAGE_KEY = 'kikouchou.assistant.chat.session.v1';
  * Past turns kept in the prompt, on top of the one being answered — three
  * complete exchanges.
  *
- * Everything sent to the model is re-tokenised on every turn, and prefill
- * memory grows with the prompt: on a model whose ONNX export does not slice the
- * logits, each prompt token costs `vocab_size` floats of GPU-to-CPU readback.
- * An uncapped transcript therefore does not degrade gradually — it walks into a
- * failed buffer allocation and takes the WebGPU device with it. Three exchanges
- * is also about as much back-reference as a 1–4B on-device model uses well.
+ * Everything sent to the model is sent again on every turn, and every token of
+ * it is paid on the project's key, so an uncapped transcript makes each answer
+ * dearer than the last.
  */
 export const MAX_PROMPT_HISTORY_MESSAGES = 6;
 
@@ -93,8 +90,8 @@ export function loadAssistantChatMessages(): ChatMessageData[] {
 function isPersistableMessage(message: ChatMessageData): boolean {
   if (message.queued === true || message.failed === true) return false;
   if (message.role !== 'assistant') return true;
-  // An answer that is only reasoning still happened: the Needle preset says
-  // what it decided there and nowhere else.
+  // An answer that is only reasoning still happened: the model said what it
+  // decided there and nowhere else.
   return message.content.length > 0 || (message.reasoning ?? '').length > 0;
 }
 
@@ -146,7 +143,7 @@ export function getOrCreateAssistantSessionId(): string {
 /**
  * Rebuilds LLM user/assistant history from UI messages (for session restore).
  *
- * Only complete user→assistant pairs survive. Gemma's chat template rejects a
+ * Only complete user→assistant pairs survive. Many chat templates reject a
  * history whose roles do not strictly alternate, so a prompt left unanswered by
  * a failed or interrupted turn would break *every* later generation, not just
  * its own.
@@ -172,8 +169,8 @@ export function messagesToLLMChatHistory(
       answer.content.length === 0
     ) {
       // An answer with reasoning and no words is skipped too: replaying an
-      // empty assistant turn breaks the strict alternation Gemma's chat
-      // template demands, and the reasoning is display only.
+      // empty assistant turn breaks the strict alternation many chat
+      // templates demand, and the reasoning is display only.
       continue;
     }
 
@@ -191,8 +188,8 @@ export function messagesToLLMChatHistory(
  * Bounds the conversation handed to the model, keeping the most recent turns.
  *
  * The transcript the user sees is untouched — only the prompt is trimmed. The
- * caps are hit by whole exchanges from the front, never by half of one: Gemma's
- * chat template rejects a history that does not strictly alternate, so a
+ * caps are hit by whole exchanges from the front, never by half of one: many
+ * chat templates reject a history that does not strictly alternate, so a
  * trimmed history that opened on an assistant answer would break every
  * generation after it, not just this one.
  *

@@ -574,24 +574,6 @@ export function normalizeRoomIcon(value: unknown): RoomIcon {
  */
 export type Language = 'en' | 'fr';
 
-/**
- * Supported assistant model presets: on-device ones, then the cloud models the
- * user reaches through their own OpenRouter account.
- *
- * These are symbolic preset identifiers stored in user settings; the concrete
- * model IDs live in the assistant feature module.
- */
-export type AssistantModelId =
-  | 'needle-v3'
-  | 'qwen3-1-7b'
-  | 'gemma-4-e2b'
-  | 'gemma-4-e4b'
-  | 'cloud-auto'
-  | 'cloud-claude-haiku'
-  | 'cloud-claude-sonnet'
-  | 'cloud-gpt-sol'
-  | 'cloud-kikouchou';
-
 // ============================================================================
 // Base Interfaces
 // ============================================================================
@@ -1948,12 +1930,6 @@ export interface AppSettings extends Identifiable {
    * Undefined if no trip has been viewed yet.
    */
   currentTripId?: TripId;
-
-  /**
-   * Preferred local assistant model preset.
-   * Undefined means "use the app default".
-   */
-  assistantModelId?: AssistantModelId;
 
   /**
    * Which guest this device's owner *is*, per trip: `{ [tripId]: personId }`.

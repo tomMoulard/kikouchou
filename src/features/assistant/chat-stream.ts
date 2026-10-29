@@ -1,13 +1,10 @@
 /**
  * @fileoverview Reads a streamed chat completion, in the OpenAI event format.
  *
- * Two engines receive that format: `openrouter`, straight from OpenRouter
- * with the user's key, and `kikouchou`, from api.kikouchou.app, which relays
- * OpenRouter's stream unchanged. One reader serves both, so a fix to how an
- * event is split or how a mid-stream error reads reaches both.
+ * api.kikouchou.app relays OpenRouter's stream unchanged, in that format.
  *
- * `onChunk` receives the **whole answer so far**, the contract the local
- * workers keep too, and an abort resolves with what arrived.
+ * `onChunk` receives the **whole answer so far**, and an abort resolves with
+ * what arrived.
  *
  * @module features/assistant/chat-stream
  */
@@ -16,7 +13,7 @@
 // Type Definitions
 // ============================================================================
 
-/** How each engine turns a failure into its own error type. */
+/** How the caller turns a failure into its own error type. */
 export interface ChatStreamErrors {
   /** The provider reported an error after the stream started. */
   readonly provider: (message: string) => Error;
@@ -79,7 +76,7 @@ function parseDataLine(data: string): DataLine {
  * Reads the stream to its end.
  *
  * @returns The full answer, or what had arrived when the request aborted
- * @throws The engine's error from `errors`, for anything other than an abort
+ * @throws The caller's error from `errors`, for anything other than an abort
  */
 export async function readChatStream(
   body: ReadableStream<Uint8Array>,

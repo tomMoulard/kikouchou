@@ -1372,33 +1372,7 @@
       }
     },
     "title": "AI Assistant",
-    "description": "Run a local model on your device to manage your trip with natural language.",
     "pageDescription": "Ask questions or modify your trip using natural language",
-    "modelLabel": "Assistant model",
-    "modelDescription": "Pick a smaller model for weaker devices or a bigger one for better quality. The size next to each name is what the first use downloads. A cloud model downloads nothing and runs on any device.",
-    "modelDownloadSize": "First use downloads about {{size}}.",
-    "hubModelLabel": "HF model: {{model}}",
-    "modelCached": "This model is already cached on this device.",
-    "modelChanged": "Assistant model set to {{model}}",
-    "modelChangeFailed": "Could not switch the assistant model. Please try again.",
-    "loadModel": "Load Model",
-    "loadHint": "The model is about {{size}}. It is downloaded once, then cached in your browser. It needs WebGPU.",
-    "loadDataWarning": "If you are on mobile data, connect to Wi-Fi first: {{size}} is a large download.",
-    "deviceUnsupportedTitle": "This device cannot run the assistant",
-    "deviceUnsupportedDescription": "The assistant runs the model entirely on your own device, which needs WebGPU, and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.",
-    "initializingLoader": "Initializing…",
-    "downloadingModelFiles": "Downloading model files…",
-    "downloadingFile": "Downloading {{file}}: {{percent}}% of this file",
-    "preparingFile": "Preparing {{file}}…",
-    "fileDownloadDone": "Finished {{file}}",
-    "loadingProgressCaption": "Top bar: overall model download progress. List: only files currently downloading.",
-    "cancelLoad": "Cancel",
-    "loadCancelled": "Loading cancelled. Files already downloaded stay in your browser cache.",
-    "loadingOverallProgressAria": "Overall model download progress",
-    "modelFilesListAria": "Per-file download progress",
-    "fileDownloadProgressAria": "Download progress for {{file}}",
-    "fileShardDone": "Done",
-    "loadingProgressAria": "Download progress for the current file",
     "placeholder": "Ask about your trip or request changes...",
     "send": "Send message",
     "stop": "Stop generating",
@@ -1432,7 +1406,6 @@
     "clearQueue": "Clear queue",
     "queueCleared_one": "1 queued request removed",
     "queueCleared_other": "{{count}} queued requests removed",
-    "engineCrashed": "The model ran out of GPU resources and had to restart. Reloading it now. Send your request again in a moment.",
     "generationFailed": "Could not answer that: {{error}}",
     "emptyTitle": "Ready to help with your trip!",
     "emptyHint": "Try asking \"Who is staying tonight?\" or \"Add a guest named Alice\"",
@@ -1458,8 +1431,8 @@
       "signInReason": "The Kikouchou server answers your questions, and it answers accounts: a free account is all it takes.",
       "signInDetail": "Your question is kept and sent as soon as you are back.",
       "errors": {
-        "unauthorized": "Your session has ended. Sign in again to keep using this model.",
-        "dailyLimit": "You have used today's questions. The count starts again tomorrow, or pick another model.",
+        "unauthorized": "Your session has ended. Sign in again to keep using the assistant.",
+        "dailyLimit": "You have used today's questions. The count starts again tomorrow.",
         "unavailable": "The Kikouchou server cannot answer right now. Try again in a moment.",
         "network": "Could not reach the Kikouchou server. Check your connection.",
         "provider": "The model did not answer. Try again."
@@ -1471,72 +1444,6 @@
       "exploreRooms": "Who sleeps where on the first night?",
       "createFamily": "Create a week in the mountains in August for my family",
       "explorePlan": "What is planned for the first day?"
-    },
-    "cloud": {
-      "badge": "Cloud",
-      "modelLabel": "OpenRouter model: {{model}}",
-      "connectTitle": "Connect your OpenRouter account",
-      "connectDescription": "OpenRouter gives you Claude and GPT models with one account. You sign in on openrouter.ai, and the app gets a key that belongs to you. Answers are billed to your OpenRouter account.",
-      "privacyNotice": "Each question sends your trip details, guest names included, to OpenRouter and to the company that runs the model. The key stays on this device. To revoke it, delete it on openrouter.ai.",
-      "connect": "Connect with OpenRouter",
-      "disconnect": "Disconnect OpenRouter",
-      "connected": "OpenRouter account connected",
-      "connectFailed": "Could not connect your OpenRouter account. Try again.",
-      "errors": {
-        "unauthorized": "Your OpenRouter connection is no longer valid. Connect again to keep using this model.",
-        "insufficientCredits": "Your OpenRouter account has no credits left. Add credits on openrouter.ai, then try again.",
-        "rateLimited": "Too many requests for now. Wait a moment, then try again.",
-        "network": "Could not reach OpenRouter. Check your connection.",
-        "notConnected": "Connect your OpenRouter account to use this model.",
-        "connectFailed": "Could not start the OpenRouter sign-in. Try again."
-      }
-    },
-    "models": {
-      "needle-v3": {
-        "name": "Tiny",
-        "description": "Makes changes only, and reasons first. It cannot answer questions in words.",
-        "hint": "Runs on any device, no WebGPU needed, and downloads about 40x less than Light."
-      },
-      "qwen3-1-7b": {
-        "name": "Light",
-        "description": "Smallest option that answers in words, aimed at lighter devices.",
-        "hint": "Needs WebGPU. Best chance of running smoothly on modest hardware."
-      },
-      "gemma-4-e2b": {
-        "name": "Balanced",
-        "description": "Stronger reasoning and quality while staying lighter than E4B.",
-        "hint": "Needs WebGPU. Good default for recent laptops and desktops."
-      },
-      "gemma-4-e4b": {
-        "name": "Best quality",
-        "description": "Largest preset with the strongest reasoning quality in this app.",
-        "hint": "Needs a stronger WebGPU-capable device, and it is the biggest download of the three."
-      },
-      "cloud-auto": {
-        "name": "Auto",
-        "description": "OpenRouter picks a model for each question, among low-cost ones.",
-        "hint": "Works on any device with a connection. The model, and its company, can change from one answer to the next."
-      },
-      "cloud-claude-haiku": {
-        "name": "Claude Haiku",
-        "description": "Fast and low cost. Runs at Anthropic through your OpenRouter account.",
-        "hint": "Works on any device with a connection. Nothing to download."
-      },
-      "cloud-claude-sonnet": {
-        "name": "Claude Sonnet",
-        "description": "The strongest answers. Runs at Anthropic through your OpenRouter account.",
-        "hint": "Works on any device with a connection. Costs more per answer than Haiku."
-      },
-      "cloud-gpt-sol": {
-        "name": "GPT Sol",
-        "description": "OpenAI model. Runs at OpenAI through your OpenRouter account.",
-        "hint": "Works on any device with a connection. Nothing to download."
-      },
-      "cloud-kikouchou": {
-        "name": "Kikouchou",
-        "description": "Included with your Kikouchou account, within a daily limit. Nothing to set up.",
-        "hint": "Needs an account and a connection. Works on any device."
-      }
     },
     "actionDetails": {
       "createTrip": "Created trip: {{name}}",
@@ -1581,8 +1488,6 @@
       "checkShoppingItem": "Bought: {{name}}",
       "removeShoppingItem": "Removed from the shopping list: {{name}}"
     },
-    "initializingCachedLoader": "Initializing cached model…",
-    "loadingCachedModelFiles": "Loading cached model files…",
     "rideNotFound": "That ride was not found.",
     "vehicleNotFound": "That car was not found.",
     "transportNotFound": "That arrival or departure was not found.",
@@ -1595,7 +1500,11 @@
     "mealNotFound": "I could not find that meal.",
     "invalidMeal": "I could not plan that meal: the day or the meal is not valid.",
     "shoppingItemNotFound": "I could not find that item on the shopping list.",
-    "invalidShoppingItem": "I could not add that item: it needs a name."
+    "invalidShoppingItem": "I could not add that item: it needs a name.",
+    "unavailable": {
+      "title": "The assistant is not available here",
+      "description": "The assistant answers through a Kikouchou account, and this copy of the app has no account service."
+    }
   },
   "auth": {
     "account": {

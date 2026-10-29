@@ -2033,8 +2033,8 @@ export function useTripActions(): UseTripActionsReturn {
   // device" rather than claiming a success the network never saw.
   const { notifySuccess } = useOfflineAwareNotify();
   // The meal planner's actions run only where its flag is on. The prompt does
-  // not offer them elsewhere, but Needle's catalogue is built in its worker
-  // from the whole schema, so this is the gate that holds for every engine.
+  // not offer them elsewhere, but a model can still write one, so this is the
+  // gate that holds.
   const mealPlanner = useMealPlannerEnabled();
 
   const executeActions = useCallback(

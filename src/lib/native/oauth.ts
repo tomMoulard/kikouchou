@@ -102,35 +102,3 @@ export async function runNativeOAuth(authorizeUrl: string): Promise<NativeOAuthR
     });
   });
 }
-
-/**
- * Opens a page in the system browser sheet, and resolves once it is closed.
- *
- * For a flow whose answer comes back as a link another module listens for,
- * such as the assistant's OpenRouter sign-in: that listener closes the sheet.
- * The caller only learns that the sheet is gone, by either route.
- *
- * @param url - The page to open
- */
-export async function openInBrowserSheet(url: string): Promise<void> {
-  let finished: () => void = () => undefined;
-  const closed = new Promise<void>((resolve) => {
-    finished = resolve;
-  });
-  const handle = await Browser.addListener('browserFinished', () => {
-    void handle.remove();
-    finished();
-  });
-  try {
-    await Browser.open({ url });
-  } catch (error: unknown) {
-    void handle.remove();
-    throw error;
-  }
-  await closed;
-}
-
-/** Closes the system browser sheet, if one is open. */
-export function closeBrowserSheet(): void {
-  void Browser.close().catch(() => undefined);
-}

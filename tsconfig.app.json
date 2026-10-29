@@ -5,7 +5,10 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "types": ["vite/client", "vitest/globals"],
+    /* `node` for the tests that read files (`node:fs`, `process`). It used to
+       arrive unasked, through the type declarations of the assistant's
+       on-device runtime, and left with it. */
+    "types": ["node", "vite/client", "vitest/globals"],
     "skipLibCheck": true,
 
     /* Bundler mode */

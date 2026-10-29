@@ -18,7 +18,8 @@
  *
  * Not covered here, and deliberately: `trip_sync_exported` / `trip_sync_imported`
  * need a camera scanning QR frames, the sign-in events need the stubbed backend
- * of the `sync` project, and the assistant's deletions need a WebGPU model. Those
+ * of the `sync` project, and the assistant's deletions need a signed-in account
+ * and an answer from api.kikouchou.app. Those
  * three are the suite's existing boundaries, not new ones.
  *
  * @module e2e/analytics-events

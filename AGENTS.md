@@ -152,7 +152,7 @@ Path alias `@/` maps to `src/`.
 
 ## AI Assistant — Keep It In Sync
 
-The on-device LLM assistant (`src/features/assistant/`) knows **only** what the
+The assistant (`src/features/assistant/`) knows **only** what the
 system prompt hands it. A feature that is missing from that prompt makes the
 assistant answer *"I don't have access to that"* even though the data sits right
 there in IndexedDB — storing it in Dexie is not enough.
@@ -187,15 +187,13 @@ Relative dates ("today", "tonight", "this weekend") resolve against the current
 date, which the prompt states from `useToday()` — extend that line rather than
 letting the model guess.
 
-**Say it once, and say it short.** The prompt is not free text: the model runs on
-the user's own GPU, and prefill memory grows with prompt length. `qwen3-1-7b`'s
-ONNX export has no `num_logits_to_keep` input, so it computes logits for *every*
-prompt position and reads back `prompt_tokens × 151936` values in one buffer —
-297 KiB per prompt token. The Gemma 3 1B preset it replaced charged half a
-mebibyte, and a 2401-token prompt asked WebGPU for 2.34 GiB and got "Failed to
-allocate memory for buffer mapping", which kills the session, not just the
-answer. The newer preset is cheaper per token, not cheap. Two guards keep that honest, and both are meant to be
-rewritten to fit rather than raised:
+**Say it once, and say it short.** The prompt is not free text. It goes to
+api.kikouchou.app with every question, and the project pays for every token
+on its own OpenRouter key. The budgets below were set while the models ran on
+the user's own GPU, where a long prompt failed to allocate memory and killed
+the session. They were not raised when the models moved to the server. Two
+guards keep that honest, and both are meant to be rewritten to fit rather
+than raised:
 
 - `action-schema.test.ts` caps the generated action prompt (~1000 tokens).
 - `useTripSystemPrompt.test.tsx` caps the trip-independent floor.
@@ -219,9 +217,9 @@ words with `actionsDeclined` set. A new `remove*` action goes in
 The assistant can show the trip in the chat: the planning, the rooms, the
 arrivals and departures, the activities and the balances. The model asks with
 a `showView` block, which sits in `ACTION_SCHEMAS` like a mutation, so the
-prompt documents it, `validateAction()` holds it to its enum and Needle gets it
-as a tool. `executeActions` skips it, which is also why a viewer trip can show
-one. `ChatMessage` reads it back with `listViewRequests` and draws
+prompt documents it and `validateAction()` holds it to its enum.
+`executeActions` skips it, which is also why a viewer trip can show one.
+`ChatMessage` reads it back with `listViewRequests` and draws
 `AssistantTripView` from the live contexts, so only the block is stored and an
 old answer never shows stale data.
 
@@ -232,43 +230,28 @@ slipped in there would split the turn the history is rebuilt from. A new view
 goes in `ASSISTANT_VIEWS` (`views.ts`), gets a body in `AssistantTripView` and
 its `assistant.views.<view>.*` keys in both locales.
 
-### Four engines, and one of them never talks
+### One engine: api.kikouchou.app
 
-The presets in `models.ts` run on four different runtimes, and the `engine`
-field says which:
+The assistant has no model picker. Every question goes to api.kikouchou.app
+(`server/api`), which answers on the project's own OpenRouter key for a
+signed-in account. Nothing runs or downloads on the device. `useAssistantChat`
+is ready exactly when an account is signed in, and `generate` streams the
+answer over `fetch` (`kikouchou-api/client.ts`, read by `chat-stream.ts`).
 
-- `transformers` — the Qwen3 and Gemma 4 presets. A chat model: it answers in
-  words and puts its changes in a ```action block inside that answer. `qwen3-1-7b`
-  is a hybrid thinking model and would open a `<think>` block on every turn, so
-  its preset turns thinking off through `chatTemplateOptions`.
-- `needle` — the `needle-v3` preset. A tool-calling router in 35.3 MB. One
-  request plus a tool catalogue in, one JSON call out, and **no prose at all**.
-  It has no system channel either, so the trip context the chat presets read is
-  not available to it: it fills arguments from the words in the request, and an
-  action needing an id the user did not say is one it cannot complete.
+Until 2026-10-29 the page offered three more engines: Transformers.js
+(Qwen3, Gemma 4) and Needle on the device, and OpenRouter with the user's own
+key. They were removed with their workers, the WebGPU probe, the OpenRouter
+sign-in and its `app.kikouchou://openrouter/callback` deep link. The
+`assistantModelId` a device stored then stays in its settings row and nothing
+reads it.
 
-- `openrouter`: the `cloud-*` presets (the Auto Router, Claude Haiku, Claude
-  Sonnet, GPT Sol).
-  Nothing runs on the device: `useWebLLM` streams a chat completion from
-  OpenRouter over `fetch`, with a key that belongs to the user. It answers in
-  words and ```action blocks like `transformers`, needs no WebGPU, and is the
-  only way a phone too small for Gemma can use the assistant.
+A build with no Supabase project (a fork, most e2e servers) has no accounts,
+so the page shows `AssistantUnavailableCard` and no chat.
 
-- `kikouchou`: the `cloud-kikouchou` preset. Nothing runs on the device
-  either: `useWebLLM` streams from api.kikouchou.app (`server/api`),
-  which answers on the project's own OpenRouter key. It needs a signed-in
-  account instead of an OpenRouter one, and the server picks the model.
+### The project pays for every answer
 
-The two local engines each have their own worker and their own Cache Storage
-bucket; the two cloud engines have neither. `isCloudPreset` is true of both
-cloud engines. A screen that asks for a connection branches on `engine`,
-because one needs an OpenRouter key and the other an account. Anything that
-reads a preset and expects an answer in words has to branch on `engine`.
-
-### The account model is paid by the project
-
-`cloud-kikouchou` is the one preset whose answers the project pays for, so
-everything about it is shaped by cost.
+The project pays for every answer the assistant gives, so everything about it
+is shaped by cost.
 
 - **The server decides, the client asks.** The client sends the Supabase
   access token and the messages, nothing else. `server/api` verifies
@@ -289,65 +272,23 @@ everything about it is shaped by cost.
   and comes back to `/`, so a starter tapped while signed out goes to
   `localStorage['kikouchou-assistant-pending-prompt']` for 30 minutes, and the
   page sends it once the engine is ready (`pending-prompt.ts`).
-- **The privacy notice names one more hop.** The trip goes to the project's
-  server, then to OpenRouter and the model's vendor. `AccountAssistantCard`
-  says so before the first question, like `CloudConnectCard`.
-- **A build with no Supabase project does not offer it**
-  (`offeredAssistantPresets`), which is why its e2e spec runs in the `sync`
-  project.
+- **The privacy notice names every hop.** The trip goes to the project's
+  server, then to OpenRouter and the model's vendor, guest names, phones and
+  notes included. `AccountAssistantCard` says so before the first question.
+  Keep that notice when you change the card.
+- **A build with no Supabase project shows no chat**, which is why the e2e
+  spec runs in the `sync` project.
 - **`$ai_generation` claims no cost** for it either. The cost is real, but the
   client does not know it; OpenRouter's activity for the project's key does.
-
-### A cloud preset sends the trip off the device
-
-The `cloud-*` presets reach Anthropic and OpenAI through **OpenRouter**, and
-not through either vendor directly, because no vendor offers a sign-in a page
-with no server can finish (see `openrouter/auth.ts` for the details checked on
-2026-10-05). Anthropic reserves a Claude plan's OAuth tokens for Claude Code
-and claude.ai. OpenAI's website sign-in is identity only, and its model-access
-flow takes a `127.0.0.1` redirect only. OpenRouter runs a public PKCE flow with
-no client secret, and the exchange returns an API key the user owns and pays
-for.
-
-- **The key lives in `localStorage`, under `kikouchou-openrouter-key`, and
-  nowhere else.** Not in Dexie, so it is in no export, no sync and no trip
-  document. Disconnecting forgets it on the device. Only the user can revoke it,
-  on openrouter.ai.
-- **OpenRouter's callback carries a `?code=`, and so does Supabase's.**
-  `openrouter/callback.ts` claims the code on `/assistant` when this browser
-  started an OpenRouter sign-in, and strips it. `main.tsx` imports it **before**
-  `lib/supabase/auth-callback`, which would otherwise exchange the code with
-  Supabase and show a sign-in error. `e2e/assistant-openrouter.spec.ts` fails if
-  the order is swapped.
-- **The system prompt goes to OpenRouter and to the model's vendor**, guest
-  names, phones and notes included. `CloudConnectCard` says so before the first
-  sign-in. Keep that notice when you change the card.
-- **`$ai_generation` claims no cost for a cloud answer.** The user pays
-  OpenRouter, not this project, so the cost fields are left out rather than
-  set to 0.
-- **A pinned slug, not `~…-latest`.** An answer must not change model without a
-  release here. When OpenRouter retires a slug, change the preset and its test.
-  `cloud-auto` (`openrouter/auto`) is the one exception, and on purpose: the
-  user who picks it asks OpenRouter to choose the model for each question. It
-  sends no `cost_tier`, so it routes in the `low` band.
-
-Two things follow for the steps above. A new action reaches Needle through
-`needle-tools.ts`, which derives the tool catalogue from `ACTION_SCHEMAS` — so
-you get it for free, as long as the action's `label` reads like something a user
-would say, because that label is what the router matches the request against.
-And its output comes back as the same ```action block, so `validateAction()`
-stays the only gate on what reaches the database.
 
 ### Every turn is offered the whole action catalogue
 
 `generateActionPrompt(defs)` documents whatever list it is given, and what it is
-given is always `ACTION_SCHEMAS`. Needle 2 used to rank the catalogue against the
-request first, in one pass of its contrastive head; Needle 3 exports no such
-head, so that narrowing is gone and the prose presets carry every action in
-their system prompt again. The prompt therefore has a character budget, enforced
-by `action-schema.test.ts`, and `qwen3-1-7b` is the preset that runs out of GPU
-first when it grows. Adding an action costs every turn a little more prompt: keep
-its `label` and field descriptions short.
+given is always `ACTION_SCHEMAS`, minus the meal planner's actions where its
+flag is off. The prompt therefore has a character budget, enforced by
+`action-schema.test.ts`. Adding an action costs every question a little more
+prompt: keep its `label` and field descriptions short. `validateAction()`
+stays the only gate on what reaches the database.
 
 ---
 
@@ -753,8 +694,7 @@ never goes live and then dead under somebody's cursor.
 trip's shopping list. `meal-planner` decides what a device shows: the page,
 its navigation item (`hiddenNavPages`), the diet fields of the guest form, and
 the five meal actions of the assistant (`offeredActionSchemas`; the executor
-refuses them too, because Needle's catalogue is built in its worker from the
-whole schema). Off and undecided read the same.
+refuses them too, because a model can still write one). Off and undecided read the same.
 
 The flag never decides what is stored or synced. `meals` and `shoppingItems`
 are published to the document by every device, flag on or off: a device that
@@ -1372,14 +1312,8 @@ what the website did before.
   the light, transparent and monochrome variants, the iOS appearances
   (default, dark, tinted) and the Android adaptive icon with its monochrome
   layer and night splash screens. Edit the drawing, never a PNG.
-- **Without WebGPU, the assistant offers what can run.** The page stays on
-  every target, and the picker lists the cloud models and Needle, which runs
-  on the CPU (`offeredAssistantPresets`). A stored choice that needs WebGPU
-  opens on the cloud router instead, without being overwritten (decided on
-  2026-10-22, replacing the 2026-09-26 rule that hid the page). In an app, the
-  OpenRouter sign-in runs in a browser sheet and returns on
-  `app.kikouchou://openrouter/callback`, a host apart from Supabase's `auth`,
-  so neither exchange ever sees the other's code.
+- **The assistant is the same on every target.** It needs an account and a
+  connection, and nothing about the device.
 - **An account can be deleted from the app** (`delete_my_account()`, both
   stores require it). A trip shared with other members goes to the earliest of
   them; a trip nobody else is on is deleted; the device keeps its trips as
@@ -1523,8 +1457,7 @@ the metric that fell instead of hiding it in a table.
   the commit message what dropped and why.
 - Branches (85.05%) and functions (92.07%) are printed but not gated. What is
   left cannot be reached under jsdom: the service worker registration, the lazy
-  route chunks, the camera in `QRScanner.tsx`, and the WebGPU device behind the
-  assistant's pipeline. Raise these two numbers after the reachable part is
+  route chunks and the camera in `QRScanner.tsx`. Raise these two numbers after the reachable part is
   done, not before.
 - `bun run test:coverage` is about 4x slower than `test:run`, so `validate`
   still uses `test:run`. Run the coverage command before you push a change that
