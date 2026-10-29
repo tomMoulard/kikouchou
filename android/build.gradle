@@ -9,8 +9,12 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.0'
         // Not on the F-Droid build's classpath at all: its scanner refuses a
-        // build that resolves Google's proprietary Gradle plugin.
-        if (System.getenv('KIKOUCHOU_ANDROID_FLAVOR') != 'fdroid') {
+        // build that resolves Google's proprietary Gradle plugin. f-droid.org
+        // can pass Gradle a property (`gradleprops` in
+        // metadata/app.kikouchou.yml) but no environment variable, so either
+        // one names the flavor.
+        def flavor = System.getenv('KIKOUCHOU_ANDROID_FLAVOR') ?: findProperty('kikouchouAndroidFlavor')
+        if (flavor != 'fdroid') {
             classpath 'com.google.gms:google-services:4.4.4'
         }
 
