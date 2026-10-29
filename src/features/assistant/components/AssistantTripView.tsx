@@ -28,7 +28,7 @@ import {
 
 import { statusVariants } from '@/components/ui/status.variants';
 
-import { ActivityTimeline } from '@/features/activities/components/ActivityTimeline';
+import { ActivityAgenda } from '@/features/activities/components/ActivityAgenda';
 import { CalendarTimeline } from '@/features/calendar/components/CalendarTimeline';
 import { BalancesCard } from '@/features/money/components/BalancesCard';
 import { loadTripMoney } from '@/features/money/lib/trip-money';
@@ -146,7 +146,8 @@ const PlanningView = memo(function PlanningView({
       today={today}
       onAssignmentClick={onOpenPage}
       onTransportClick={onOpenPage}
-      // The agenda bands are drawn only when a click has somewhere to go.
+      // The day-by-day agenda under the grid is drawn only when a click has
+      // somewhere to go.
       onActivityClick={onOpenPage}
       rideForTransport={rideForTransport}
     />
@@ -286,9 +287,8 @@ const RidesView = memo(function RidesView(): ReactElement {
   );
 });
 
-/** What the group does: the activities page's timeline. */
+/** What the group does, day by day: the activities page's agenda. */
 const ActivitiesView = memo(function ActivitiesView({
-  trip,
   onOpenPage,
 }: TripViewBodyProps): ReactElement {
   const { i18n } = useTranslation();
@@ -298,12 +298,15 @@ const ActivitiesView = memo(function ActivitiesView({
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   return (
-    <ActivityTimeline
-      trip={trip}
+    <ActivityAgenda
       activities={activities}
       dateLocale={dateLocale}
       today={today}
       onActivityClick={onOpenPage}
+      // The deepest level the agenda offers. The view's title is an h3 as
+      // well, so the days sit beside it rather than under it.
+      headingLevel={3}
+      className="p-3"
     />
   );
 });
