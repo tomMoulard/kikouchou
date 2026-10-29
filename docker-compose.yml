@@ -109,6 +109,34 @@ services:
       - traefik.http.routers.share.tls.certresolver=letsencrypt
       - traefik.http.services.share.loadbalancer.server.port=8080
 
+  # api.kikouchou.app: the assistant's chat for a signed-in account, on the
+  # project's OpenRouter key (server/assistant-api/README.md).
+  assistant-api:
+    image: tommoulard/kikouchou-assistant-api:latest
+    build:
+      context: ./server/assistant-api
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    expose:
+      - "8080"
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?set SUPABASE_URL for the assistant API}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY for the assistant API}
+      # Pays for every answer. From the shell or the `.env` beside this file,
+      # never from a build arg.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY for the assistant API}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/auto}
+      DAILY_LIMIT: ${ASSISTANT_DAILY_LIMIT:-30}
+      APP_ORIGIN: https://app.kikouchou.app
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.assistant-api.rule=Host(`api.kikouchou.app`)
+      - traefik.http.routers.assistant-api.entrypoints=websecure
+      - traefik.http.routers.assistant-api.tls.certresolver=letsencrypt
+      - traefik.http.services.assistant-api.loadbalancer.server.port=8080
+
 secrets:
   # Read from the environment rather than from a file, so it never lands on
   # disk beside the compose file. Empty when POSTHOG_CLI_API_KEY is unset,

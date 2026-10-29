@@ -304,6 +304,44 @@ jobs:
       - name: Build the image
         run: docker build -t share-preview:ci .
 
+  assistant-api:
+    name: Assistant API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/assistant-api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server/assistant-api/target
+          key: cargo-assistant-api-${{ runner.os }}-${{ hashFiles('server/assistant-api/Cargo.lock') }}
+          restore-keys: cargo-assistant-api-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      # The release profile only runs inside the image.
+      - name: Build the image
+        run: docker build -t assistant-api:ci .
+
   # ============================================================================
   # Build - Build production bundle
   # ============================================================================
