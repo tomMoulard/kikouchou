@@ -346,9 +346,10 @@ How the seed behaves, and why:
   `trip-sharing-sync.spec.ts` fail twice as often under load. For the same reason it has no guest group: a group is synced with the
   account.
 - **A first open lands on the trip list, with the pet on.** `/` redirects
-  to `/trips`, where the sample is the first row. The exception is the test
-  arm of the `onboarding-planning-view` experiment, which opens the sample's
-  calendar instead (see the feature flags section). When the seed
+  to `/trips`, where the sample is the first row. The exceptions are two
+  arms of the `onboarding-planning-view` experiment: `test` opens the
+  sample's calendar and `wizard` opens the first-trip wizard (see the
+  feature flags section). When the seed
   answers `seeded`, `main.tsx` also turns the pet on (`storePetEnabled`). Only
   that outcome does it: a returning device keeps its own choice, because a
   pet turned off with the default animal is stored as nothing at all, and a
@@ -639,15 +640,20 @@ path for the writes, so the arms differ in what they show and not in what they
 save.
 
 `onboarding-planning-view` is an experiment, so its flag is multivariate
-(`control`, `test`), and `isFeatureEnabled` answers `true` in both arms. Read
+(`control`, `test`, `wizard`), and `isFeatureEnabled` answers `true` in every
+arm. Read
 it with `useFeatureFlagVariant(key)`, which returns the variant key, `false`
 for a person in no arm, or `undefined` while PostHog is asked. The override
-`on` forces `test` and `off` forces `control`. Reading the variant is what
+`on` forces `test`, `off` forces `control`, and `wizard` forces `wizard`.
+Reading the variant is what
 sends `$feature_flag_called`, the exposure the experiment counts, so
 `EntryRedirect` (the `/` route) reads it only for a device whose one trip is
 the sample; anyone else goes to `/trips` without being counted. The test arm
 opens `/trips/<sample>/calendar` with router state `{ via: 'entry' }`, so
-`sample_trip_viewed` tells that view from a click. The primary metric is
+`sample_trip_viewed` tells that view from a click. The wizard arm opens
+`/trips/new`, which on such a device is the first-trip wizard; its cancel
+goes to `/trips`. The arms split 33/33/34, and the wizard arm was added on
+2026-10-29, before the first exposure. The primary metric is
 `trip_created` after exposure. Started on 2026-10-29, after a review of the
 funnel: of 1201 new app visitors in 28 days, 497 opened the first-trip wizard,
 9 opened the sample and 9 created a trip.

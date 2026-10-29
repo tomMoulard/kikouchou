@@ -1,12 +1,15 @@
 /**
- * @fileoverview Where `/` sends a visitor: the trip list, or the sample's plan.
+ * @fileoverview Where `/` sends a visitor: the trip list, the sample's plan, or
+ * the first-trip wizard.
  *
  * Opening the app lands on the trip list, where the sample trip is the first
  * row. Of the visitors who arrive that way almost none open it: they read the
  * list, go to "New trip" and leave inside the wizard. The
  * `onboarding-planning-view` experiment asks whether showing the planning
  * view itself does better. Its test arm opens the sample trip's calendar
- * instead of the list; its control arm keeps the list.
+ * instead of the list; its wizard arm opens `/trips/new`, which for a device
+ * with no trip of its own is the first-trip wizard; its control arm keeps the
+ * list.
  *
  * Only a device whose one trip is the sample takes part. Anyone with a trip of
  * their own, or who deleted the sample, goes to the list without the flag
@@ -37,6 +40,9 @@ export const ONBOARDING_PLANNING_VIEW_FLAG = 'onboarding-planning-view';
 /** The variant that opens the sample's calendar. */
 const PLANNING_VIEW_VARIANT = 'test';
 
+/** The variant that opens the first-trip wizard. */
+const WIZARD_VARIANT = 'wizard';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -64,11 +70,15 @@ const SampleEntry = memo(function SampleEntry({ sampleTripId }: SampleEntryProps
   if (variant === PLANNING_VIEW_VARIANT) {
     return <Navigate to={`/trips/${sampleTripId}/calendar`} replace state={OPENED_ON_ENTRY} />;
   }
+  if (variant === WIZARD_VARIANT) {
+    return <Navigate to="/trips/new" replace />;
+  }
   return <Navigate to="/trips" replace />;
 });
 
 /**
- * The index route: the trip list, or the sample's calendar in the test arm.
+ * The index route: the trip list, the sample's calendar in the test arm, or
+ * the first-trip wizard in the wizard arm.
  */
 export const EntryRedirect = memo(function EntryRedirect(): ReactElement {
   const { trips, sampleTripId, isLoading } = useTripContext();
