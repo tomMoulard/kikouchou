@@ -671,6 +671,15 @@ and the bottom bar through `useHideNavigation`, because no trip tab can open
 on a first visit. An e2e spec that tests the form seeds a trip first
 (`seedTrip`); one that only needs a trip uses `e2e/support/trip-create.ts`.
 
+**The invitation is part of the creation.** The wizard asks the name and the
+dates, creates the trip, and ends on its invite link (`ShareLinkPanel`, the
+same body as `ShareDialog`). The place, the guests and the rooms are not
+questions: the group fills them in once it has the link. A signed-out visitor
+signs in on that screen. Google and a magic link leave the page and return to
+`/`. So the wizard first writes the trip id to `kikouchou-pending-invite`.
+`PendingInviteDialog` in `App` reads that key once on load, for 30 minutes at
+most, and opens the share dialog for the trip when the session is back.
+
 `ent-trip-templates` gates the **publishing** side only, and deliberately. A
 template link handed out is followed by a customer of that enterprise, who is
 not in the cohort and never will be, so `/template/:token` is open to everyone.

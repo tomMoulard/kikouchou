@@ -1,22 +1,27 @@
 /**
- * @fileoverview The first trip, one question per screen.
+ * @fileoverview The first trip: a name, two dates, then the invite link.
  *
  * Shown on `/trips/new` for a device that holds no trip of its own yet. It won
  * the `first-trip-wizard` experiment against the one-page form, which is still
- * what a later trip gets. Five questions (name, dates, place, guests, rooms) and a
- * screen that says the trip is ready. Enter advances, Back goes back, and
- * everything after the dates can be skipped: a trip needs a name and two
- * dates, nothing else, and the rooms page is a fine place to add rooms.
+ * what a later trip gets. Two questions (name, dates), one per screen, then the
+ * trip is created and the last screen hands over its invite link. Enter
+ * advances and Back goes back.
+ *
+ * The invitation is part of the creation, not a button after it. The place,
+ * the guests and the rooms used to be three more questions before the link,
+ * and almost nobody reached the link: the group fills those in the trip, once
+ * they have it. A signed-out visitor, which is nearly every first visitor,
+ * signs in on that same screen, and `pending-invite` carries the trip across
+ * the sign-in redirect so the link opens when they are back.
  *
  * The writes are `createTripWithDetails`, the same call the one-page form
  * makes, so the two paths differ in their screens and in nothing else.
  *
  * It is also the screen behind a trip template link. A `prefill` carries the
  * place, the map pin, the description, the currency and the rooms the
- * enterprise published, the place and rooms questions come out of the flow, and
- * the customer answers the three that are left: the name, the dates and the
- * guests. The name starts as the template's and the dates as today, so a
- * customer with nothing to change reaches the guests by pressing Next twice.
+ * enterprise published, and the customer answers the same two questions. The
+ * name starts as the template's and the dates as today, so a customer with
+ * nothing to change reaches the link by pressing Next twice.
  *
  * @module features/trips/components/TripCreateWizard
  */
@@ -33,22 +38,25 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { ArrowLeft, Check, PartyPopper, Plus, X } from 'lucide-react';
+import { ArrowLeft, Check, PartyPopper } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
-import { ShareDialog } from '@/features/sharing/components/ShareDialog';
+import { ShareLinkPanel } from '@/features/sharing/components/ShareLinkPanel';
+import type { ShareLinkState } from '@/features/sharing/hooks/useTripShareLink';
+import {
+  forgetPendingInvite,
+  rememberPendingInvite,
+} from '@/features/sharing/utils/pending-invite';
 import { useToday } from '@/hooks/useToday';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus } from '@/lib/notifications';
 import { pushDataLayerEvent } from '@/lib/google-tag';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
-import { DEFAULT_ROOM_ICON } from '@/types';
 import type { CurrencyCode, ISODateString, Trip, TripFormData } from '@/types';
-import { LocationAutocomplete, type TripImportData } from './LocationAutocomplete';
 import type { NewTripGuest, NewTripRoom } from './TripForm';
 import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-trip-with-details';
 
@@ -60,10 +68,7 @@ import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-t
  * What a trip template hands the wizard before the first question.
  *
  * Everything here is already decided by whoever published the template, so the
- * wizard neither asks for it nor shows it: the place and the rooms questions
- * are dropped and the remaining three — the name, the dates, the guests — are
- * the whole flow. The description and the currency have no question of their
- * own in the wizard at all; they travel straight into the trip.
+ * wizard neither asks for it nor shows it: it travels straight into the trip.
  *
  * `name` is the one exception: it is only where the name question starts, and
  * the customer may type over it.
@@ -78,12 +83,12 @@ export interface TripCreateWizardPrefill {
 }
 
 export interface TripCreateWizardProps {
-  /** What to pre-fill the first guest, "you", with. */
+  /** The creator's own guest row, when the account gives a name. */
   readonly currentUserName?: string | undefined;
   /**
    * A template's values, when the visitor arrived through a template link.
    *
-   * Absent for the ordinary first-trip wizard, which asks all five questions.
+   * Absent for the ordinary first-trip wizard.
    */
   readonly prefill?: TripCreateWizardPrefill | undefined;
   /**
@@ -91,39 +96,34 @@ export interface TripCreateWizardProps {
    *
    * The page decides between the wizard and the form from the trip list, and
    * the list grows as soon as the trip row lands — before the guests, the
-   * rooms and the done screen. This is how the page knows to keep the wizard
+   * rooms and the invite screen. This is how the page knows to keep the wizard
    * on screen through that.
    */
   readonly onCreating?: (() => void) | undefined;
-  /** Called from the done screen when the user opens the trip. */
+  /** Called from the invite screen when the user opens the trip. */
   readonly onCreated: (trip: Trip) => void;
   readonly onCancel: () => void;
   /** Whether the wizard holds anything worth an unsaved-changes prompt. */
   readonly onDirtyChange?: ((dirty: boolean) => void) | undefined;
 }
 
-/** The questions, in order; `done` follows the last one. */
-type Step = 'name' | 'dates' | 'place' | 'guests' | 'rooms' | 'done';
+/** The questions, in order; `invite` follows the last one. */
+type Step = 'name' | 'dates' | 'invite';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const QUESTIONS: readonly Step[] = ['name', 'dates', 'place', 'guests', 'rooms'];
+const QUESTIONS: readonly Step[] = ['name', 'dates'];
 
 /**
- * The questions a template leaves to ask.
- *
- * The place and the rooms came with the template, so asking for them again
- * would invite the customer to overwrite what the enterprise set up.
+ * The screens the progress dots count: the questions, and the link after
+ * them, so the person sees the invitation coming before the trip exists.
  */
-const TEMPLATE_QUESTIONS: readonly Step[] = ['name', 'dates', 'guests'];
+const STEP_COUNT = QUESTIONS.length + 1;
 
 /** The date shape `Trip` stores. */
 const ISO_DATE_FORMAT = 'yyyy-MM-dd';
-
-const MIN_ROOM_CAPACITY = 1;
-const DEFAULT_ROOM_CAPACITY = 2;
 
 // ============================================================================
 // Helpers
@@ -150,7 +150,7 @@ function prefersReducedMotion(): boolean {
 // ============================================================================
 
 /**
- * Walks a first trip through five questions and a celebration.
+ * Walks a first trip through two questions and hands over its invite link.
  *
  * @param props - See {@link TripCreateWizardProps}
  * @returns The wizard
@@ -176,22 +176,10 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   const [range, setRange] = useState<DateRange | undefined>(() =>
     prefill === undefined ? undefined : { from: today, to: today },
   );
-  const [location, setLocation] = useState(() => prefill?.location ?? '');
-  const [coordinates, setCoordinates] = useState<TripFormData['coordinates']>(
-    () => prefill?.coordinates,
-  );
-  const [importSource, setImportSource] = useState<TripImportData | null>(null);
-  const [guests, setGuests] = useState<NewTripGuest[]>(() =>
-    currentUserName ? [{ name: currentUserName, isSelf: true }] : [],
-  );
-  const [guestDraft, setGuestDraft] = useState('');
-  const [rooms, setRooms] = useState<NewTripRoom[]>(() => [...(prefill?.rooms ?? [])]);
-  const [roomDraft, setRoomDraft] = useState('');
-  const [roomCapacity, setRoomCapacity] = useState(DEFAULT_ROOM_CAPACITY);
   const [problem, setProblem] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [created, setCreated] = useState<TripCreationOutcome | null>(null);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [linkState, setLinkState] = useState<ShareLinkState['kind']>('loading');
   const isMountedRef = useRef(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -215,10 +203,10 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     inputRef.current?.focus();
   }, [step]);
 
-  // The celebration: once, on the done screen, and not for somebody who asked
-  // the OS for less motion. Loaded on demand so the form pays nothing for it.
+  // The celebration: once, on the invite screen, and not for somebody who
+  // asked the OS for less motion. Loaded on demand so the form pays nothing.
   useEffect(() => {
-    if (step !== 'done' || prefersReducedMotion()) {
+    if (step !== 'invite' || prefersReducedMotion()) {
       return undefined;
     }
     let cancelled = false;
@@ -232,13 +220,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     };
   }, [step]);
 
-  // Three questions for a template, five otherwise. Memoised on the prefill
-  // rather than read inline, so the callbacks below keep a stable identity.
-  const questions = useMemo(
-    () => (prefill === undefined ? QUESTIONS : TEMPLATE_QUESTIONS),
-    [prefill],
-  );
-  const stepIndex = questions.indexOf(step);
+  const stepIndex = QUESTIONS.indexOf(step);
 
   const report = useCallback((outcome: 'next' | 'skip' | 'back', from: Step): void => {
     captureEvent('trip_wizard_step', { step: from, outcome });
@@ -255,8 +237,8 @@ export const TripCreateWizard = memo(function TripCreateWizard({
       return;
     }
     report('back', step);
-    goTo(questions[stepIndex - 1] ?? 'name');
-  }, [goTo, onCancel, questions, report, step, stepIndex]);
+    goTo(QUESTIONS[stepIndex - 1] ?? 'name');
+  }, [goTo, onCancel, report, step, stepIndex]);
 
   const create = useCallback(async (): Promise<void> => {
     if (!range?.from || !range.to) {
@@ -267,24 +249,27 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     setIsCreating(true);
     setProblem(null);
     onCreating?.();
+    // The creator is on the guest list when the account gives a name. Every
+    // other guest adds themself through the link.
+    const guests: NewTripGuest[] = currentUserName ? [{ name: currentUserName, isSelf: true }] : [];
     try {
       const outcome = await createTripWithDetails({
         form: {
           name: name.trim(),
           startDate: toIsoDate(range.from),
           endDate: toIsoDate(range.to),
-          ...(location.trim() === '' ? {} : { location: location.trim() }),
-          ...(coordinates === undefined ? {} : { coordinates }),
-          // A template's own two fields. The wizard never asks for either, so
-          // they are here or they are nowhere.
+          // A template's own fields. The wizard asks for none of them, so they
+          // are here or they are nowhere.
+          ...(prefill?.location?.trim() ? { location: prefill.location.trim() } : {}),
+          ...(prefill?.coordinates === undefined ? {} : { coordinates: prefill.coordinates }),
           ...(prefill?.description ? { description: prefill.description } : {}),
           ...(prefill?.currency ? { currency: prefill.currency } : {}),
         },
         guests,
-        rooms,
-        importSourceTripId: importSource?.trip.id ?? null,
+        rooms: [...(prefill?.rooms ?? [])],
+        importSourceTripId: null,
         // The page selects the trip when the user opens it; selecting it here
-        // would remount the route and lose the done screen.
+        // would remount the route and lose the invite screen.
         selectAsCurrent: false,
       });
       if (!isMountedRef.current) {
@@ -311,7 +296,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         }),
       );
       setCreated(outcome);
-      setStep('done');
+      setStep('invite');
     } catch (error) {
       console.error('Wizard could not create the trip:', error);
       if (isMountedRef.current) {
@@ -322,199 +307,137 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         setIsCreating(false);
       }
     }
-  }, [
-    coordinates,
-    goTo,
-    guests,
-    importSource,
-    location,
-    name,
-    onCreating,
-    prefill,
-    range,
-    rooms,
-    t,
-  ]);
-
-  /**
-   * The question after this one, or the trip when there is none.
-   *
-   * Written against the list rather than naming each next step, because a
-   * template asks three of the five questions and a hard-coded `goTo('place')`
-   * would walk it into a screen it does not have.
-   */
-  const goToNext = useCallback((): void => {
-    const next = questions[stepIndex + 1];
-    if (next === undefined) {
-      void create();
-      return;
-    }
-    goTo(next);
-  }, [create, goTo, questions, stepIndex]);
+  }, [currentUserName, goTo, name, onCreating, prefill, range, t]);
 
   /** Enter, or the Next button: validate this question, move to the next. */
-  const advance = useCallback(
-    (outcome: 'next' | 'skip'): void => {
-      switch (step) {
-        case 'name': {
-          if (name.trim() === '') {
-            setProblem(t('trips.wizard.nameRequired', 'Give the trip a name to continue.'));
-            return;
-          }
-          report(outcome, step);
-          goToNext();
+  const advance = useCallback((): void => {
+    switch (step) {
+      case 'name': {
+        if (name.trim() === '') {
+          setProblem(t('trips.wizard.nameRequired', 'Give the trip a name to continue.'));
           return;
         }
-        case 'dates': {
-          if (!range?.from || !range.to) {
-            setProblem(
-              t('trips.wizard.datesRequired', 'Pick the first and the last day to continue.'),
-            );
-            return;
-          }
-          report(outcome, step);
-          goToNext();
-          return;
-        }
-        case 'place':
-        case 'guests':
-        case 'rooms': {
-          report(outcome, step);
-          goToNext();
-          return;
-        }
-        case 'done':
-          return;
+        report('next', step);
+        goTo('dates');
+        return;
       }
-    },
-    [goToNext, name, range, report, step, t],
-  );
-
-  const addGuest = useCallback((): boolean => {
-    const trimmed = guestDraft.trim();
-    if (trimmed === '') {
-      return false;
+      case 'dates': {
+        if (!range?.from || !range.to) {
+          setProblem(
+            t('trips.wizard.datesRequired', 'Pick the first and the last day to continue.'),
+          );
+          return;
+        }
+        report('next', step);
+        void create();
+        return;
+      }
+      case 'invite':
+        return;
     }
-    setGuests((current) => [...current, { name: trimmed.slice(0, MAX_LENGTHS.personName) }]);
-    setGuestDraft('');
-    return true;
-  }, [guestDraft]);
+  }, [create, goTo, name, range, report, step, t]);
 
-  const addRoom = useCallback((): boolean => {
-    const trimmed = roomDraft.trim();
-    if (trimmed === '') {
-      return false;
-    }
-    setRooms((current) => [
-      ...current,
-      {
-        name: trimmed.slice(0, MAX_LENGTHS.roomName),
-        capacity: Math.max(MIN_ROOM_CAPACITY, Math.round(roomCapacity) || MIN_ROOM_CAPACITY),
-        // The wizard asks for a name and a count only, so the room takes the
-        // same glyph a new row gets in the form.
-        icon: DEFAULT_ROOM_ICON,
-      },
-    ]);
-    setRoomDraft('');
-    setRoomCapacity(DEFAULT_ROOM_CAPACITY);
-    return true;
-  }, [roomCapacity, roomDraft]);
-
-  /**
-   * Enter on a screen. On a list screen with something typed it adds the row
-   * and stays; with nothing typed it moves on, like everywhere else.
-   */
   const handleSubmit = useCallback(
     (event: SyntheticEvent<HTMLFormElement>): void => {
       event.preventDefault();
       if (isCreating) {
         return;
       }
-      if (step === 'guests' && addGuest()) {
-        return;
-      }
-      if (step === 'rooms' && addRoom()) {
-        return;
-      }
-      advance('next');
+      advance();
     },
-    [addGuest, addRoom, advance, isCreating, step],
+    [advance, isCreating],
   );
 
-  const handleLocationChange = useCallback(
-    (value: string, nextCoordinates?: TripFormData['coordinates']): void => {
-      setLocation(value);
-      setCoordinates(nextCoordinates);
+  /**
+   * Where a sign-in started here comes back to.
+   *
+   * Google and a magic link leave the page, so the trip is remembered while
+   * the screen asks for an account, and forgotten once the link is on screen:
+   * a store app's sheet and a wallet sign in without leaving, and this screen
+   * shows the link itself.
+   */
+  const handleLinkState = useCallback(
+    (kind: ShareLinkState['kind']): void => {
+      setLinkState(kind);
+      if (created === null) {
+        return;
+      }
+      if (kind === 'needs-account') {
+        rememberPendingInvite(created.trip.id);
+      } else if (kind === 'invite') {
+        forgetPendingInvite();
+      }
     },
-    [],
+    [created],
   );
 
-  const handleImportTrip = useCallback((data: TripImportData): void => {
-    setImportSource(data);
-    setLocation(data.trip.location ?? '');
-    setCoordinates(data.trip.coordinates);
-  }, []);
-
-  // The last question is the one that creates the trip: 'rooms' for the full
-  // flow, 'guests' behind a template. Naming it rather than naming a step keeps
-  // the two flows from drifting.
-  const isLastQuestion = stepIndex >= 0 && stepIndex === questions.length - 1;
+  const openTrip = useCallback((): void => {
+    if (created === null) {
+      return;
+    }
+    forgetPendingInvite();
+    // `next` once the link was on screen, `skip` when the person left
+    // without one: the share of first trips that leave with a link.
+    report(linkState === 'invite' ? 'next' : 'skip', 'invite');
+    onCreated(created.trip);
+  }, [created, linkState, onCreated, report]);
 
   const progressLabel = useMemo(
     () =>
       t('trips.wizard.progress', {
         step: Math.max(stepIndex, 0) + 1,
-        total: questions.length,
+        total: STEP_COUNT,
         defaultValue: 'Step {{step}} of {{total}}',
       }),
-    [questions.length, stepIndex, t],
+    [stepIndex, t],
   );
 
   // --------------------------------------------------------------------------
-  // Done
+  // Invite
   // --------------------------------------------------------------------------
 
-  if (step === 'done' && created !== null) {
+  if (step === 'invite' && created !== null) {
+    const signInFirst = linkState === 'needs-account';
     return (
-      <div className="flex flex-col items-center gap-6 py-8 text-center" data-testid="trip-wizard-done">
-        <div className="flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <PartyPopper className="size-10" aria-hidden="true" />
+      <div className="flex flex-col gap-6 py-4" data-testid="trip-wizard-invite">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <PartyPopper className="size-8" aria-hidden="true" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-display text-2xl font-bold">
+              {t('trips.wizard.inviteTitle', {
+                tripName: created.trip.name,
+                defaultValue: '{{tripName}} is ready: invite the group',
+              })}
+            </h2>
+            <p className="text-muted-foreground">
+              {t(
+                'trips.wizard.inviteHint',
+                'Send this link. Each person adds their name and when they arrive, and the rooms fill in from there.',
+              )}
+            </p>
+          </div>
         </div>
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold">
-            {t('trips.wizard.doneTitle', {
-              tripName: created.trip.name,
-              defaultValue: '{{tripName}} is ready',
-            })}
-          </h2>
-          <p className="text-muted-foreground">
-            {t(
-              'trips.wizard.doneHint',
-              'Share the link and the others can see who sleeps where and who arrives when.',
-            )}
-          </p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button
-            onClick={() => {
-              onCreated(created.trip);
-            }}
-          >
-            {t('trips.wizard.openCalendar', 'Open the calendar')}
+        <ShareLinkPanel
+          trip={created.trip}
+          active
+          signIn="inline"
+          withShareSheet
+          onStateChange={handleLinkState}
+        />
+        <div className="flex justify-center">
+          <Button variant={signInFirst ? 'ghost' : 'default'} onClick={openTrip}>
+            {signInFirst
+              ? t('trips.wizard.later', 'Later, open the trip')
+              : t('trips.wizard.openCalendar', 'Open the calendar')}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setShareOpen(true);
-            }}
-          >
-            {t('trips.wizard.share', 'Share the trip')}
-          </Button>
         </div>
-        <ShareDialog open={shareOpen} onOpenChange={setShareOpen} trip={created.trip} />
       </div>
     );
   }
+
+  const isLastQuestion = stepIndex === QUESTIONS.length - 1;
 
   // --------------------------------------------------------------------------
   // Questions
@@ -523,16 +446,16 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6" data-testid="trip-wizard">
       <ol className="flex justify-center gap-2" aria-label={progressLabel}>
-        {questions.map((question, index) => (
+        {[...QUESTIONS, 'invite' as const].map((screen, index) => (
           <li
-            key={question}
+            key={screen}
             aria-current={index === stepIndex ? 'step' : undefined}
             className={cn(
               'size-2.5 rounded-full transition-colors',
               index <= stepIndex ? 'bg-primary' : 'bg-muted-foreground/30',
             )}
           >
-            <span className="sr-only">{question}</span>
+            <span className="sr-only">{screen}</span>
           </li>
         ))}
       </ol>
@@ -585,194 +508,6 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         </div>
       ) : null}
 
-      {step === 'place' ? (
-        <div className="space-y-3">
-          <h2 className="text-2xl font-bold">
-            {t('trips.wizard.placeQuestion', 'Where is the house?')}
-          </h2>
-          <p className="text-muted-foreground">
-            {t(
-              'trips.wizard.placeHint',
-              'A town or an address. Pick a previous trip to reuse its rooms.',
-            )}
-          </p>
-          <Label htmlFor="wizard-trip-location" className="sr-only">
-            {t('trips.wizard.placeLabel', 'Location')}
-          </Label>
-          <LocationAutocomplete
-            id="wizard-trip-location"
-            value={location}
-            {...(coordinates === undefined ? {} : { coordinates })}
-            onChange={handleLocationChange}
-            onImportTrip={handleImportTrip}
-          />
-        </div>
-      ) : null}
-
-      {step === 'guests' ? (
-        <div className="space-y-3">
-          <h2 className="text-2xl font-bold">
-            {t('trips.wizard.guestsQuestion', 'Who is coming?')}
-          </h2>
-          <p className="text-muted-foreground">
-            {t(
-              'trips.wizard.guestsHint',
-              'One name at a time, Enter after each. You can add more later.',
-            )}
-          </p>
-          {guests.length > 0 ? (
-            <ul className="flex flex-wrap gap-2" aria-label={t('trips.wizard.guestsQuestion', 'Who is coming?')}>
-              {guests.map((guest, index) => (
-                <li
-                  key={`${guest.name}-${index}`}
-                  className="flex items-center gap-1 rounded-full border bg-card py-1 pl-3 pr-1 text-sm"
-                >
-                  <span>{guest.name}</span>
-                  {guest.isSelf ? (
-                    <span className="rounded-full bg-primary/10 px-2 text-xs text-primary">
-                      {t('trips.wizard.you', 'You')}
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="flex size-7 items-center justify-center rounded-full hover:bg-muted"
-                    aria-label={t('trips.wizard.removeGuest', {
-                      name: guest.name,
-                      defaultValue: 'Remove {{name}}',
-                    })}
-                    onClick={() => {
-                      setGuests((current) => current.filter((_, at) => at !== index));
-                    }}
-                  >
-                    <X className="size-3.5" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="flex gap-2">
-            <Label htmlFor="wizard-guest-name" className="sr-only">
-              {t('trips.wizard.guestLabel', 'Guest name')}
-            </Label>
-            <Input
-              id="wizard-guest-name"
-              ref={inputRef}
-              value={guestDraft}
-              maxLength={MAX_LENGTHS.personName}
-              placeholder={t('trips.wizard.guestPlaceholder', 'A first name')}
-              onChange={(event) => {
-                setGuestDraft(event.target.value);
-              }}
-              className="h-12 text-lg"
-              autoComplete="off"
-            />
-            {/* A tap on the button would move focus off the field and close a
-                phone's keyboard before the next name. Refusing the mousedown
-                keeps focus where it is; the refocus in the click covers a
-                keyboard user who tabbed here. */}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-12"
-              onMouseDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={() => {
-                addGuest();
-                inputRef.current?.focus();
-              }}
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              {t('trips.wizard.addGuest', 'Add')}
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {step === 'rooms' ? (
-        <div className="space-y-3">
-          <h2 className="text-2xl font-bold">
-            {t('trips.wizard.roomsQuestion', 'Which rooms are there?')}
-          </h2>
-          <p className="text-muted-foreground">
-            {t('trips.wizard.roomsHint', 'Name and beds. Skip this and add rooms as you go.')}
-          </p>
-          {rooms.length > 0 ? (
-            <ul className="space-y-2" aria-label={t('trips.wizard.roomsQuestion', 'Which rooms are there?')}>
-              {rooms.map((room, index) => (
-                <li
-                  key={`${room.name}-${index}`}
-                  className="flex items-center justify-between rounded-lg border bg-card px-3 py-2 text-sm"
-                >
-                  <span>
-                    {room.name} · {room.capacity} {t('trips.wizard.bedsLabel', 'Beds').toLowerCase()}
-                  </span>
-                  <button
-                    type="button"
-                    className="flex size-8 items-center justify-center rounded-full hover:bg-muted"
-                    aria-label={t('trips.wizard.removeRoom', {
-                      name: room.name,
-                      defaultValue: 'Remove {{name}}',
-                    })}
-                    onClick={() => {
-                      setRooms((current) => current.filter((_, at) => at !== index));
-                    }}
-                  >
-                    <X className="size-3.5" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Label htmlFor="wizard-room-name" className="sr-only">
-                {t('trips.wizard.roomLabel', 'Room name')}
-              </Label>
-              <Input
-                id="wizard-room-name"
-                ref={inputRef}
-                value={roomDraft}
-                maxLength={MAX_LENGTHS.roomName}
-                placeholder={t('trips.wizard.roomPlaceholder', 'Master bedroom')}
-                onChange={(event) => {
-                  setRoomDraft(event.target.value);
-                }}
-                className="h-12 text-lg"
-                autoComplete="off"
-              />
-            </div>
-            <div className="w-24">
-              <Label htmlFor="wizard-room-beds" className="sr-only">
-                {t('trips.wizard.bedsLabel', 'Beds')}
-              </Label>
-              <Input
-                id="wizard-room-beds"
-                type="number"
-                min={MIN_ROOM_CAPACITY}
-                inputMode="numeric"
-                value={roomCapacity}
-                onChange={(event) => {
-                  setRoomCapacity(Number(event.target.value));
-                }}
-                className="h-12 text-lg"
-              />
-            </div>
-            <Button type="button" variant="outline" className="h-12" onClick={addRoom}>
-              <Plus className="size-4" aria-hidden="true" />
-              {t('trips.wizard.addRoom', 'Add')}
-            </Button>
-          </div>
-          {/* Two fields and no submit button would leave Enter doing nothing:
-              a form only submits implicitly with one field or a submit button.
-              This one is never seen or tabbed to; it is what makes Enter add
-              the room, and Enter on an empty row create the trip. */}
-          <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
-            {t('trips.wizard.addRoom', 'Add')}
-          </button>
-        </div>
-      ) : null}
-
       {problem !== null ? (
         <p role="alert" className="text-sm text-destructive">
           {problem}
@@ -785,19 +520,8 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           {t('trips.wizard.back', 'Back')}
         </Button>
         <div className="flex gap-2">
-          {stepIndex >= 2 && !isLastQuestion ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                advance('skip');
-              }}
-            >
-              {t('trips.wizard.skip', 'Skip for now')}
-            </Button>
-          ) : null}
           {isLastQuestion ? (
-            <Button type="button" disabled={isCreating} onClick={() => advance('next')}>
+            <Button type="button" disabled={isCreating} onClick={advance}>
               <Check className="size-4" aria-hidden="true" />
               {isCreating
                 ? t('trips.wizard.creating', 'Creating…')

@@ -1,5 +1,5 @@
 /**
- * @fileoverview The first-trip wizard: five questions, Enter, Back, Skip, done.
+ * @fileoverview The first-trip wizard: a name, the dates, then the invite link.
  *
  * @module features/trips/components/__tests__/TripCreateWizard.test
  */
@@ -11,6 +11,10 @@ import { format } from 'date-fns';
 
 import { TripCreateWizard } from '../TripCreateWizard';
 import { createTripWithDetails } from '../../lib/create-trip-with-details';
+import {
+  forgetPendingInvite,
+  rememberPendingInvite,
+} from '@/features/sharing/utils/pending-invite';
 import { pushDataLayerEvent } from '@/lib/google-tag';
 import { announceStatus } from '@/lib/notifications';
 import { captureEvent, captureUsage } from '@/lib/posthog';
@@ -60,65 +64,36 @@ vi.mock('@/components/shared/DateRangePicker', () => ({
   ),
 }));
 
-vi.mock('../LocationAutocomplete', () => ({
-  LocationAutocomplete: (props: {
-    id?: string;
-    value: string;
-    coordinates?: { lat: number; lon: number };
-    onChange: (value: string, coordinates?: { lat: number; lon: number }) => void;
-    onImportTrip: (data: {
-      trip: { id: string; location?: string; coordinates?: { lat: number; lon: number } };
-      rooms: never[];
-    }) => void;
+// The panel has its own tests. Here it only has to say what it was given and
+// let a test move it from one link state to the next.
+vi.mock('@/features/sharing/components/ShareLinkPanel', () => ({
+  ShareLinkPanel: (props: {
+    trip: { id: string };
+    active: boolean;
+    signIn: string;
+    withShareSheet: boolean;
+    onStateChange: (kind: string) => void;
   }) => (
-    <div>
-      <input
-        id={props.id}
-        aria-label="Location"
-        value={props.value}
-        onChange={(event) => {
-          props.onChange(event.target.value);
-        }}
-      />
-      {/* What the wizard handed down, so a test can read the pin back. */}
-      <output data-testid="location-pin">
-        {'coordinates' in props
-          ? `${props.coordinates?.lat ?? 'none'},${props.coordinates?.lon ?? 'none'}`
-          : 'no pin'}
-      </output>
-      <button
-        type="button"
-        onClick={() => {
-          props.onChange('Annecy', { lat: 45.9, lon: 6.1 });
-        }}
-      >
-        pick Annecy
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          props.onImportTrip({
-            trip: { id: 'old-trip', location: 'Biarritz', coordinates: { lat: 43.5, lon: -1.6 } },
-            rooms: [],
-          });
-        }}
-      >
-        import Biarritz
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          props.onImportTrip({ trip: { id: 'placeless-trip' }, rooms: [] });
-        }}
-      >
-        import placeless
-      </button>
+    <div data-testid="share-link-panel">
+      <output>{`${props.trip.id} ${String(props.active)} ${props.signIn} ${String(props.withShareSheet)}`}</output>
+      {['needs-account', 'invite', 'loading'].map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          onClick={() => {
+            props.onStateChange(kind);
+          }}
+        >
+          {`link ${kind}`}
+        </button>
+      ))}
     </div>
   ),
 }));
 
-vi.mock('@/features/sharing/components/ShareDialog', () => ({
-  ShareDialog: ({ open }: { open: boolean }) => (open ? <div role="dialog">share</div> : null),
+vi.mock('@/features/sharing/utils/pending-invite', () => ({
+  rememberPendingInvite: vi.fn(),
+  forgetPendingInvite: vi.fn(),
 }));
 
 const confetti = vi.fn();
@@ -134,9 +109,9 @@ vi.mock('@/lib/posthog', () => {
     default: { capture },
     captureEvent: capture,
     captureUsage: vi.fn(),
-  // Named export used by every catch block that reports; a mock
-  // without it makes the reporter itself the error under test.
-  reportError: vi.fn(),
+    // Named export used by every catch block that reports; a mock
+    // without it makes the reporter itself the error under test.
+    reportError: vi.fn(),
   };
 });
 
@@ -151,16 +126,11 @@ const CREATED_TRIP = {
   endDate: '2026-07-22',
 };
 
-function outcome(overrides: Partial<{ guests: number; rooms: number }> = {}) {
+function outcome() {
   return {
     trip: CREATED_TRIP,
     selfPersonId: undefined,
-    counts: {
-      guests: overrides.guests ?? 0,
-      importedGuests: 0,
-      rooms: overrides.rooms ?? 0,
-      importedRooms: false,
-    },
+    counts: { guests: 0, importedGuests: 0, rooms: 0, importedRooms: false },
     warnings: [],
   } as never;
 }
@@ -184,7 +154,7 @@ function renderWizard(currentUserName?: string): ReturnType<typeof render> {
 const PREFILL = {
   name: 'Chalet Marmotte',
   description: 'Check-in after 3pm.',
-  location: 'Chamonix',
+  location: '  Chamonix  ',
   coordinates: { lat: 45.9237, lon: 6.8694 },
   currency: 'EUR',
   rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' as const }],
@@ -196,12 +166,47 @@ function renderTemplateWizard(): ReturnType<typeof render> {
   );
 }
 
-/** Answers the two required questions and lands on the place screen. */
-async function answerNameAndDates(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+/** Answers the name and lands on the dates, the last question. */
+async function answerName(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
+  await screen.findByText('When is it?');
+}
+
+/** Answers both questions and creates the trip. */
+async function createTrip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await answerName(user);
   await user.click(screen.getByRole('button', { name: 'Trip dates' }));
-  await user.click(screen.getByRole('button', { name: 'Next' }));
-  await screen.findByText('Where is the house?');
+  await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+}
+
+/** Creates the trip and waits for the invite screen. */
+async function reachInvite(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+  await createTrip(user);
+  return screen.findByTestId('trip-wizard-invite');
+}
+
+/** The single argument of the one `createTripWithDetails` call. */
+function createdDraft(): unknown {
+  expect(mockedCreate).toHaveBeenCalledTimes(1);
+  return mockedCreate.mock.calls[0]?.[0];
+}
+
+/** A creation the test finishes by hand. */
+function pendingCreation(): { finish: () => Promise<void> } {
+  let settle: (value: never) => void = () => {};
+  mockedCreate.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+  );
+  return {
+    finish: async () => {
+      await act(async () => {
+        settle(outcome());
+      });
+    },
+  };
 }
 
 beforeEach(() => {
@@ -238,63 +243,61 @@ describe('TripCreateWizard', () => {
     expect(screen.getByText('What is the trip called?')).toBeInTheDocument();
   });
 
-  it('will not move on without both dates', async () => {
+  it('will not create the trip without both dates', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
+    await answerName(user);
 
-    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('Pick the first and the last day');
+    expect(mockedCreate).not.toHaveBeenCalled();
   });
 
-  it('shows the step count as progress', async () => {
+  it('counts the link as a step of its own', async () => {
     const user = userEvent.setup();
     renderWizard();
 
-    expect(screen.getByRole('list', { name: 'Step 1 of 5' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
 
-    expect(screen.getByRole('list', { name: 'Step 2 of 5' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Step 2 of 3' })).toBeInTheDocument();
   });
 
   it('goes back a question, and leaves from the first one', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
+    await answerName(user);
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByText('What is the trip called?')).toBeInTheDocument();
     // The name typed is still there.
     expect(screen.getByLabelText('Trip name')).toHaveValue('Lake house');
+    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'dates', outcome: 'back' });
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('lets everything after the dates be skipped, and creates the trip', async () => {
+  it('creates the trip from the dates, with no place, guest or room asked', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await answerNameAndDates(user);
+    await createTrip(user);
 
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    expect(screen.getByText('Who is coming?')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    expect(screen.getByText('Which rooms are there?')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
+    // Exactly these keys: nothing the wizard did not ask for is sent empty.
     await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith({
+      expect(createdDraft()).toStrictEqual({
         form: { name: 'Lake house', startDate: '2026-07-15', endDate: '2026-07-22' },
         guests: [],
         rooms: [],
         importSourceTripId: null,
-        // Selecting the trip would remount the route and lose the done screen.
+        // Selecting the trip would remount the route and lose the invite screen.
         selectAsCurrent: false,
       });
     });
-    expect(await screen.findByTestId('trip-wizard-done')).toHaveTextContent('Lake house is ready');
+    expect(await screen.findByTestId('trip-wizard-invite')).toBeInTheDocument();
+    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'dates', outcome: 'next' });
     expect(vi.mocked(captureUsage)).toHaveBeenCalledWith(
       'trip_created',
       expect.objectContaining({ via: 'wizard' }),
@@ -306,107 +309,67 @@ describe('TripCreateWizard', () => {
     expect(vi.mocked(announceStatus)).toHaveBeenCalledWith('Trip Lake house created');
   });
 
-  it('collects guests one Enter at a time, with the user first', async () => {
+  it('puts the account holder on the guest list, and nobody else', async () => {
     const user = userEvent.setup();
     renderWizard('Tom');
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-
-    // "You" is already on the list.
-    expect(screen.getByText('Tom')).toBeInTheDocument();
-    expect(screen.getByText('You')).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText('Guest name'), 'Alice{Enter}');
-    await user.type(screen.getByLabelText('Guest name'), 'Bob{Enter}');
-    // Still on the guests screen: Enter with a name adds; Enter empty moves on.
-    expect(screen.getByText('Who is coming?')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Remove Bob' }));
-    await user.type(screen.getByLabelText('Guest name'), '{Enter}');
-    expect(screen.getByText('Which rooms are there?')).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText('Room name'), 'Attic{Enter}');
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+    await createTrip(user);
 
     await waitFor(() => {
       expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          guests: [{ name: 'Tom', isSelf: true }, { name: 'Alice' }],
-          rooms: [{ name: 'Attic', capacity: 2, icon: 'bed-double' }],
-        }),
+        expect.objectContaining({ guests: [{ name: 'Tom', isSelf: true }] }),
       );
     });
   });
 
-  it('carries the place typed on the place screen', async () => {
+  it('trims the name, and will not take one that is only spaces', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await answerNameAndDates(user);
 
-    await user.type(screen.getByLabelText('Location'), 'Annecy{Enter}');
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await user.type(screen.getByLabelText('Trip name'), '   {Enter}');
+    expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
+
+    await user.clear(screen.getByLabelText('Trip name'));
+    await user.type(screen.getByLabelText('Trip name'), '  Lake house  {Enter}');
+    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
     await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
     await waitFor(() => {
       expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ form: expect.objectContaining({ location: 'Annecy' }) }),
+        expect.objectContaining({ form: expect.objectContaining({ name: 'Lake house' }) }),
       );
     });
   });
 
-  it('celebrates on the done screen, then hands the trip over', async () => {
+  it('creates the trip on Enter from the dates', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-    await screen.findByTestId('trip-wizard-done');
+    await answerName(user);
+    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
+
+    fireEvent.submit(screen.getByTestId('trip-wizard'));
 
     await waitFor(() => {
-      expect(confetti).toHaveBeenCalledTimes(1);
+      expect(mockedCreate).toHaveBeenCalledTimes(1);
     });
-
-    await user.click(screen.getByRole('button', { name: 'Share the trip' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Open the calendar' }));
-    expect(onCreated).toHaveBeenCalledWith(CREATED_TRIP);
-  });
-
-  it('keeps the confetti for people who asked for less motion', async () => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: () => ({ matches: true }),
-    });
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-    await screen.findByTestId('trip-wizard-done');
-
-    // The announcement still happens; only the motion is skipped.
-    expect(vi.mocked(announceStatus)).toHaveBeenCalled();
-    expect(confetti).not.toHaveBeenCalled();
-    Reflect.deleteProperty(window, 'matchMedia');
   });
 
   it('says so and stays when the trip cannot be created', async () => {
     mockedCreate.mockRejectedValue(new Error('disk full'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     renderWizard();
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+    await createTrip(user);
 
     await expect(screen.findByRole('alert')).resolves.toHaveTextContent(
       'The trip could not be created.',
     );
     expect(screen.getByRole('button', { name: 'Create the trip' })).toBeEnabled();
     expect(onCreated).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      'Wizard could not create the trip:',
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 
   it('reports what it holds as unsaved changes', async () => {
@@ -419,20 +382,19 @@ describe('TripCreateWizard', () => {
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
   });
+
   // --------------------------------------------------------------------------
   // Behind a trip template link
   // --------------------------------------------------------------------------
 
   describe('with a template', () => {
-    it("starts on the template's name and today, so Next alone reaches the guests", async () => {
+    it("starts on the template's name and today, so Next alone reaches the link", async () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
       expect(screen.getByLabelText('Trip name')).toHaveValue('Chalet Marmotte');
       await user.click(screen.getByRole('button', { name: 'Next' }));
       await screen.findByText('When is it?');
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      await screen.findByText('Who is coming?');
       await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       const today = format(new Date(), 'yyyy-MM-dd');
@@ -447,6 +409,7 @@ describe('TripCreateWizard', () => {
           }),
         );
       });
+      expect(await screen.findByTestId('trip-wizard-invite')).toBeInTheDocument();
     });
 
     it('lets the customer type over the name the template gave', async () => {
@@ -459,20 +422,10 @@ describe('TripCreateWizard', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
     });
 
-    it('asks three questions instead of five', async () => {
-      const user = userEvent.setup();
+    it('asks the same two questions as the ordinary wizard', () => {
       renderTemplateWizard();
 
-      expect(screen.getByLabelText('Step 1 of 3')).toBeInTheDocument();
-
-      await user.clear(screen.getByLabelText('Trip name'));
-      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
-      await user.click(screen.getByRole('button', { name: 'Trip dates' }));
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      // Straight to the guests: the place and the rooms came with the template.
-      expect(await screen.findByText('Who is coming?')).toBeInTheDocument();
-      expect(screen.queryByText('Where is the house?')).not.toBeInTheDocument();
+      expect(screen.getByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
     });
 
     it('creates the trip with the template values and the answers', async () => {
@@ -482,13 +435,10 @@ describe('TripCreateWizard', () => {
       await user.clear(screen.getByLabelText('Trip name'));
       await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
       await user.click(screen.getByRole('button', { name: 'Trip dates' }));
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      await screen.findByText('Who is coming?');
-      await user.type(screen.getByLabelText('Guest name'), 'Alice{Enter}');
       await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       await waitFor(() => {
-        expect(mockedCreate).toHaveBeenCalledWith({
+        expect(createdDraft()).toStrictEqual({
           form: {
             name: 'Ski week',
             startDate: '2026-07-15',
@@ -498,7 +448,7 @@ describe('TripCreateWizard', () => {
             description: 'Check-in after 3pm.',
             currency: 'EUR',
           },
-          guests: [{ name: 'Alice' }],
+          guests: [],
           rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' }],
           importSourceTripId: null,
           selectAsCurrent: false,
@@ -506,15 +456,39 @@ describe('TripCreateWizard', () => {
       });
     });
 
+    it('leaves out the fields a template left blank', async () => {
+      const user = userEvent.setup();
+      render(
+        <TripCreateWizard
+          prefill={{
+            ...PREFILL,
+            location: '   ',
+            coordinates: undefined,
+            description: null,
+            currency: null,
+          }}
+          onCreated={onCreated}
+          onCancel={onCancel}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+
+      await waitFor(() => {
+        expect(mockedCreate).toHaveBeenCalledTimes(1);
+      });
+      expect(mockedCreate.mock.calls[0]?.[0].form).toStrictEqual({
+        name: 'Chalet Marmotte',
+        startDate: format(new Date(), 'yyyy-MM-dd'),
+        endDate: format(new Date(), 'yyyy-MM-dd'),
+      });
+    });
+
     it('is counted apart from the ordinary wizard', async () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
-      await user.clear(screen.getByLabelText('Trip name'));
-      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
-      await user.click(screen.getByRole('button', { name: 'Trip dates' }));
       await user.click(screen.getByRole('button', { name: 'Next' }));
-      await screen.findByText('Who is coming?');
       await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       await waitFor(() => {
@@ -528,62 +502,12 @@ describe('TripCreateWizard', () => {
         );
       });
     });
-
-    it('goes back through its own three questions', async () => {
-      const user = userEvent.setup();
-      renderTemplateWizard();
-
-      await user.clear(screen.getByLabelText('Trip name'));
-      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
-      await user.click(screen.getByRole('button', { name: 'Back' }));
-
-      expect(screen.getByLabelText('Step 1 of 3')).toBeInTheDocument();
-    });
   });
-
 });
 
 // ============================================================================
 // What each screen says and how it looks
 // ============================================================================
-
-/** Walks past the name, the dates and the place, onto the guests screen. */
-async function goToGuests(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await answerNameAndDates(user);
-  await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-  await screen.findByText('Who is coming?');
-}
-
-/** Walks on to the rooms screen, the last question. */
-async function goToRooms(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await goToGuests(user);
-  await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-  await screen.findByText('Which rooms are there?');
-}
-
-/** The single argument of the one `createTripWithDetails` call. */
-function createdDraft(): unknown {
-  expect(mockedCreate).toHaveBeenCalledTimes(1);
-  return mockedCreate.mock.calls[0]?.[0];
-}
-
-/** A creation the test finishes by hand. */
-function pendingCreation(): { finish: () => Promise<void> } {
-  let settle: (value: never) => void = () => {};
-  mockedCreate.mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        settle = resolve;
-      }),
-  );
-  return {
-    finish: async () => {
-      await act(async () => {
-        settle(outcome());
-      });
-    },
-  };
-}
 
 describe('TripCreateWizard screens', () => {
   it('words the name screen and focuses its field', () => {
@@ -601,11 +525,9 @@ describe('TripCreateWizard screens', () => {
     expect(field).toHaveFocus();
     expect(screen.getByText('Trip name')).toHaveClass('sr-only');
     expect(screen.getByTestId('trip-wizard')).toHaveClass('space-y-6');
-    // Nothing is wrong yet, and nothing can be skipped on the first screen.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Who is coming?')).not.toBeInTheDocument();
-    expect(screen.queryByText('Which rooms are there?')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create the trip' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
   });
 
@@ -614,445 +536,37 @@ describe('TripCreateWizard screens', () => {
     renderWizard();
     await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
 
-    const dots = within(screen.getByRole('list', { name: 'Step 2 of 5' })).getAllByRole(
+    const dots = within(screen.getByRole('list', { name: 'Step 2 of 3' })).getAllByRole(
       'listitem',
     );
-    expect(dots).toHaveLength(5);
-    expect(dots.map((dot) => dot.getAttribute('aria-current'))).toEqual([
-      null,
-      'step',
-      null,
-      null,
-      null,
-    ]);
+    expect(dots).toHaveLength(3);
+    expect(dots.map((dot) => dot.getAttribute('aria-current'))).toEqual([null, 'step', null]);
     expect(dots[0]).toHaveClass('bg-primary', 'size-2.5');
     expect(dots[1]).toHaveClass('bg-primary');
     expect(dots[2]).toHaveClass('bg-muted-foreground/30');
     expect(dots[2]).not.toHaveClass('bg-primary');
     expect(dots[1]).not.toHaveClass('bg-muted-foreground/30');
     expect(dots[1]).toHaveTextContent('dates');
+    expect(dots[2]).toHaveTextContent('invite');
   });
 
-  it('words the dates screen, with no skip', async () => {
+  it('words the dates screen, which creates the trip', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
+    await answerName(user);
 
     expect(screen.getByRole('heading', { name: 'When is it?' })).toBeInTheDocument();
     expect(
       screen.getByText('First and last day. Guests can arrive and leave in between.'),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
-  });
-
-  it('words the place screen and hands it no pin until one is picked', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-
-    expect(screen.getByRole('heading', { name: 'Where is the house?' })).toBeInTheDocument();
-    expect(
-      screen.getByText('A town or an address. Pick a previous trip to reuse its rooms.'),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('location-pin')).toHaveTextContent('no pin');
-    expect(screen.getByText('Location', { selector: 'label' })).toHaveClass('sr-only');
-
-    await user.click(screen.getByRole('button', { name: 'pick Annecy' }));
-
-    expect(screen.getByLabelText('Location')).toHaveValue('Annecy');
-    expect(screen.getByTestId('location-pin')).toHaveTextContent('45.9,6.1');
-  });
-
-  it('words the guests screen, and lists nobody before a name is added', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToGuests(user);
-
-    expect(screen.getByRole('heading', { name: 'Who is coming?' })).toBeInTheDocument();
-    expect(
-      screen.getByText('One name at a time, Enter after each. You can add more later.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Who is coming?' })).not.toBeInTheDocument();
-    const field = screen.getByLabelText('Guest name');
-    expect(field).toHaveFocus();
-    expect(field).toHaveAttribute('placeholder', 'A first name');
-    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
-    expect(screen.queryByText('Which rooms are there?')).not.toBeInTheDocument();
-  });
-
-  it('shows each guest as a chip with a remove button, "you" marked', async () => {
-    const consoleError = vi.spyOn(console, 'error');
-    const user = userEvent.setup();
-    renderWizard('Tom');
-    await goToGuests(user);
-    await user.type(screen.getByLabelText('Guest name'), 'Alice{Enter}');
-    await user.type(screen.getByLabelText('Guest name'), 'Alice{Enter}');
-
-    const list = screen.getByRole('list', { name: 'Who is coming?' });
-    const chips = within(list).getAllByRole('listitem');
-    expect(chips).toHaveLength(3);
-    expect(chips[0]).toHaveClass('rounded-full', 'bg-card');
-    expect(within(chips[0] as HTMLElement).getByText('You')).toHaveClass('bg-primary/10');
-    expect(within(chips[1] as HTMLElement).queryByText('You')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Remove Alice' })[0]).toHaveClass('size-7');
-    // Two guests may share a first name; each chip still has its own key.
-    expect(
-      consoleError.mock.calls.some((call) => String(call[0]).includes('same key')),
-    ).toBe(false);
-
-    await user.click(screen.getByRole('button', { name: 'Remove Tom' }));
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
-  });
-
-  it('adds a guest from the Add button and keeps the keyboard on the field', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToGuests(user);
-
-    const add = screen.getByRole('button', { name: 'Add' });
-    // Refusing the mousedown is what keeps a phone keyboard open.
-    expect(fireEvent.mouseDown(add)).toBe(false);
-
-    await user.type(screen.getByLabelText('Guest name'), 'Alice');
-    await user.click(add);
-
-    expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByLabelText('Guest name')).toHaveValue('');
-    expect(screen.getByLabelText('Guest name')).toHaveFocus();
-  });
-
-  it('trims a guest name and ignores one that is only spaces', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToGuests(user);
-
-    await user.type(screen.getByLabelText('Guest name'), '  Alice  {Enter}');
-    expect(screen.getByLabelText('Guest name')).toHaveValue('');
-    // Spaces only: Enter moves on rather than adding a blank guest.
-    await user.type(screen.getByLabelText('Guest name'), '   {Enter}');
-    await screen.findByText('Which rooms are there?');
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ guests: [{ name: 'Alice' }] }),
-      );
-    });
-  });
-
-  it('cuts a pasted guest name to the length a guest name may have', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToGuests(user);
-
-    fireEvent.change(screen.getByLabelText('Guest name'), { target: { value: 'G'.repeat(150) } });
-    await user.type(screen.getByLabelText('Guest name'), '{Enter}');
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ guests: [{ name: 'G'.repeat(100) }] }),
-      );
-    });
-  });
-
-  it('words the rooms screen, and lists no room before one is added', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToRooms(user);
-
-    expect(screen.getByRole('heading', { name: 'Which rooms are there?' })).toBeInTheDocument();
-    expect(
-      screen.getByText('Name and beds. Skip this and add rooms as you go.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Which rooms are there?' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Room name')).toHaveFocus();
-    expect(screen.getByLabelText('Room name')).toHaveAttribute('placeholder', 'Master bedroom');
-    expect(screen.getByLabelText('Beds')).toHaveValue(2);
-    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
-    // The last question creates the trip, so there is nothing left to skip.
-    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Who is coming?')).not.toBeInTheDocument();
-  });
-
-  it('gives Enter a submit button on the rooms screen that nobody tabs to', async () => {
-    const user = userEvent.setup();
-    const { container } = renderWizard();
-    await goToRooms(user);
-
-    const hidden = container.querySelector('button[type="submit"][aria-hidden="true"]');
-    expect(hidden).toHaveAttribute('tabindex', '-1');
-    expect(hidden).toHaveClass('sr-only');
-    expect(hidden).toHaveTextContent('Add');
-  });
-
-  it('adds rooms with their beds, resets the row, and removes one', async () => {
-    const consoleError = vi.spyOn(console, 'error');
-    const user = userEvent.setup();
-    renderWizard();
-    await goToRooms(user);
-
-    await user.type(screen.getByLabelText('Room name'), '  Attic  ');
-    fireEvent.change(screen.getByLabelText('Beds'), { target: { value: '3' } });
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-
-    expect(screen.getByLabelText('Room name')).toHaveValue('');
-    expect(screen.getByLabelText('Beds')).toHaveValue(2);
-
-    await user.type(screen.getByLabelText('Room name'), 'Attic{Enter}');
-
-    const list = screen.getByRole('list', { name: 'Which rooms are there?' });
-    const rows = within(list).getAllByRole('listitem');
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent('Attic · 3 beds');
-    expect(rows[0]).toHaveClass('rounded-lg', 'bg-card');
-    expect(rows[1]).toHaveTextContent('Attic · 2 beds');
-    expect(
-      consoleError.mock.calls.some((call) => String(call[0]).includes('same key')),
-    ).toBe(false);
-
-    const removeButtons = screen.getAllByRole('button', { name: 'Remove Attic' });
-    expect(removeButtons[0]).toHaveClass('size-8');
-    await user.click(removeButtons[0] as HTMLElement);
-    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(list).getByRole('listitem')).toHaveTextContent('Attic · 2 beds');
-
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ rooms: [{ name: 'Attic', capacity: 2, icon: 'bed-double' }] }),
-      );
-    });
-  });
-
-  it('keeps a room to one bed at least, and cuts a pasted name', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToRooms(user);
-
-    fireEvent.change(screen.getByLabelText('Room name'), { target: { value: 'R'.repeat(150) } });
-    fireEvent.change(screen.getByLabelText('Beds'), { target: { value: '0' } });
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          rooms: [{ name: 'R'.repeat(100), capacity: 1, icon: 'bed-double' }],
-        }),
-      );
-    });
-  });
-
-  it('creates the trip on Enter in an empty room row', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToRooms(user);
-
-    await user.type(screen.getByLabelText('Room name'), '   {Enter}');
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(expect.objectContaining({ rooms: [] }));
-    });
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'rooms', outcome: 'next' });
-  });
-
-  it('reports the create button as a next move', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToRooms(user);
-
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'rooms', outcome: 'next' });
-  });
-
-  it('does not add a half-typed guest from the rooms screen', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToGuests(user);
-    // Typed but never added: Skip leaves it behind.
-    await user.type(screen.getByLabelText('Guest name'), 'Zoe');
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await screen.findByText('Which rooms are there?');
-
-    await user.type(screen.getByLabelText('Room name'), '{Enter}');
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(expect.objectContaining({ guests: [] }));
-    });
-  });
-
-  it('does not add a half-typed room from the guests screen', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await goToRooms(user);
-    await user.type(screen.getByLabelText('Room name'), 'Barn');
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    await screen.findByText('Who is coming?');
-
-    await user.type(screen.getByLabelText('Guest name'), '{Enter}');
-
-    // Enter on an empty guest row moves on; it does not add the room.
-    expect(await screen.findByText('Which rooms are there?')).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Which rooms are there?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create the trip' })).toBeInTheDocument();
   });
 
   it('cancels the browser submit on every Enter', () => {
     renderWizard();
 
     expect(fireEvent.submit(screen.getByTestId('trip-wizard'))).toBe(false);
-  });
-});
-
-describe('TripCreateWizard navigation', () => {
-  it('reports every move with its outcome', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'dates', outcome: 'next' });
-
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'place', outcome: 'skip' });
-
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'guests', outcome: 'back' });
-  });
-
-  it('goes back one question at a time, not to the start', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-
-    expect(screen.getByText('When is it?')).toBeInTheDocument();
-  });
-
-  it('clears a complaint once the question is answered', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await user.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByRole('alert')).toHaveClass('text-destructive');
-
-    await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
-
-    expect(screen.getByText('When is it?')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('will not take a name that is only spaces, and trims the one it takes', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-
-    await user.type(screen.getByLabelText('Trip name'), '   {Enter}');
-    expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
-
-    await user.clear(screen.getByLabelText('Trip name'));
-    await user.type(screen.getByLabelText('Trip name'), '  Lake house  {Enter}');
-    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
-    await user.click(screen.getByRole('button', { name: 'Next' }));
-    await user.type(screen.getByLabelText('Location'), '   ');
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    // Exactly these keys: a blank place and no pin are left out, not sent empty.
-    await waitFor(() => {
-      expect(createdDraft()).toStrictEqual({
-        form: { name: 'Lake house', startDate: '2026-07-15', endDate: '2026-07-22' },
-        guests: [],
-        rooms: [],
-        importSourceTripId: null,
-        selectAsCurrent: false,
-      });
-    });
-  });
-
-  it('trims the place, and drops the pin once the place is typed over', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'pick Annecy' }));
-    await user.type(screen.getByLabelText('Location'), '  ');
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    await waitFor(() => {
-      expect(createdDraft()).toStrictEqual(
-        expect.objectContaining({
-          form: {
-            name: 'Lake house',
-            startDate: '2026-07-15',
-            endDate: '2026-07-22',
-            location: 'Annecy',
-          },
-        }),
-      );
-    });
-  });
-
-  it('sends the pin when the place is picked last', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'pick Annecy' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          form: expect.objectContaining({ location: 'Annecy', coordinates: { lat: 45.9, lon: 6.1 } }),
-        }),
-      );
-    });
-  });
-
-  it('takes the place, the pin and the rooms source from a previous trip', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-    await user.click(screen.getByRole('button', { name: 'import Biarritz' }));
-    expect(screen.getByLabelText('Location')).toHaveValue('Biarritz');
-    expect(screen.getByTestId('location-pin')).toHaveTextContent('43.5,-1.6');
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Skip for now' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-
-    await waitFor(() => {
-      expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          form: expect.objectContaining({
-            location: 'Biarritz',
-            coordinates: { lat: 43.5, lon: -1.6 },
-          }),
-          importSourceTripId: 'old-trip',
-        }),
-      );
-    });
-  });
-
-  it('leaves the place empty when the previous trip had none', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerNameAndDates(user);
-    await user.type(screen.getByLabelText('Location'), 'Somewhere');
-    await user.click(screen.getByRole('button', { name: 'import placeless' }));
-
-    expect(screen.getByLabelText('Location')).toHaveValue('');
-  });
-
-  it('asks the questions of the prefill it is given now', () => {
-    const { rerender } = renderWizard();
-    expect(screen.getByRole('list', { name: 'Step 1 of 5' })).toBeInTheDocument();
-
-    rerender(<TripCreateWizard prefill={PREFILL} onCreated={onCreated} onCancel={onCancel} />);
-
-    expect(screen.getByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
   });
 });
 
@@ -1064,18 +578,16 @@ describe('TripCreateWizard creating', () => {
     render(
       <TripCreateWizard onCreating={onCreating} onCreated={onCreated} onCancel={onCancel} />,
     );
-    await goToRooms(user);
-
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+    await createTrip(user);
 
     expect(onCreating).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
-    await user.type(screen.getByLabelText('Room name'), '{Enter}');
+    fireEvent.submit(screen.getByTestId('trip-wizard'));
     expect(mockedCreate).toHaveBeenCalledTimes(1);
 
     await creation.finish();
-    expect(await screen.findByTestId('trip-wizard-done')).toBeInTheDocument();
+    expect(await screen.findByTestId('trip-wizard-invite')).toBeInTheDocument();
   });
 
   it('clears the last failure as soon as it tries again', async () => {
@@ -1083,18 +595,14 @@ describe('TripCreateWizard creating', () => {
     mockedCreate.mockRejectedValueOnce(new Error('disk full'));
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     renderWizard();
-    await goToRooms(user);
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+    await createTrip(user);
     await screen.findByRole('alert');
-    expect(consoleError).toHaveBeenCalledWith(
-      'Wizard could not create the trip:',
-      expect.any(Error),
-    );
 
     pendingCreation();
     await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    consoleError.mockRestore();
   });
 
   it('reports the counts of what it created', async () => {
@@ -1104,9 +612,7 @@ describe('TripCreateWizard creating', () => {
     } as never);
     const user = userEvent.setup();
     renderWizard();
-    await goToRooms(user);
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-    await screen.findByTestId('trip-wizard-done');
+    await reachInvite(user);
 
     expect(vi.mocked(captureUsage)).toHaveBeenCalledWith('trip_created', {
       via: 'wizard',
@@ -1126,8 +632,7 @@ describe('TripCreateWizard creating', () => {
     const creation = pendingCreation();
     const user = userEvent.setup();
     const { unmount } = renderWizard();
-    await goToRooms(user);
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+    await createTrip(user);
 
     unmount();
     await creation.finish();
@@ -1136,14 +641,37 @@ describe('TripCreateWizard creating', () => {
     expect(vi.mocked(announceStatus)).not.toHaveBeenCalled();
   });
 
+  it('says nothing when the creation fails after it has left the screen', async () => {
+    let fail: (error: Error) => void = () => {};
+    mockedCreate.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const { unmount } = renderWizard();
+    await createTrip(user);
+
+    unmount();
+    await act(async () => {
+      fail(new Error('disk full'));
+    });
+
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it('is no longer dirty once the trip exists', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await goToRooms(user);
+    await answerName(user);
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
+    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
     await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-    await screen.findByTestId('trip-wizard-done');
+    await screen.findByTestId('trip-wizard-invite');
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
@@ -1174,32 +702,77 @@ describe('TripCreateWizard creating', () => {
   });
 });
 
-describe('TripCreateWizard done screen', () => {
-  async function finish(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
-    await goToRooms(user);
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
-    return screen.findByTestId('trip-wizard-done');
-  }
+// ============================================================================
+// The invite screen
+// ============================================================================
 
-  it('words the done screen and opens the share dialog only on request', async () => {
+describe('TripCreateWizard invite screen', () => {
+  it('words the screen and asks the panel for a link straight away', async () => {
     const user = userEvent.setup();
     renderWizard();
-    const done = await finish(user);
+    await reachInvite(user);
 
-    expect(done).toHaveClass('text-center');
-    expect(screen.getByRole('heading', { name: 'Lake house is ready' })).toHaveClass('text-2xl');
+    expect(screen.getByRole('heading', { name: 'Lake house is ready: invite the group' })).toHaveClass(
+      'text-2xl',
+      'font-display',
+    );
     expect(
       screen.getByText(
-        'Share the link and the others can see who sleeps where and who arrives when.',
+        'Send this link. Each person adds their name and when they arrive, and the rooms fill in from there.',
       ),
     ).toHaveClass('text-muted-foreground');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The trip, asked for now, sign-in in place, with the share sheet.
+    expect(screen.getByTestId('share-link-panel')).toHaveTextContent('trip-1 true inline true');
+    expect(screen.queryByTestId('trip-wizard')).not.toBeInTheDocument();
+  });
+
+  it('remembers the trip while an account is asked for, and forgets it once the link is there', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+
+    await user.click(screen.getByRole('button', { name: 'link needs-account' }));
+    expect(vi.mocked(rememberPendingInvite)).toHaveBeenCalledWith('trip-1');
+    expect(vi.mocked(forgetPendingInvite)).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'link loading' }));
+    expect(vi.mocked(forgetPendingInvite)).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'link invite' }));
+    expect(vi.mocked(forgetPendingInvite)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(rememberPendingInvite)).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers "later" while signed out, and opens the trip from it', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+    await user.click(screen.getByRole('button', { name: 'link needs-account' }));
+
+    expect(screen.queryByRole('button', { name: 'Open the calendar' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Later, open the trip' }));
+
+    expect(onCreated).toHaveBeenCalledWith(CREATED_TRIP);
+    expect(vi.mocked(forgetPendingInvite)).toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'invite', outcome: 'skip' });
+  });
+
+  it('opens the calendar once the link is on screen, and counts it as a link handed over', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+    await user.click(screen.getByRole('button', { name: 'link invite' }));
+
+    await user.click(screen.getByRole('button', { name: 'Open the calendar' }));
+
+    expect(onCreated).toHaveBeenCalledWith(CREATED_TRIP);
+    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'invite', outcome: 'next' });
   });
 
   it('throws confetti once, with its shape', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await finish(user);
+    await reachInvite(user);
 
     await waitFor(() => {
       expect(confetti).toHaveBeenCalledWith({
@@ -1241,7 +814,7 @@ describe('TripCreateWizard done screen', () => {
       });
       const user = userEvent.setup();
       renderWizard();
-      await finish(user);
+      await reachInvite(user);
       // Every lazy import the effect may have started has landed by now.
       await act(async () => {
         await vi.dynamicImportSettled();
@@ -1249,13 +822,15 @@ describe('TripCreateWizard done screen', () => {
 
       expect(asked).toEqual(['(prefers-reduced-motion: reduce)']);
       expect(confetti).not.toHaveBeenCalled();
+      // The announcement still happens; only the motion is skipped.
+      expect(vi.mocked(announceStatus)).toHaveBeenCalled();
     });
 
     it('celebrates where the browser cannot say', async () => {
       Reflect.deleteProperty(window, 'matchMedia');
       const user = userEvent.setup();
       renderWizard();
-      await finish(user);
+      await reachInvite(user);
 
       await waitFor(() => {
         expect(confetti).toHaveBeenCalledTimes(1);
@@ -1268,7 +843,7 @@ describe('TripCreateWizard done screen', () => {
       });
       const user = userEvent.setup();
       renderWizard();
-      await finish(user);
+      await reachInvite(user);
 
       await waitFor(() => {
         expect(confetti).toHaveBeenCalledTimes(1);
@@ -1288,7 +863,7 @@ describe('TripCreateWizard done screen', () => {
     try {
       const user = userEvent.setup();
       const { unmount } = renderWizard();
-      await finish(user);
+      await reachInvite(user);
 
       unmount();
       open();

@@ -46,12 +46,24 @@ vi.mock('@/components/shared/DateRangePicker', () => ({
   ),
 }));
 
-vi.mock('../LocationAutocomplete', () => ({
-  LocationAutocomplete: ({ id }: { id?: string }) => <input id={id} />,
+// The panel words itself and has its own French test. Here it only moves the
+// screen between the signed-out and the link states.
+vi.mock('@/features/sharing/components/ShareLinkPanel', () => ({
+  ShareLinkPanel: ({ onStateChange }: { onStateChange: (kind: string) => void }) => (
+    <div>
+      <button type="button" onClick={() => onStateChange('needs-account')}>
+        signed out
+      </button>
+      <button type="button" onClick={() => onStateChange('invite')}>
+        link ready
+      </button>
+    </div>
+  ),
 }));
 
-vi.mock('@/features/sharing/components/ShareDialog', () => ({
-  ShareDialog: () => null,
+vi.mock('@/features/sharing/utils/pending-invite', () => ({
+  rememberPendingInvite: vi.fn(),
+  forgetPendingInvite: vi.fn(),
 }));
 
 vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
@@ -94,7 +106,7 @@ describe('TripCreateWizard in French', () => {
   it('words the name and dates questions from the catalogue', async () => {
     const user = await renderInFrench();
 
-    expect(screen.getByRole('list', { name: 'Étape 1 sur 5' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Étape 1 sur 3' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: "Comment s'appelle le séjour ?" })).toBeInTheDocument();
     expect(
       screen.getByText("La maison, la ville, l'occasion : le nom que le groupe lui donne."),
@@ -115,58 +127,16 @@ describe('TripCreateWizard in French', () => {
         'Premier et dernier jour. Les invités peuvent arriver et partir entre les deux.',
       ),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Suivant' }));
+    await user.click(screen.getByRole('button', { name: 'Créer le séjour' }));
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Choisissez le premier et le dernier jour pour continuer.',
     );
-
-    await user.click(screen.getByRole('button', { name: 'Dates du séjour' }));
-    await user.click(screen.getByRole('button', { name: 'Suivant' }));
-    expect(screen.getByRole('heading', { name: 'Où est la maison ?' })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Une ville ou une adresse. Choisissez un séjour précédent pour reprendre ses chambres.',
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Lieu')).toBeInTheDocument();
   });
 
-  it('words the guests, the rooms and the done screen from the catalogue', async () => {
+  it('words the invite screen from the catalogue', async () => {
     const user = await renderInFrench();
     await user.type(screen.getByLabelText('Nom du séjour'), 'Lac{Enter}');
     await user.click(screen.getByRole('button', { name: 'Dates du séjour' }));
-    await user.click(screen.getByRole('button', { name: 'Suivant' }));
-    await user.click(screen.getByRole('button', { name: "Passer pour l'instant" }));
-
-    expect(screen.getByRole('heading', { name: 'Qui vient ?' })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Un prénom à la fois, Entrée après chacun. Vous pourrez en ajouter plus tard.',
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Qui vient ?' })).toBeInTheDocument();
-    expect(screen.getByText('Vous')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retirer Tom' })).toBeInTheDocument();
-    expect(screen.getByLabelText("Nom de l'invité")).toHaveAttribute('placeholder', 'Un prénom');
-    expect(screen.getByRole('button', { name: 'Ajouter' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: "Passer pour l'instant" }));
-    expect(screen.getByRole('heading', { name: 'Quelles sont les chambres ?' })).toBeInTheDocument();
-    expect(
-      screen.getByText("Nom et nombre de lits. Passez et ajoutez les chambres au fil de l'eau."),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText('Nom de la chambre')).toHaveAttribute(
-      'placeholder',
-      'Chambre parentale',
-    );
-    expect(screen.getByLabelText('Lits')).toBeInTheDocument();
-    await user.type(screen.getByLabelText('Nom de la chambre'), 'Grenier{Enter}');
-    expect(screen.getByRole('list', { name: 'Quelles sont les chambres ?' })).toHaveTextContent(
-      'Grenier · 2 lits',
-    );
-    expect(screen.getByRole('button', { name: 'Retirer Grenier' })).toBeInTheDocument();
-    // The visible Add button and the hidden one that gives Enter a submit.
-    expect(screen.getAllByText('Ajouter')).toHaveLength(2);
 
     let settle: (value: never) => void = () => {};
     mockedCreate.mockImplementation(
@@ -181,15 +151,21 @@ describe('TripCreateWizard in French', () => {
       settle(OUTCOME);
     });
 
-    expect(await screen.findByRole('heading', { name: 'Lac est prêt' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Lac est prêt : invitez le groupe' }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Partagez le lien et les autres verront qui dort où et qui arrive quand.',
+        "Envoyez ce lien. Chacun ajoute son prénom et son jour d'arrivée, et les chambres se remplissent à partir de là.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ouvrir le calendrier' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Partager le séjour' })).toBeInTheDocument();
     expect(vi.mocked(announceStatus)).toHaveBeenCalledWith('Séjour Lac créé');
+
+    await user.click(screen.getByRole('button', { name: 'signed out' }));
+    expect(screen.getByRole('button', { name: 'Plus tard, ouvrir le séjour' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'link ready' }));
+    expect(screen.getByRole('button', { name: 'Ouvrir le calendrier' })).toBeInTheDocument();
   });
 
   it('says in French that the trip could not be created', async () => {
@@ -198,9 +174,6 @@ describe('TripCreateWizard in French', () => {
     const user = await renderInFrench();
     await user.type(screen.getByLabelText('Nom du séjour'), 'Lac{Enter}');
     await user.click(screen.getByRole('button', { name: 'Dates du séjour' }));
-    await user.click(screen.getByRole('button', { name: 'Suivant' }));
-    await user.click(screen.getByRole('button', { name: "Passer pour l'instant" }));
-    await user.click(screen.getByRole('button', { name: "Passer pour l'instant" }));
     await user.click(screen.getByRole('button', { name: 'Créer le séjour' }));
 
     await waitFor(() => {

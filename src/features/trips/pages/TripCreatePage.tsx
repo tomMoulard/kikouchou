@@ -103,7 +103,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   /**
    * Latched the moment the wizard starts writing: the trip list grows with the
    * first write, which would otherwise swap the wizard for the form between
-   * the last question and the done screen.
+   * the last question and the invite screen.
    */
   const [wizardBusy, setWizardBusy] = useState(false);
   const showWizard = isFirstTrip || wizardBusy;
@@ -296,7 +296,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       skipNextBlock();
 
       // The trip is made and celebrated by this point, so a failure to select it
-      // must not strand the reader on the done screen with no way on and nothing
+      // must not strand the reader on the invite screen with no way on and nothing
       // said. Reported, then navigated anyway: the calendar selects the trip
       // from the route.
       try {

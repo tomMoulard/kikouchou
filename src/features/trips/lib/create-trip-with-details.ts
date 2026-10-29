@@ -44,7 +44,7 @@ export interface TripDraft {
    *
    * The form does, then navigates. The wizard must not: selecting a trip
    * remounts the route element (`YjsTripSync` swaps it on the no-trip → trip
-   * transition), which would throw the wizard away before its done screen.
+   * transition), which would throw the wizard away before its invite screen.
    * It selects the trip when the user opens it instead. Defaults to true.
    */
   readonly selectAsCurrent?: boolean;
