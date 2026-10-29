@@ -17,6 +17,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { JoinTripPage } from '../JoinTripPage';
 import { useJoinTrip } from '../../hooks/useJoinTrip';
@@ -24,6 +25,7 @@ import { db } from '@/lib/db/database';
 import { useTripContext } from '@/contexts/TripContext';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { fetchClaimedParticipants } from '@/lib/sync/join-trip';
+import { captureEvent } from '@/lib/posthog';
 import type { SyncState } from '@/lib/sync/SupabaseYjsProvider';
 import { isRunningStandalone } from '@/lib/pwa/display-mode';
 import { useHereManifest } from '@/lib/pwa/use-here-manifest';
@@ -70,6 +72,11 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('../../hooks/useJoinTrip', () => ({ useJoinTrip: vi.fn() }));
+
+vi.mock('@/lib/posthog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/posthog')>()),
+  captureEvent: vi.fn(),
+}));
 
 // The install request the nudge raises, and the manifest swap it relies on.
 const installState = {
@@ -135,6 +142,15 @@ const mockedUseSyncStatus = vi.mocked(useSyncStatus);
 const mockedFetchClaimed = vi.mocked(fetchClaimedParticipants);
 const mockedUseTripContext = vi.mocked(useTripContext);
 const mockedStandalone = vi.mocked(isRunningStandalone);
+const mockedCaptureEvent = vi.mocked(captureEvent);
+
+/** The key a viewer's arrival day waits under until they sign in. */
+const PENDING_KEY = `kikouchou-pending-arrival:trip-local-1`;
+
+/** Finds a captured event by name, not by position. */
+function capturedWith(event: string): unknown {
+  return mockedCaptureEvent.mock.calls.find(([name]) => name === event)?.[1];
+}
 
 const TRIP_ID = 'trip-local-1' as TripId;
 /** A trip the invitee already had open before following the invite link. */
@@ -394,7 +410,7 @@ describe('JoinTripPage for a viewer', () => {
     expect(screen.queryByText(/welcome to kikouchou/i)).not.toBeInTheDocument();
   });
 
-  it('remembers the pick on this device and opens the calendar', async () => {
+  it('remembers the pick on this device and asks when they arrive', async () => {
     await seedPersons(TRIP_ID, ['Alice', 'Bob']);
     render(<JoinTripPage />);
     await waitFor(() => {
@@ -409,7 +425,76 @@ describe('JoinTripPage for a viewer', () => {
       personId: 'person-alice',
       tripId: TRIP_ID,
     });
+    expect(await screen.findByText('When do you arrive, Alice?')).toBeInTheDocument();
+    // One button per night of the trip: the 15th to the 21st, the 22nd is the
+    // day everybody leaves.
+    expect(
+      screen.getByRole('button', { name: 'Wednesday, July 15th, 2026' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tuesday, July 21st, 2026' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Wednesday, July 22nd, 2026' }),
+    ).not.toBeInTheDocument();
+    // Picking a name is no longer the moment the page leaves.
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the day on the device and asks for a sign-in to save it', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: /alice/i }));
+
+    await user.click(await screen.findByRole('button', { name: 'Friday, July 17th, 2026' }));
+
+    // A viewer trip takes no write: the guest row is as the organiser left it,
+    // and the answer waits for the sign-in.
+    expect(JSON.parse(localStorage.getItem(PENDING_KEY) ?? '{}')).toEqual({
+      personId: 'person-alice',
+      date: '2026-07-17',
+    });
+    expect((await db.persons.get('person-alice' as PersonId))?.stayStartDate).toBeUndefined();
+    expect(capturedWith('guest_arrival_answered')).toEqual({ scope: 'device', answer: 'date' });
+    expect(screen.getByTestId('guest-arrival-sign-in')).toHaveTextContent(
+      'You arrive on Friday, July 17th, 2026.',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Save my arrival' }));
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'Sign in to save your arrival day.',
+    );
+    expect(mockedCaptureEvent).toHaveBeenCalledWith('viewer_sign_in_clicked');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('opens the trip on "not now", and keeps the day for a later sign-in', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: /alice/i }));
+    await user.click(await screen.findByRole('button', { name: 'Friday, July 17th, 2026' }));
+
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+
     expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+    expect(localStorage.getItem(PENDING_KEY)).not.toBeNull();
+  });
+
+  it('opens the trip when the guest has not decided yet', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: /alice/i }));
+
+    await user.click(await screen.findByRole('button', { name: 'Not decided yet' }));
+
+    expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+    expect(localStorage.getItem(PENDING_KEY)).toBeNull();
+    expect(capturedWith('guest_arrival_answered')).toEqual({
+      scope: 'device',
+      answer: 'unknown',
+    });
   });
 
   it('lets somebody not on the list in anyway', async () => {
@@ -503,5 +588,103 @@ describe('JoinTripPage for a viewer', () => {
       expect(screen.queryByTestId('install-here-hint')).not.toBeInTheDocument();
       expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
     });
+  });
+});
+
+// ============================================================================
+// "When do you arrive?" for a member
+// ============================================================================
+
+describe('JoinTripPage asking a member when they arrive', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockedUseTripContext.mockReturnValue({
+      setCurrentTrip: vi.fn(),
+      trips: [
+        {
+          id: TRIP_ID,
+          name: 'Brittany',
+          shareId: 'share-abc1',
+          startDate: '2026-07-15',
+          endDate: '2026-07-22',
+          remoteTripId: 'remote-1',
+        },
+      ],
+    } as never);
+  });
+
+  it('saves the day on the guest, then offers the journey', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+
+    await user.click(await screen.findByRole('button', { name: /alice/i }));
+    expect(await screen.findByText('When do you arrive, Alice?')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Thursday, July 16th, 2026' }));
+
+    // A member trip takes the write at once: it is the guest's own stay date,
+    // the field the calendar and the presence maths already read.
+    await waitFor(async () => {
+      expect((await db.persons.get('person-alice' as PersonId))?.stayStartDate).toBe(
+        '2026-07-16',
+      );
+    });
+    expect(await screen.findByTestId('guest-arrival-saved')).toHaveTextContent(
+      'Noted: you arrive on Thursday, July 16th, 2026.',
+    );
+    expect(capturedWith('guest_arrival_saved')).toEqual({ via: 'join' });
+
+    await user.click(screen.getByRole('button', { name: 'Add my journey' }));
+    expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/transports?new=1`);
+  });
+
+  it('opens the calendar when the journey can wait', async () => {
+    const user = userEvent.setup();
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: /alice/i }));
+    await user.click(await screen.findByRole('button', { name: 'Thursday, July 16th, 2026' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Later' }));
+
+    expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+  });
+
+  it('shows the day the organiser already gave as the one pressed', async () => {
+    const user = userEvent.setup();
+    await db.persons.add({
+      id: 'person-alice' as PersonId,
+      tripId: TRIP_ID,
+      name: 'Alice',
+      color: '#ff0000' as Person['color'],
+      stayStartDate: '2026-07-18' as Person['stayStartDate'],
+      stayEndDate: '2026-07-20' as Person['stayEndDate'],
+    });
+    render(<JoinTripPage />);
+    await user.click(await screen.findByRole('button', { name: /alice/i }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Saturday, July 18th, 2026' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    // Nobody arrives on or after the day they leave.
+    expect(
+      screen.queryByRole('button', { name: 'Monday, July 20th, 2026' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('claims and saves at once for a guest who answered before signing in', async () => {
+    await seedPersons(TRIP_ID, ['Alice', 'Bob']);
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ personId: 'person-bob', date: '2026-07-19' }),
+    );
+
+    render(<JoinTripPage />);
+
+    // Bob already said who he is and when he comes, so neither is asked again.
+    expect(await screen.findByTestId('guest-arrival-saved')).toBeInTheDocument();
+    expect((await db.persons.get('person-bob' as PersonId))?.stayStartDate).toBe('2026-07-19');
+    expect(localStorage.getItem(PENDING_KEY)).toBeNull();
+    expect(capturedWith('guest_arrival_saved')).toEqual({ via: 'after_sign_in' });
   });
 });

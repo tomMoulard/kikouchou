@@ -583,6 +583,14 @@ The exit is `upgradeViewerTrip`: redeem the token, clear `viewerToken`, and the
 provider mounts on the same document. Its first reconcile finds nothing to send
 because the viewer path recorded the server's state vector after every read.
 
+The invite page asks "When do you arrive?" after a name is picked. A member's
+answer is written at once as the guest's `stayStartDate`. A viewer's answer
+cannot be, so it waits in `localStorage['kikouchou-pending-arrival:<tripId>']`
+(`lib/sharing/pending-arrival`). `usePendingArrival`, in `Layout`, writes it
+once the trip has no `viewerToken` and sync says `synced`. Do not write it
+earlier, for example inside `upgradeViewerTrip`: the server's projection then
+puts the document's value back over it.
+
 ### A reminder is sent once, and says nothing a stranger could use
 
 Trip reminders go out from `server/share-preview` (`push_sender.rs`) to the

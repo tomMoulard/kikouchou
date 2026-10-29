@@ -53,6 +53,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { useActivePalette } from '@/hooks/useActivePalette';
 import { useToday } from '@/hooks/useToday';
 import { useMobileNavPreferences } from '@/hooks/useMobileNavPreferences';
+import { usePendingArrival } from '@/hooks/usePendingArrival';
 import { OPENED_FROM_NAV, useSampleTripViewReport } from '@/hooks/useSampleTripViewReport';
 import {
   useCompactNavViewport,
@@ -1200,6 +1201,10 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   // Here because every page renders inside this layout, so one hook sees
   // every page of the sample a user opens.
   useSampleTripViewReport();
+
+  // Same reason: a guest who answered "when do you arrive" signed out lands
+  // on whichever page signing in returns to, and the answer is saved there.
+  usePendingArrival();
 
   /*
     The bottom stack in `src/index.css` counts the bar's 4rem under every FAB,
