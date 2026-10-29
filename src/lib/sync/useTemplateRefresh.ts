@@ -32,6 +32,7 @@ import {
   buildTemplatePayload,
   refreshTemplatePayload,
   type TripTemplatePayload,
+  uploadTemplatePhotos,
 } from '@/lib/sync/templates';
 import type { TripId } from '@/types';
 
@@ -136,6 +137,12 @@ export function useTemplateRefresh({
           // Left unsettled, so the next edit or the next reconnect sends it again.
           console.error('Failed to refresh the trip template:', result.message);
           return;
+        }
+        if (result.status === 'refreshed') {
+          // A new or replaced photo goes to the template's prefix too. A copy
+          // that fails is tried again with the next edit; the link works
+          // without it in the meantime.
+          await uploadTemplatePhotos(client, { id: tripId, remoteTripId }, payload);
         }
         // `not-published` settles too: there is nothing to refresh, and asking
         // again with the same payload would get the same answer.

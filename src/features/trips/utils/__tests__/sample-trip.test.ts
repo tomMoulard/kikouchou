@@ -96,6 +96,11 @@ describe('buildSampleTrip', () => {
 
     it('fills every trip-scoped table', () => {
       const filled = new Set<string>(tablesOf(rows).map(({ table }) => table));
+      // Photos have no form schema, so they are counted here rather than
+      // listed in `tablesOf`.
+      if (rows.photos.length > 0) {
+        filled.add('photos');
+      }
       const missing = db.tables
         .map((table) => table.name)
         .filter((name) => !(name in TABLES_WITHOUT_SAMPLE_ROWS) && !filled.has(name));

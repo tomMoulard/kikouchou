@@ -66,7 +66,9 @@ function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
     a.viewerToken === b.viewerToken &&
     // Whether the trip has been put away. A member archiving it elsewhere has
     // to move the card into the archived section here, which needs a re-render.
-    a.archived === b.archived
+    a.archived === b.archived &&
+    // The cover photo. A member replacing it elsewhere must change the card.
+    a.photoId === b.photoId
   );
 }
 

@@ -1095,7 +1095,9 @@ export type AnalyticsEvent =
   | 'viewer_sign_in_clicked'
   // Creating a trip
   | 'trip_wizard_started'
-  | 'trip_wizard_step';
+  | 'trip_wizard_step'
+  // Cover photos of trips and rooms: `subject` and `removed`, never the image
+  | 'photo_saved';
 
 /** One captured event, as {@link readCapturedEvents} hands it back. */
 export interface CapturedEvent {

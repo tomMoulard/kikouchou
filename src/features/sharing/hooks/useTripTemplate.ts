@@ -17,7 +17,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { readTripTemplate, type TripTemplatePayload } from '@/lib/sync/templates';
+import { downloadPhoto, templatePhotoPath } from '@/lib/photos/storage';
+import type { TypedSupabaseClient } from '@/lib/supabase/client';
+import {
+  readTripTemplate,
+  templatePhotoIds,
+  type TripTemplatePayload,
+} from '@/lib/sync/templates';
+import type { PhotoId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -25,8 +32,16 @@ import { readTripTemplate, type TripTemplatePayload } from '@/lib/sync/templates
 
 export type TemplatePhase =
   | { readonly kind: 'loading' }
-  /** The template is readable, and the wizard can be filled from it. */
-  | { readonly kind: 'ready'; readonly template: TripTemplatePayload }
+  /**
+   * The template is readable, and the wizard can be filled from it. `photos`
+   * holds the template's photos that could be downloaded, by id; one that
+   * could not is simply absent, and the trip is made without it.
+   */
+  | {
+      readonly kind: 'ready';
+      readonly template: TripTemplatePayload;
+      readonly photos: ReadonlyMap<PhotoId, Blob>;
+    }
   /** Unknown token, deleted trip, or a template taken down. One sentence covers all three. */
   | { readonly kind: 'not-found' }
   /** A build with no backend configured: there is nothing to ask. */
@@ -50,6 +65,40 @@ export interface UseTripTemplateResult {
  * accepts. A path that is not one of these never becomes a request.
  */
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Downloads every photo a template names, side by side. The link is the
+ * credential: the bucket serves `templates/<token>/` to anybody holding it.
+ *
+ * @param client - Any client, signed in or not
+ * @param token - The template token
+ * @param template - The payload just read
+ * @returns The photos that came back, by id
+ */
+async function downloadTemplatePhotos(
+  client: TypedSupabaseClient,
+  token: string,
+  template: TripTemplatePayload,
+): Promise<ReadonlyMap<PhotoId, Blob>> {
+  const ids = templatePhotoIds(template);
+  const blobs = await Promise.all(
+    ids.map((photoId) =>
+      downloadPhoto(client, templatePhotoPath(token, photoId)).catch(() => null),
+    ),
+  );
+  const photos = new Map<PhotoId, Blob>();
+  ids.forEach((photoId, index) => {
+    const blob = blobs[index];
+    if (blob) {
+      photos.set(photoId, blob);
+    }
+  });
+  return photos;
+}
 
 // ============================================================================
 // Hook
@@ -102,9 +151,13 @@ export function useTripTemplate(token: string | null): UseTripTemplateResult {
         return;
       }
       switch (result.status) {
-        case 'ok':
-          setPhase({ kind: 'ready', template: result.template });
+        case 'ok': {
+          const photos = await downloadTemplatePhotos(client, token, result.template);
+          if (isMountedRef.current) {
+            setPhase({ kind: 'ready', template: result.template, photos });
+          }
           return;
+        }
         case 'not-found':
           setPhase({ kind: 'not-found' });
           return;

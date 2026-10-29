@@ -17,10 +17,12 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTestRoom, createTestTrip, waitForDb } from '@/test/utils';
+import { db } from '@/lib/db/database';
 import { updateTrip } from '@/lib/db/repositories/trip-repository';
+import { uploadTemplatePhotos } from '@/lib/sync/templates';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
-import type { TripId } from '@/types';
+import type { PhotoId, TripId } from '@/types';
 
 import { useTemplateRefresh } from '../useTemplateRefresh';
 
@@ -29,6 +31,10 @@ import { useTemplateRefresh } from '../useTemplateRefresh';
 // ============================================================================
 
 vi.mock('@/lib/supabase/client', () => ({ getSupabaseClient: vi.fn() }));
+vi.mock('@/lib/sync/templates', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/sync/templates')>()),
+  uploadTemplatePhotos: vi.fn(async () => 0),
+}));
 
 interface Update {
   readonly table: string;
@@ -110,6 +116,38 @@ describe('useTemplateRefresh', () => {
       description: 'Check-in after 4pm.',
       rooms: [{ name: 'Attic', capacity: 4 }],
     });
+  });
+
+  it('copies the photos to the template after a refresh that carried a new one', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    mount();
+    await waitForDb();
+    await db.trips.update(tripId, { photoId: 'coverPhoto0001' as PhotoId });
+
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]?.row).toMatchObject({ photo_id: 'coverPhoto0001' });
+    await waitFor(() => {
+      expect(uploadTemplatePhotos).toHaveBeenCalledWith(
+        client,
+        { id: tripId, remoteTripId: 'remote-1' },
+        expect.objectContaining({ photoId: 'coverPhoto0001' }),
+      );
+    });
+  });
+
+  it('copies no photo when the template was not published', async () => {
+    const { client, updates } = stubClient(() => ({ data: [], error: null }));
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    mount();
+    await waitForDb();
+    await db.trips.update(tripId, { photoId: 'coverPhoto0001' as PhotoId });
+
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(uploadTemplatePhotos).not.toHaveBeenCalled();
   });
 
   it('writes nothing for what it found on mount', async () => {

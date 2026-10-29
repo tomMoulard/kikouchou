@@ -74,6 +74,8 @@ vi.mock('@/lib/sync/templates', async () => {
     buildTemplateCardUrl: actual.buildTemplateCardUrl,
     // Real too, so the payload assertions below read what the trip says.
     buildTemplatePayload: actual.buildTemplatePayload,
+    templatePhotoIds: actual.templatePhotoIds,
+    uploadTemplatePhotos: vi.fn(async () => 0),
     readTemplateState: vi.fn(),
     publishTemplate: vi.fn(),
     unpublishTemplate: vi.fn(),
@@ -288,6 +290,7 @@ describe('useTripTemplateLink', () => {
         location: 'Chamonix',
         coordinates: null,
         currency: 'EUR',
+        photoId: null,
         rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' }],
       },
       null,

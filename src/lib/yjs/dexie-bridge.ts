@@ -15,6 +15,7 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
+import { toPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
   MAX_LENGTHS,
   isCalendarDayString,
@@ -274,6 +275,15 @@ function buildTripRecord(
       lat: (coordinates as { lat: number }).lat,
       lon: (coordinates as { lon: number }).lon,
     };
+  }
+
+  // A photo id from a peer ends up in a Storage path and in the key of the
+  // photo cache, so only a value shaped like an id is kept. The cache key is
+  // `[tripId+photoId]` with the local trip id, so even a valid id cannot
+  // reach another trip's photo.
+  const photoId = toPhotoId(meta.get('photoId'));
+  if (photoId !== undefined) {
+    trip.photoId = photoId;
   }
 
   return trip;
@@ -543,6 +553,14 @@ function buildRoomRecord(room: SharedRecord, tripId: TripId): Room | undefined {
 
   if (row.icon !== undefined && !(ROOM_ICONS as readonly unknown[]).includes(row.icon)) {
     delete row.icon;
+  }
+
+  // Same rule as the trip's photo: only an id-shaped value survives.
+  const photoId = toPhotoId(row.photoId);
+  if (photoId === undefined) {
+    delete row.photoId;
+  } else {
+    row.photoId = photoId;
   }
 
   return row;
@@ -1169,6 +1187,7 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     // device claiming, on every document it populates, that the trip is not
     // put away — which is an edit that could undo another member's archive.
     if (trip.archived === true) meta.set('archived', true);
+    if (trip.photoId !== undefined) meta.set('photoId', trip.photoId);
 
     stampDocSchemaVersion(doc);
 

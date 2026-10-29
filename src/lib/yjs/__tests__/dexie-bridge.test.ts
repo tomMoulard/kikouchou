@@ -436,6 +436,17 @@ describe('buildTripRecord — remote field validation', () => {
     );
   });
 
+  it('keeps a cover photo id a peer sent, and drops one not shaped like an id', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ photoId: 'coverPhoto0001' }), trip.id);
+    expect((await db.trips.get(trip.id))?.photoId).toBe('coverPhoto0001');
+
+    // It ends up in a Storage path: `../` would name another trip's object.
+    await syncDocToDexie(makeDoc({ photoId: '../other-trip/photo' }), trip.id);
+    expect((await db.trips.get(trip.id))?.photoId).toBeUndefined();
+  });
+
   it('bounds a location a peer never bounded', async () => {
     const trip = await makeTrip();
 

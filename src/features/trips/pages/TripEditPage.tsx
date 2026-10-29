@@ -35,6 +35,7 @@ import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentity
 import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
 import { TripTemplateCard } from '@/features/sharing/components/TripTemplateCard';
 import { TripDescriptionCard } from '@/features/trips/components/TripDescriptionCard';
+import { TripPhotoCard } from '@/features/trips/components/TripPhotoCard';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import { ShareDialog } from '@/features/sharing';
@@ -587,6 +588,9 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
           onSave={handleDescriptionSave}
           onDirtyChange={setIsDescriptionDirty}
         />
+
+        {/* The cover photo, saved the moment it is picked. */}
+        <TripPhotoCard trip={trip} canEdit={canEdit} />
 
         {/* Which guest this browser is — under the trip it belongs to, because
             the answer is per trip and means nothing without one. */}

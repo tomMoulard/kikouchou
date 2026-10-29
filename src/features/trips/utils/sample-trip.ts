@@ -28,7 +28,10 @@
 import { addDays } from 'date-fns';
 
 import { toAllDayActivityInstant } from '@/features/activities/utils/activity-utils';
+import { SAMPLE_PHOTOS, samplePhotoBlob } from '@/features/trips/utils/sample-trip-photos';
 
+import type { PhotoRow } from '@/lib/db/database';
+import { createPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
   createActivityId,
   createExpenseId,
@@ -75,6 +78,8 @@ export interface SampleTripRows {
   readonly transports: readonly Transport[];
   readonly activities: readonly Activity[];
   readonly expenses: readonly Expense[];
+  /** The bytes of the photos the trip and its rooms name. */
+  readonly photos: readonly PhotoRow[];
 }
 
 /** The words of the sample trip, in one language. */
@@ -421,6 +426,13 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
   const key = (index: number): ISODateString => toLocalISODateString(day(index));
   const lastDay = SAMPLE_TRIP_NIGHTS;
 
+  // ---- Photos -------------------------------------------------------------
+  const photoIds = {
+    house: createPhotoId(),
+    master: createPhotoId(),
+    tent: createPhotoId(),
+  } as const;
+
   // ---- Trip ---------------------------------------------------------------
   const trip: Trip = {
     id: createTripId(),
@@ -432,10 +444,22 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     startDate: key(0),
     endDate: key(lastDay),
     currency: 'EUR',
+    photoId: photoIds.house,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
   const tripId = trip.id;
+
+  // Never pending: the sample is never uploaded.
+  const photos: PhotoRow[] = (Object.keys(photoIds) as (keyof typeof photoIds)[]).map(
+    (subject) => ({
+      tripId,
+      id: photoIds[subject],
+      blob: samplePhotoBlob(SAMPLE_PHOTOS[subject]),
+      pending: 0,
+      createdAt: timestamp,
+    }),
+  );
 
   // ---- Guests -------------------------------------------------------------
   const ids = {
@@ -520,11 +544,11 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
   } as const;
 
   const rooms: Room[] = [
-    { id: roomIds.master, tripId, order: 0, capacity: 2, icon: 'bed-double', ...copy.rooms.master },
+    { id: roomIds.master, tripId, order: 0, capacity: 2, icon: 'bed-double', photoId: photoIds.master, ...copy.rooms.master },
     { id: roomIds.twin, tripId, order: 1, capacity: 2, icon: 'bed-twin', ...copy.rooms.twin },
     { id: roomIds.bunk, tripId, order: 2, capacity: 3, icon: 'bunk-bed', ...copy.rooms.bunk },
     { id: roomIds.sofa, tripId, order: 3, capacity: 2, icon: 'sofa', ...copy.rooms.sofa },
-    { id: roomIds.tent, tripId, order: 4, capacity: 2, icon: 'tent', ...copy.rooms.tent },
+    { id: roomIds.tent, tripId, order: 4, capacity: 2, icon: 'tent', photoId: photoIds.tent, ...copy.rooms.tent },
   ];
 
   // ---- Room assignments: endDate is the check-out day ---------------------
@@ -1030,5 +1054,6 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     transports,
     activities,
     expenses,
+    photos,
   };
 }

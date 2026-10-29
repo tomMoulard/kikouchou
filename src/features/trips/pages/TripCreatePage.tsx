@@ -133,6 +133,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const importSourceRef = useRef<TripId | null>(null);
   const guestsRef = useRef<readonly NewTripGuest[]>([]);
   const roomsRef = useRef<readonly NewTripRoom[]>([]);
+  const photoRef = useRef<Blob | null>(null);
 
   // ============================================================================
   // Guest Group Selection
@@ -207,6 +208,11 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
     roomsRef.current = rooms;
   }, []);
 
+  /** The cover photo the form holds, prepared already. Not a trip field either. */
+  const handlePhotoChange = useCallback((photo: Blob | null) => {
+    photoRef.current = photo;
+  }, []);
+
   // ============================================================================
   // Submission Handler
   // ============================================================================
@@ -225,6 +231,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         form: data,
         guests: guestsRef.current,
         rooms: roomsRef.current,
+        ...(photoRef.current ? { photo: photoRef.current } : {}),
         importSourceTripId: importSourceRef.current,
       });
 
@@ -234,6 +241,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         'rooms-import': t('trips.importRoomsFailed', 'Trip created but room import failed'),
         guests: t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'),
         rooms: t('trips.roomsCreateFailed', 'Trip created but some rooms could not be added'),
+        photos: t('photos.saveFailedOnCreate', 'Trip created but a photo could not be saved'),
         // Same message the settings picker shows, because it is the same failure.
         identity: t(
           'sharing.identityStorageFailed',
@@ -377,6 +385,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
             currentUserName={currentUserName}
             onGuestsChange={handleGuestsChange}
             onRoomsChange={handleRoomsChange}
+            onPhotoChange={handlePhotoChange}
           >
             {/*
               One button, and no queue beside it: whatever the picker returns

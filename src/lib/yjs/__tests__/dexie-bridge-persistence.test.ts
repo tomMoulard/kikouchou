@@ -26,7 +26,7 @@ import {
 } from '@/lib/yjs/dexie-bridge';
 import { DOC_SCHEMA_VERSION, readDocCollection, upsertDocEntity } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
-import type { TripId } from '@/types';
+import type { PhotoId, TripId } from '@/types';
 
 // ============================================================================
 // Mocks
@@ -282,6 +282,7 @@ describe('populateDocFromDexie', () => {
       currency: 'EUR',
       description: 'By the sea',
       archived: true,
+      photoId: 'coverPhoto0001' as PhotoId,
     });
     const doc = new Y.Doc();
 
@@ -291,6 +292,7 @@ describe('populateDocFromDexie', () => {
     expect(meta.get('currency')).toBe('EUR');
     expect(meta.get('description')).toBe('By the sea');
     expect(meta.get('archived')).toBe(true);
+    expect(meta.get('photoId')).toBe('coverPhoto0001');
   });
 
   it('claims nothing about a trip that is not archived', async () => {

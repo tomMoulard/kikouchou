@@ -2185,5 +2185,25 @@
       "boots": "Bottes de pluie",
       "socks": "Chaussettes"
     }
+  },
+  "photos": {
+    "add": "Ajouter une photo",
+    "change": "Changer la photo",
+    "remove": "Retirer la photo",
+    "preparing": "Préparation de la photo",
+    "tripLabel": "Photo de couverture",
+    "tripFieldLabel": "Photo affichée sur la carte du voyage",
+    "roomLabel": "Photo",
+    "tripAlt": "Photo de {{name}}",
+    "roomAlt": "Photo de la chambre {{name}}",
+    "saved": "Photo enregistrée",
+    "removed": "Photo retirée",
+    "saveFailed": "La photo n'a pas pu être enregistrée",
+    "saveFailedOnCreate": "Voyage créé, mais une photo n'a pas pu être enregistrée",
+    "errors": {
+      "notAnImage": "Ce fichier n'est pas une image.",
+      "tooLarge": "Cette photo est trop lourde, même réduite.",
+      "decodeFailed": "Cette photo n'a pas pu être lue. Essayez-en une autre."
+    }
   }
 }

@@ -79,6 +79,8 @@ export interface TripCreateWizardPrefill {
   readonly location: string | null;
   readonly coordinates: TripFormData['coordinates'];
   readonly currency: CurrencyCode | null;
+  /** The template's cover photo, already downloaded. */
+  readonly photo?: Blob | undefined;
   readonly rooms: readonly NewTripRoom[];
 }
 
@@ -267,6 +269,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         },
         guests,
         rooms: [...(prefill?.rooms ?? [])],
+        ...(prefill?.photo === undefined ? {} : { photo: prefill.photo }),
         importSourceTripId: null,
         // The page selects the trip when the user opens it; selecting it here
         // would remount the route and lose the invite screen.

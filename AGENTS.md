@@ -728,6 +728,34 @@ to the calendar while `installIntent` is set, or the Home Screen app opens on
 the wrong page. `installIntent` is also true *inside* the installed app when
 its start URL carried `?install=1`; guard with `!isInstalled`.
 
+### A photo is an id in the document and bytes in Storage
+
+A trip and each room carry one optional `photoId`. Only the id travels in the
+Yjs document. The bytes go to the private `trip-photos` bucket and to the
+device's `photos` table (`lib/photos`, migration `20261029090000_trip_photos`).
+A photo in the document would be replayed by every member on every start.
+
+- **The cache key is `[tripId+photoId]`, with the local trip id.** A photo id
+  from the document is remote input, so it is never a key on its own, and
+  `toPhotoId` drops anything not shaped like an id before it reaches a path.
+- **An object is written once and never changed or deleted by a client.** A
+  replaced photo is a new id. Replaced photos and the photos of a deleted trip
+  stay in the bucket as orphans that nobody can read.
+- **Members only.** `trips/<remoteTripId>/` is readable and writable by the
+  trip's members. A viewer with an invite link and no account sees no photo.
+  A photo added to a local-only trip waits as `pending` until the trip is
+  uploaded; `PhotoUploadSync` sends it.
+- **A template carries copies.** `templates/<template_token>/` holds the
+  photos a published payload names, read with the link through
+  `private.is_published_template_photo` (the one `private` function `anon`
+  may execute). Unpublishing hides them with the rest of the template.
+- **Every photo is resized before it is stored** (`preparePhoto`: 1600 px,
+  WebP or JPEG, under the bucket's 2 MiB cap), which also drops the EXIF GPS.
+- **The sample trip's photos are SVG drawings.** The bucket refuses SVG, and
+  the upload sweep skips it, so they never leave the device.
+- **The assistant reads that a photo exists and cannot set one.** No action
+  carries an image.
+
 ### A global entity syncs per account, not through the trip document
 
 The Yjs document is per trip, so nothing that outlives a trip can travel in it.

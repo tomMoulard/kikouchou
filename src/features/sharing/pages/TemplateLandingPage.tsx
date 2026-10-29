@@ -106,18 +106,27 @@ export function TemplateLandingPage(): ReactElement {
     if (phase.kind !== 'ready') {
       return undefined;
     }
-    const { template } = phase;
+    const { template, photos } = phase;
+    const cover = template.photoId === null ? undefined : photos.get(template.photoId);
     return {
       name: template.name,
       description: template.description,
       location: template.location,
       coordinates: template.coordinates ?? undefined,
       currency: template.currency,
-      // `TemplateRoom` and `NewTripRoom` are the same three fields; the copy is
-      // what stops the wizard's own edits reaching into the payload.
-      rooms: template.rooms.map(
-        (room): NewTripRoom => ({ name: room.name, capacity: room.capacity, icon: room.icon }),
-      ),
+      ...(cover === undefined ? {} : { photo: cover }),
+      // The copy is what stops the wizard's own edits reaching into the
+      // payload. A room's photo arrives as its id and leaves as its bytes,
+      // which `createTripWithDetails` stores under the new trip.
+      rooms: template.rooms.map((room): NewTripRoom => {
+        const photo = room.photoId === undefined ? undefined : photos.get(room.photoId);
+        return {
+          name: room.name,
+          capacity: room.capacity,
+          icon: room.icon,
+          ...(photo === undefined ? {} : { photo }),
+        };
+      }),
     };
   }, [phase]);
 

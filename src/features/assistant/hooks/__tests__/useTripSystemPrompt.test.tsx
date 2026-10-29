@@ -524,6 +524,32 @@ describe('useTripSystemPrompt', () => {
    * ceiling, not a target: it sits a little above what the prompt costs today,
    * so the next section still has to earn its place.
    */
+  it('says which room has a photo and that the trip has a cover, and only then', async () => {
+    const { tripId } = await seedTrip();
+    await db.rooms.bulkAdd([
+      { id: 'r-photo', tripId, name: 'Red room', capacity: 2, order: 0, photoId: 'roomPhoto0001' },
+      { id: 'r-plain', tripId, name: 'Plain room', capacity: 1, order: 1 },
+    ] as never);
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('"Red room" (id: r-photo): 2 bed(s), has a photo');
+    });
+    expect(result.current.prompt.systemPrompt).toContain('"Plain room" (id: r-plain): 1 bed(s)\n');
+    expect(result.current.prompt.systemPrompt).not.toContain('Cover photo');
+
+    await act(async () => {
+      await db.trips.update(tripId, { photoId: 'coverPhoto0001' as never });
+    });
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain(
+        '- Cover photo: yes (only the app changes photos)',
+      );
+    });
+  });
+
   it('keeps the trip-independent floor within its prompt budget', async () => {
     const MAX_FLOOR_CHARS = 5600;
 

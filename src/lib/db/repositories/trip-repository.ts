@@ -399,6 +399,7 @@ export async function deleteTrip(id: TripId): Promise<void> {
       db.yjsOutbox,
       db.syncCursors,
       db.tripMembers,
+      db.photos,
     ],
     async () => {
       // Delete related records in parallel for better performance
@@ -422,6 +423,10 @@ export async function deleteTrip(id: TripId): Promise<void> {
         db.yjsOutbox.where('tripId').equals(id).delete(),
         db.syncCursors.where('tripId').equals(id).delete(),
         db.tripMembers.where('tripId').equals(id).delete(),
+        // The device's copy of the cover photos. The bytes in Storage stay:
+        // no client deletes an object, and nobody can read them once the
+        // trip is gone (see the trip_photos migration).
+        db.photos.where('tripId').equals(id).delete(),
         // The CRDT log is keyed on the trip since schema 8. It used to be keyed
         // on a WebRTC room id, so purging it needed the trip's credentials read
         // out first — and without that purge a deleted trip re-materialised in

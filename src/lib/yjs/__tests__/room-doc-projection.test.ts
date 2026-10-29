@@ -127,6 +127,15 @@ describe('rooms crossing the trust boundary', () => {
     expect((await db.rooms.get('r1'))?.icon).toBeUndefined();
   });
 
+  it('keeps a photo id, and drops one not shaped like an id', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'rooms', { ...VALID_ROOM, photoId: 'roomPhoto0001' });
+    expect((await db.rooms.get('r1'))?.photoId).toBe('roomPhoto0001');
+
+    await project(tripId, 'rooms', { ...VALID_ROOM, photoId: { path: '../x' } });
+    expect((await db.rooms.get('r1'))?.photoId).toBeUndefined();
+  });
+
   it('keeps the rest of the collection when one room is unusable', async () => {
     const tripId = await makeTrip();
     const doc = makeDoc();

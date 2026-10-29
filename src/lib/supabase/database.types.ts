@@ -308,6 +308,7 @@ export type Database = {
           location: string | null
           longitude: number | null
           name: string
+          photo_id: string | null
           rooms: Json
           trip_id: string
           updated_at: string
@@ -319,6 +320,7 @@ export type Database = {
           location?: string | null
           longitude?: number | null
           name: string
+          photo_id?: string | null
           rooms?: Json
           trip_id: string
           updated_at?: string
@@ -330,6 +332,7 @@ export type Database = {
           location?: string | null
           longitude?: number | null
           name?: string
+          photo_id?: string | null
           rooms?: Json
           trip_id?: string
           updated_at?: string

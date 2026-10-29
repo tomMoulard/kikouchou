@@ -30,8 +30,10 @@ import {
   buildTemplatePayload,
   buildTemplateUrl,
   publishTemplate,
+  templatePhotoIds,
   readTemplateState,
   unpublishTemplate,
+  uploadTemplatePhotos,
 } from '@/lib/sync/templates';
 import type { Trip } from '@/types';
 
@@ -247,8 +249,18 @@ export function useTripTemplateLink(
         captureEvent('trip_template_publish_failed', { reason: 'write' });
         return;
       }
+      // After the row, because the read rule checks the payload. A photo that
+      // could not be copied is retried by the next refresh, not reported as a
+      // failed publish: the link works without it.
+      const photosFailed = await uploadTemplatePhotos(
+        client,
+        { id: trip.id, remoteTripId: remote.remoteTripId },
+        payload,
+      );
       captureEvent('trip_template_published', {
         room_count: payload.rooms.length,
+        photo_count: templatePhotoIds(payload).length,
+        photos_failed: photosFailed,
         has_description: payload.description !== null,
         republished: existing.status === 'ok' && existing.state.isTemplate,
       });

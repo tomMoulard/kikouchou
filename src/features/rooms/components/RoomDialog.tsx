@@ -23,9 +23,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import type { PhotoChange } from '@/components/shared/PhotoField';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { RoomForm } from '@/features/rooms/components/RoomForm';
-import { captureUsage } from '@/lib/posthog';
+import { usePhotoUrl, type PhotoTrip } from '@/hooks/usePhotoUrl';
+import { setRoomPhoto } from '@/lib/db/repositories/photo-repository';
+import { notify } from '@/lib/notifications';
+import { captureEvent, captureUsage } from '@/lib/posthog';
 import type { Room, RoomFormData, RoomId } from '@/types';
 
 // ============================================================================
@@ -42,6 +46,11 @@ export interface RoomDialogProps {
   readonly open: boolean;
   /** Callback to change the open state */
   readonly onOpenChange: (open: boolean) => void;
+  /**
+   * The trip the room belongs to, which is where its photo is read and
+   * written. Without it the form shows no stored photo and saves none.
+   */
+  readonly trip?: PhotoTrip | undefined;
 }
 
 // ============================================================================
@@ -81,6 +90,7 @@ const RoomDialog = memo(function RoomDialog({
   roomId,
   open,
   onOpenChange,
+  trip,
 }: RoomDialogProps) {
   const { t } = useTranslation();
   const { rooms, createRoom, updateRoom } = useRoomContext();
@@ -134,19 +144,46 @@ const RoomDialog = memo(function RoomDialog({
   // Event Handlers
   // ============================================================================
 
+  /** The stored photo of the room being edited. */
+  const photoUrl = usePhotoUrl(trip, room?.photoId);
+
+  /**
+   * Writes the photo change the form holds, after the room itself.
+   *
+   * A failure here keeps the room and says so: the room is saved, and the
+   * photo can be picked again.
+   */
+  const saveRoomPhoto = useCallback(
+    async (id: RoomId, photo: PhotoChange): Promise<void> => {
+      if (photo === undefined || !trip) {
+        return;
+      }
+      try {
+        await setRoomPhoto(trip.id, id, photo);
+        captureEvent('photo_saved', { subject: 'room', removed: photo === null });
+      } catch (error) {
+        console.error('Failed to save the room photo:', error);
+        notify.error(t('photos.saveFailed', 'The photo could not be saved'));
+      }
+    },
+    [t, trip],
+  );
+
   /**
    * Handles form submission — creates or updates room.
    * Passes raw async function directly to RoomForm which manages
    * its own submission state via useFormSubmission hook.
    */
   const handleSubmit = useCallback(
-    async (data: RoomFormData) => {
+    async (data: RoomFormData, photo?: PhotoChange) => {
       if (isEditMode && roomId) {
         await updateRoom(roomId, data);
+        await saveRoomPhoto(roomId, photo);
         notifySuccess(t('rooms.updateSuccess', 'Room updated successfully'));
         captureUsage('room_saved', { operation: 'updated', capacity: data.capacity });
       } else {
-        await createRoom(data);
+        const created = await createRoom(data);
+        await saveRoomPhoto(created.id, photo);
         notifySuccess(t('rooms.createSuccess', 'Room created successfully'));
         captureUsage('room_saved', {
           operation: 'created',
@@ -156,7 +193,7 @@ const RoomDialog = memo(function RoomDialog({
       }
       onOpenChange(false);
     },
-    [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange, notifySuccess],
+    [isEditMode, roomId, updateRoom, createRoom, saveRoomPhoto, t, onOpenChange, notifySuccess],
   );
 
   /**
@@ -237,6 +274,7 @@ const RoomDialog = memo(function RoomDialog({
 
           <RoomForm
             room={room}
+            photoUrl={photoUrl}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             onDirtyChange={setIsDirty}
