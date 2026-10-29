@@ -1081,6 +1081,8 @@ export type AnalyticsEvent =
   | 'trip_link_opened'
   | 'trip_missing_on_device'
   | 'trip_share_blocked'
+  // The share dialog opened after a sign-in started on the wizard's invite screen
+  | 'trip_invite_resumed'
   // Trip templates: the enterprise link, and what the customer does with it
   | 'trip_template_opened'
   | 'trip_template_published'

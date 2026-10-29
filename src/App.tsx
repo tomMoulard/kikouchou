@@ -16,6 +16,7 @@ import { PaletteSync } from '@/components/shared/PaletteSync';
 import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
 import { PetMount } from '@/features/pet/components/PetMount';
+import { PendingInviteDialog } from '@/features/sharing/components/PendingInviteDialog';
 import { applyStoredPalette } from '@/lib/palette';
 import { isTripCreationPath } from '@/lib/pwa/trip-creation-path';
 import { NativeShell } from '@/components/native/NativeShell';
@@ -150,6 +151,12 @@ function App(): ReactElement {
       <InstallPromptProvider>
         <AppProviders>
           <RouterProvider router={router} />
+          {/*
+            Inside the providers, unlike the chrome below: it reads the session
+            and the trip list. Outside the router, because the share link it
+            opens after a sign-in must not wait on any one route.
+          */}
+          <PendingInviteDialog />
         </AppProviders>
 
       {/*

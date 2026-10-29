@@ -208,7 +208,7 @@ async function createTestTrip(page: Page): Promise<string> {
   await page.goto('/trips/new');
   await page.waitForLoadState('load');
 
-  // No location, deliberately: the wizard's place step is skipped.
+  // No location, deliberately: the wizard does not ask for one.
   //
   // Typing a location opens a suggestion popper, and the Nominatim stub above
   // does not hold in *this* project. It is the production build, so a service

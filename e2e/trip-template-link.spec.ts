@@ -5,11 +5,11 @@
  * one trip, puts the link in its own web page, and a customer who has never
  * heard of this app clicks it and ends up with their own trip. The place, the
  * map pin, the currency and the rooms arrive with the template; the customer
- * answers three questions.
+ * answers two questions and gets their trip's own invite link.
  *
  * The unit tests prove each piece. What only a browser proves is that the three
  * pieces meet: a route outside the app chrome, an anonymous RPC, and a wizard
- * whose flow changes shape when it is handed a prefill.
+ * that carries a prefill into the trip without asking about it.
  *
  * Runs in the `sync` project against `support/supabase-stub`, which answers
  * `read_trip_template` the way the real function does — five fields, and one
@@ -64,7 +64,7 @@ async function newVisitor(browser: Browser, stub: SupabaseStub): Promise<Page> {
 // ============================================================================
 
 test.describe('a trip template link opened with no account', () => {
-  test('asks three questions and makes the customer their own trip', async ({ browser }) => {
+  test('asks two questions and makes the customer their own trip', async ({ browser }) => {
     const stub = new SupabaseStub();
     stub.templates.set(TOKEN, TEMPLATE);
 
@@ -80,28 +80,24 @@ test.describe('a trip template link opened with no account', () => {
     // No account is asked for anywhere on this screen.
     await expect(page.getByRole('button', { name: /^sign in$/i })).toHaveCount(0);
 
-    // Three questions, not five: the place and the rooms came with the link.
-    // The name starts as the template's and the dates as today, so a customer
-    // with nothing to change only presses Next.
+    // The name and the dates, nothing else: the place and the rooms came with
+    // the link. The name starts as the template's and the dates as today, so a
+    // customer with nothing to change only presses Next and Create.
     await expect(page.getByText('What is the trip called?')).toBeVisible();
     await expect(page.getByLabel('Trip name')).toHaveValue('Chalet Marmotte');
     await page.getByRole('button', { name: /^next$/i }).click();
 
     await expect(page.getByText('When is it?')).toBeVisible();
-    await page.getByRole('button', { name: /^next$/i }).click();
-
-    await expect(page.getByText('Who is coming?')).toBeVisible();
-    await expect(page.getByText('Where is the house?')).toHaveCount(0);
-    await expect(page.getByText('Which rooms are there?')).toHaveCount(0);
-
-    await page.getByLabel('Guest name').fill('Alice');
-    await page.getByLabel('Guest name').press('Enter');
     await page.getByRole('button', { name: /create the trip/i }).click();
 
-    await expect(page.getByTestId('trip-wizard-done')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/chalet marmotte is ready/i)).toBeVisible();
+    // The trip's own invite link. Sending it needs an account, and the
+    // customer can go past that: the trip is theirs either way.
+    const invite = page.getByTestId('trip-wizard-invite');
+    await expect(invite).toBeVisible({ timeout: 30_000 });
+    await expect(invite.getByText(/chalet marmotte is ready/i)).toBeVisible();
+    await expect(invite.getByText(/sharing needs an account/i)).toBeVisible({ timeout: 15_000 });
 
-    await page.getByRole('button', { name: /open the calendar/i }).click();
+    await invite.getByRole('button', { name: /^later, open the trip$/i }).click();
     await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 30_000 });
 
     // The template's rooms came with it, under the names the enterprise gave.

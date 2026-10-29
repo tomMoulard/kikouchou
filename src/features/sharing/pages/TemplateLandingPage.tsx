@@ -3,14 +3,17 @@
  *
  * An enterprise customer publishes one trip and hands out one link. Whoever
  * follows it — a customer of that hotel, with no account and often no idea what
- * this app is — reads what the template says and answers three questions: what
- * to call the trip, when it runs, and who is coming. The place, the map pin, the
- * currency and the rooms arrive with the template and are never asked about.
+ * this app is — reads what the template says and answers two questions: what
+ * to call the trip and when it runs. The place, the map pin, the currency and
+ * the rooms arrive with the template and are never asked about. The wizard then
+ * offers the trip's own invite link, which asks for an account only if the
+ * customer wants to send it.
  *
- * The trip made here is an ordinary local trip. Nothing is synced, the
- * enterprise never sees it, and the customer owes nobody an account. That is
- * the promise of the link, and it is why this page reads through the one
- * anonymous function rather than through the invite path.
+ * The trip made here is an ordinary local trip. Nothing is synced unless the
+ * customer signs in to invite their group, the enterprise never sees it, and
+ * the customer owes nobody an account. That is the promise of the link, and it
+ * is why this page reads through the one anonymous function rather than
+ * through the invite path.
  *
  * The name question starts as the template's name and the dates as today, so
  * a customer who has nothing to change only presses Next.
@@ -121,7 +124,7 @@ export function TemplateLandingPage(): ReactElement {
   const handleCreated = useCallback(
     async (trip: Trip): Promise<void> => {
       // The trip exists by now, so a failure to select it must not strand the
-      // customer on the done screen. Reported, then navigated anyway: the
+      // customer on the invite screen. Reported, then navigated anyway: the
       // calendar selects the trip from the route.
       try {
         await setCurrentTrip(trip.id);

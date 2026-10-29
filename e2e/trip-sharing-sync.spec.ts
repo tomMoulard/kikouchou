@@ -60,11 +60,11 @@ const SEEDED_TRIP_DATES = {
  * The first trip on a device goes through the wizard, a later one through the
  * form; `fillNewTrip` answers either.
  *
- * Unlike the rest of the suite these tests are signed in, so both screens
- * pre-fill their first guest from the account, which would put a guest
- * named "owner" on every trip here, and leave the tests that add Alice and Bob
- * asserting against a roster they did not write. Each test says who is on its
- * trip, through `addGuest`.
+ * Unlike the rest of the suite these tests are signed in, so both screens put
+ * the account on the guest list, which would put a guest named "owner" on
+ * every trip here, and leave the tests that add Alice and Bob asserting
+ * against a roster they did not write. `dropOrganiser` takes it off again, and
+ * each test says who is on its trip, through `addGuest`.
  */
 async function createTrip(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: /new trip/i }).first().click();
@@ -359,6 +359,71 @@ test.describe('sharing a trip', () => {
 // Joining — what the invitee sees
 // ============================================================================
 
+// ============================================================================
+// The first trip's wizard ends on the link
+// ============================================================================
+
+/**
+ * Answers the wizard's two questions and waits for its invite screen.
+ *
+ * @param page - Playwright page with no trip of its own yet
+ * @returns The invite screen
+ */
+async function createFirstTripInWizard(page: Page): Promise<ReturnType<Page['getByTestId']>> {
+  await page.goto('/trips/new');
+  await page.locator('#wizard-trip-name').fill(TRIP.name);
+  await page.keyboard.press('Enter');
+  const dates = page.getByRole('group', { name: /trip dates/i });
+  await dates.getByLabel(/^from$/i).fill(fixtureDate(15, 0));
+  await dates.getByLabel(/^to$/i).fill(fixtureDate(22, 0));
+  await page.getByRole('button', { name: /create the trip/i }).click();
+  const invite = page.getByTestId('trip-wizard-invite');
+  await expect(invite).toBeVisible({ timeout: 15_000 });
+  return invite;
+}
+
+test.describe('inviting from the first-trip wizard', () => {
+  test('shows the link on the last screen when signed in', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    const invite = await createFirstTripInWizard(page);
+
+    await expect(invite.getByTestId('share-url')).toContainText('/join/', { timeout: 20_000 });
+    expect(stub.counts.tripInserts).toBe(1);
+    expect(stub.counts.inviteInserts).toBe(1);
+  });
+
+  test('asks for an account in place, and opens the link after the sign-in round trip', async ({
+    page,
+  }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+
+    const invite = await createFirstTripInWizard(page);
+
+    // Signed out: the sign-in sits on the screen, with a way past it.
+    await expect(invite.getByText(/sharing needs an account/i)).toBeVisible({ timeout: 15_000 });
+    await expect(invite.getByRole('button', { name: /^later, open the trip$/i })).toBeVisible();
+    expect(stub.counts.tripInserts).toBe(0);
+
+    // Google and a magic link leave the page and come back to `/` with a
+    // session. The trip is remembered across that, and its link opens.
+    await stub.signIn(page, OWNER);
+    await page.goto('/');
+
+    const dialog = page.getByTestId('share-dialog');
+    await expect(dialog.getByTestId('share-url')).toContainText('/join/', { timeout: 20_000 });
+    expect(stub.counts.inviteInserts).toBe(1);
+
+    // Once only: the next load does not open it again.
+    await page.reload();
+    await expect(page.getByText(TRIP.name).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('share-dialog')).toHaveCount(0);
+  });
+});
+
 test.describe('joining a trip', () => {
   test('redeems the invite, offers the participants, and opens the trip', async ({
     browser,
@@ -438,13 +503,18 @@ test.describe('joining a trip', () => {
 
   test('lets an invitee into a trip that has no participants', async ({ browser }) => {
     const stub = new SupabaseStub();
-    const ownerPage = await newDevice(browser, stub, OWNER);
+    // Signed out at first. Signed in, the wizard puts the account on the guest
+    // list and uploads the trip on its last screen, and a guest removed after
+    // that reaches the server some time later, maybe after the invitee reads it.
+    const ownerPage = await newDevice(browser, stub);
 
     // No guests at all. The reported case: the owner shares a trip before adding
     // anyone, which is the natural order — you share it *so that* people get
     // added.
     await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
+    await stub.signIn(ownerPage, OWNER);
+    await ownerPage.reload();
 
     await openShareDialog(ownerPage);
     const inviteUrl = await ownerPage
