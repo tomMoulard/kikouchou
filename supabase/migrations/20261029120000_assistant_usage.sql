@@ -1,4 +1,4 @@
--- The assistant API's daily limit (server/assistant-api).
+-- The assistant's daily limit on api.kikouchou.app (server/api).
 --
 -- api.kikouchou.app answers the assistant's chat on the project's OpenRouter
 -- key, so every answer costs the project money. Each signed-in account gets a
@@ -25,7 +25,7 @@ revoke all on public.assistant_usage from public, anon, authenticated;
 grant select, insert, update, delete on public.assistant_usage to service_role;
 
 comment on table public.assistant_usage is
-  'Assistant API requests per account per UTC day. Written by consume_assistant_quota only.';
+  'Assistant requests to api.kikouchou.app per account per UTC day. Written by consume_assistant_quota only.';
 
 -- Takes one request from the account's allowance for today and answers whether
 -- it fitted. One statement, so two concurrent calls cannot both take the last
@@ -61,4 +61,4 @@ revoke all on function public.consume_assistant_quota(uuid, integer)
 grant execute on function public.consume_assistant_quota(uuid, integer) to service_role;
 
 comment on function public.consume_assistant_quota(uuid, integer) is
-  'Assistant API daily limit. Service role only: the caller has already verified the user.';
+  'Assistant daily limit on api.kikouchou.app. Service role only: the caller has already verified the user.';

@@ -1,4 +1,5 @@
-# api.kikouchou.app: the assistant's chat, on the project's OpenRouter key.
+# api.kikouchou.app: the app's API. Today it answers the assistant's chat, on
+# the project's OpenRouter key.
 #
 # Two stages: a Rust toolchain that produces one binary, and a Debian slim
 # image that carries it and a certificate store. The build stage is never
@@ -32,10 +33,10 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /build/target/release/assistant-api /usr/local/bin/assistant-api
+COPY --from=build /build/target/release/kikouchou-api /usr/local/bin/kikouchou-api
 
-RUN useradd --system --create-home --shell /usr/sbin/nologin assistant
-USER assistant
+RUN useradd --system --create-home --shell /usr/sbin/nologin api
+USER api
 
 ENV PORT=8080
 EXPOSE 8080
@@ -43,6 +44,6 @@ EXPOSE 8080
 # `/healthz` has nothing behind it, so an OpenRouter or Supabase outage does
 # not make Docker restart a container that is answering correctly.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD ["assistant-api", "--health-check"]
+  CMD ["kikouchou-api", "--health-check"]
 
-CMD ["assistant-api"]
+CMD ["kikouchou-api"]

@@ -60,7 +60,7 @@ public/og-card.png
 # Rust build output for the share-preview service, and the sample card its
 # ignored layout test writes.
 server/share-preview/target/
-server/assistant-api/target/
+server/api/target/
 server/share-preview/sample-card.png
 
 # Stryker mutation testing: the sandbox copy of the repo it works in, and the

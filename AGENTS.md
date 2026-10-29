@@ -255,7 +255,7 @@ field says which:
   only way a phone too small for Gemma can use the assistant.
 
 - `kikouchou`: the `cloud-kikouchou` preset. Nothing runs on the device
-  either: `useWebLLM` streams from api.kikouchou.app (`server/assistant-api`),
+  either: `useWebLLM` streams from api.kikouchou.app (`server/api`),
   which answers on the project's own OpenRouter key. It needs a signed-in
   account instead of an OpenRouter one, and the server picks the model.
 
@@ -271,7 +271,7 @@ reads a preset and expects an answer in words has to branch on `engine`.
 everything about it is shaped by cost.
 
 - **The server decides, the client asks.** The client sends the Supabase
-  access token and the messages, nothing else. `server/assistant-api` verifies
+  access token and the messages, nothing else. `server/api` verifies
   the token against the project's JWKS, bounds the body, takes one request
   from the account's daily allowance (`consume_assistant_quota`), and only
   then calls OpenRouter with the model and token cap from its own

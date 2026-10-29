@@ -120,10 +120,10 @@ interface ImportMetaEnv {
   readonly VITE_SHARE_ORIGIN?: string;
 
   /**
-   * Where the assistant API answers, `https://api.kikouchou.app` when absent
-   * (`server/assistant-api`). Points a build at another deploy of it.
+   * Where the app's API answers, `https://api.kikouchou.app` when absent
+   * (`server/api`). Points a build at another deploy of it.
    */
-  readonly VITE_ASSISTANT_API_URL?: string;
+  readonly VITE_API_URL?: string;
 
   /**
    * The website's origin, `https://app.kikouchou.app` when absent.
