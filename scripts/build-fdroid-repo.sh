@@ -62,9 +62,11 @@ keydname: CN=Kikouchou, O=Kikouchou
 CONFIG
 chmod 600 "$work/config.yml" "$work/keystore.p12"
 mkdir -p "$work/repo/icons"
-cp "$root/public/icons/icon-512.png" "$work/repo/icons/icon.png" 2>/dev/null || true
+# public/icons/*.png is generated and ignored by git, so take the listing icon.
+cp "$root/fastlane/metadata/android/en-US/images/icon.png" "$work/repo/icons/icon.png" 2>/dev/null || true
 
-(cd "$work" && fdroid update --pretty)
+# A recipe that fdroidserver refuses must not hold back the website deploy.
+(cd "$work" && fdroid update --pretty) || warn "fdroid update failed, see the log above."
 
 mkdir -p "$dist/fdroid"
 rm -rf "$dist/fdroid/repo"

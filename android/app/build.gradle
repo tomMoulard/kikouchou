@@ -109,8 +109,11 @@ apply from: 'capacitor.build.gradle'
 
 // Firebase for the Play build only. CI writes google-services.json from a
 // secret; a checkout without it, and every F-Droid build, skips the plugin.
+// The flavor comes from the environment or, on f-droid.org, from a Gradle
+// property, as in ../build.gradle.
 def servicesJson = file('google-services.json')
-if (System.getenv('KIKOUCHOU_ANDROID_FLAVOR') != 'fdroid' && servicesJson.exists() && servicesJson.text) {
+def distributionFlavor = System.getenv('KIKOUCHOU_ANDROID_FLAVOR') ?: findProperty('kikouchouAndroidFlavor')
+if (distributionFlavor != 'fdroid' && servicesJson.exists() && servicesJson.text) {
     apply plugin: 'com.google.gms.google-services'
 } else {
     logger.info("google-services.json not applied: this build has no push notifications")

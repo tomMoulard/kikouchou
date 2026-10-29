@@ -53,10 +53,11 @@ Builds:
       - node_modules
     gradle:
       - fdroid
-    # The same variable the Gradle files read, so Google's services plugin
-    # never lands on the classpath.
-    env:
-      KIKOUCHOU_ANDROID_FLAVOR: fdroid
+    # The Gradle files read the flavor from this property, so Google's
+    # services plugin never lands on the classpath. fdroidserver has no
+    # flag for an environment variable: `env:` stopped `fdroid update`.
+    gradleprops:
+      - kikouchouAndroidFlavor=fdroid
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9.]+$

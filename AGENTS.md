@@ -65,7 +65,7 @@ bun run build:native          # Web build, then copy it into ios/ and android/
 bunx cap open ios             # Xcode (macOS only)
 bunx cap open android         # Android Studio
 cd android && ./gradlew assemblePlayDebug                  # JDK 21 + Android SDK 36
-KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx cap sync android && (cd android && ./gradlew assembleFdroidRelease)
+KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx cap sync android && (cd android && ./gradlew -PkikouchouAndroidFlavor=fdroid assembleFdroidRelease)
 bun run generate-app-icons    # Every icon and splash, from one drawing
 ```
 

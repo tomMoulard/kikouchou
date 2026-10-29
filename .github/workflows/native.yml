@@ -174,16 +174,17 @@ jobs:
         run: echo "::warning title=No push on Android::GOOGLE_SERVICES_JSON is unset, so this Play build registers for no reminders."
 
       # One `cap sync` per flavor: F-Droid's leaves the push plugin, and with it
-      # Firebase, out of the Gradle project (capacitor.config.ts).
+      # Firebase, out of the Gradle project (capacitor.config.ts). Gradle gets
+      # the flavor as a property, the one way f-droid.org can pass it, so this
+      # build checks the recipe's path (metadata/app.kikouchou.yml).
       - name: Build the F-Droid flavor
         env:
-          KIKOUCHOU_ANDROID_FLAVOR: fdroid
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          bunx cap sync android
-          cd android && ./gradlew --no-daemon assembleFdroidRelease
+          KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx cap sync android
+          cd android && ./gradlew --no-daemon -PkikouchouAndroidFlavor=fdroid assembleFdroidRelease
 
       - name: Build the Play flavor
         env:
