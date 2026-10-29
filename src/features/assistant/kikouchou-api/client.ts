@@ -2,7 +2,7 @@
  * @fileoverview Streams one chat completion from api.kikouchou.app.
  *
  * The `kikouchou` engine: the project's own server answers, on the project's
- * OpenRouter key, for a signed-in account (`server/assistant-api`). The
+ * OpenRouter key, for a signed-in account (`server/api`). The
  * request carries the Supabase access token and the messages, nothing else.
  * The server picks the model and caps the answer, so a client cannot spend
  * the project's key on something dearer. Its answer is OpenRouter's stream,
@@ -36,7 +36,7 @@ export interface KikouchouChatRequest {
 
 /**
  * Why the request failed. The server's statuses are documented in
- * `server/assistant-api/src/app.rs`.
+ * `server/api/src/app.rs`.
  */
 export type KikouchouApiErrorKind =
   /** No session on this device, or one the server could not verify. */
@@ -63,11 +63,11 @@ export class KikouchouApiError extends Error {
 // ============================================================================
 
 /**
- * Where the API answers. `VITE_ASSISTANT_API_URL` points a build at another
+ * Where the API answers. `VITE_API_URL` points a build at another
  * deploy; the production origin is the default, like `VITE_SHARE_ORIGIN`'s.
  */
 export const KIKOUCHOU_CHAT_URL = `${(
-  import.meta.env.VITE_ASSISTANT_API_URL || 'https://api.kikouchou.app'
+  import.meta.env.VITE_API_URL || 'https://api.kikouchou.app'
 ).replace(/\/+$/, '')}/v1/chat/completions`;
 
 // ============================================================================

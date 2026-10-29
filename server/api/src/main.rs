@@ -1,7 +1,8 @@
-//! api.kikouchou.app: the assistant's chat, for a signed-in account.
+//! api.kikouchou.app: the app's API.
 //!
-//! The app's cloud presets used to need the user's own OpenRouter key. This
-//! service answers with the project's key instead, so somebody with an account
+//! Its first route is the assistant's chat, for a signed-in account. The app's
+//! cloud presets used to need the user's own OpenRouter key. This route
+//! answers with the project's key instead, so somebody with an account
 //! and no OpenRouter account can use the assistant. In exchange it verifies the
 //! Supabase token, bounds the body, and counts each account against a daily
 //! limit before anything reaches the model. See `README.md`.
@@ -75,7 +76,7 @@ async fn shutdown_signal() {
     }
 }
 
-/// The container's health check, run as `assistant-api --health-check`, so
+/// The container's health check, run as `kikouchou-api --health-check`, so
 /// the image needs no `curl`.
 async fn health_check() -> Result<(), Box<dyn std::error::Error>> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_owned());
@@ -95,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::from_env()?;
     println!(
-        "assistant-api listening on {}, model {}, {} requests per account per day",
+        "kikouchou-api listening on {}, model {}, {} assistant requests per account per day",
         config.port, config.openrouter_model, config.daily_limit
     );
 

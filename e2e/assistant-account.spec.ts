@@ -10,7 +10,7 @@
  * Runs in the `sync` project, the one whose build has a Supabase project (the
  * stub): a build without accounts does not offer the account model at all.
  * api.kikouchou.app is routed to a canned answer; the server itself is tested
- * in `server/assistant-api`.
+ * in `server/api`.
  *
  * @module e2e/assistant-account
  */

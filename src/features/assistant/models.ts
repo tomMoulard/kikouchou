@@ -36,7 +36,7 @@ import type { WebGPUSupport } from './webgpu';
  * WebGPU. See `openrouter/auth.ts` for why it is OpenRouter.
  *
  * `kikouchou` runs nowhere on the device either. It sends the conversation to
- * api.kikouchou.app (`server/assistant-api`), which answers on the project's
+ * api.kikouchou.app (`server/api`), which answers on the project's
  * own OpenRouter key for a signed-in account, within a daily limit. It needs
  * an account instead of a connected OpenRouter account, and the server, not
  * the preset, picks the model.

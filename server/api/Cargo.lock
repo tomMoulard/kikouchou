@@ -3,19 +3,6 @@
 version = 4
 
 [[package]]
-name = "assistant-api"
-version = "0.1.0"
-dependencies = [
- "axum",
- "http-body-util",
- "jsonwebtoken",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -519,6 +506,19 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_asn1",
+]
+
+[[package]]
+name = "kikouchou-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "jsonwebtoken",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

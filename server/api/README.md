@@ -1,7 +1,9 @@
-# assistant-api
+# api
 
-The service behind `api.kikouchou.app`. It answers the assistant's chat for a
-signed-in Kikouchou account, on the project's own OpenRouter key.
+The service behind `api.kikouchou.app`, the app's API. Its first route answers
+the assistant's chat for a signed-in Kikouchou account, on the project's own
+OpenRouter key. A new server feature of the app gets a route here, not a new
+service.
 
 ```
 POST https://api.kikouchou.app/v1/chat/completions
@@ -10,19 +12,19 @@ Authorization: Bearer <Supabase access token>
   -> text/event-stream, OpenRouter's stream relayed as it arrives
 ```
 
-## Why the service exists
+## Why the chat route exists
 
 The app's cloud presets need the user's own OpenRouter account, which most
 people do not have. The models that run in the browser need WebGPU and a
 download of 1 to 5 GB. A visitor with neither cannot use the assistant at all.
-This service lets an account use it with nothing to set up. The project pays
+This route lets an account use it with nothing to set up. The project pays
 for each answer, so the service identifies the account and counts its requests
 before anything reaches the model.
 
 The client is the `kikouchou` engine and the `cloud-kikouchou` preset
 (`src/features/assistant/kikouchou-api/client.ts`).
 
-## What a request does
+## What a chat request does
 
 1. Read the bearer token. Compare its signature with the public keys of the
    Supabase project (ES256, `/auth/v1/.well-known/jwks.json`). Then compare its
@@ -82,7 +84,7 @@ image. The service refuses to start without them.
 
 To call it from a dev server, add the dev origin to `ALLOWED_ORIGINS`, for
 example `http://localhost:5173`, and point the app at it with
-`VITE_ASSISTANT_API_URL`.
+`VITE_API_URL`.
 
 ## Development
 
@@ -92,7 +94,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 
 # The image, which is what docker-compose.yml builds.
-docker build -t assistant-api .
+docker build -t kikouchou-api .
 ```
 
 The tests need no network. The token tests use a throwaway key, and fakes
@@ -109,7 +111,7 @@ behind Traefik on `api.kikouchou.app`. Before the first deploy:
 3. Set `OPENROUTER_API_KEY` in the shell or the `.env` beside the compose file.
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are the ones share-preview
    already reads. `ASSISTANT_DAILY_LIMIT` sets `DAILY_LIMIT`.
-4. Run `docker compose up -d assistant-api`, then check
+4. Run `docker compose up -d api`, then check
    `curl https://api.kikouchou.app/healthz`.
 
 ## Layout

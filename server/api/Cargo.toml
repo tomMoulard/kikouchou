@@ -1,9 +1,9 @@
 [package]
-name = "assistant-api"
+name = "kikouchou-api"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-description = "Serves api.kikouchou.app: the assistant's chat, for a signed-in account, on the project's OpenRouter key."
+description = "Serves api.kikouchou.app, the app's API. Today: the assistant's chat, for a signed-in account."
 publish = false
 
 [dependencies]

@@ -304,12 +304,12 @@ jobs:
       - name: Build the image
         run: docker build -t share-preview:ci .
 
-  assistant-api:
-    name: Assistant API
+  api:
+    name: API
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: server/assistant-api
+        working-directory: server/api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -325,9 +325,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            server/assistant-api/target
-          key: cargo-assistant-api-${{ runner.os }}-${{ hashFiles('server/assistant-api/Cargo.lock') }}
-          restore-keys: cargo-assistant-api-${{ runner.os }}-
+            server/api/target
+          key: cargo-api-${{ runner.os }}-${{ hashFiles('server/api/Cargo.lock') }}
+          restore-keys: cargo-api-${{ runner.os }}-
 
       - name: Check formatting
         run: cargo fmt --check
@@ -340,7 +340,7 @@ jobs:
 
       # The release profile only runs inside the image.
       - name: Build the image
-        run: docker build -t assistant-api:ci .
+        run: docker build -t kikouchou-api:ci .
 
   # ============================================================================
   # Build - Build production bundle
