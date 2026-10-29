@@ -10,6 +10,8 @@ import { Brain, ChevronRight, Clock3 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
+import { listViewRequests } from '../hooks/useTripActions';
+import { AssistantTripView } from './AssistantTripView';
 import { MarkdownText } from './MarkdownText';
 
 // ============================================================================
@@ -64,6 +66,13 @@ export interface ChatMessageData {
    * next turn.
    */
   readonly failed?: boolean;
+  /**
+   * Set on both halves of a turn a view shortcut wrote: the label the user
+   * tapped and the `showView` block that answers it. Persisted, so the view
+   * stays in the transcript, but never replayed to the model, which took no
+   * part in it.
+   */
+  readonly shortcut?: boolean;
 }
 
 /**
@@ -114,6 +123,14 @@ const ChatMessage = memo(function ChatMessage({
 
   const isUser = message.role === 'user';
 
+  // Read from the content rather than stored beside it, so the view is drawn
+  // from the trip as it is now and an old answer never shows stale data.
+  const views = useMemo(
+    () => (isUser ? [] : listViewRequests(message.content)),
+    [isUser, message.content],
+  );
+  const hasViews = views.length > 0;
+
   const hasReasoning = !isUser && (message.reasoning ?? '').length > 0;
 
   const appliedCount =
@@ -131,6 +148,9 @@ const ChatMessage = memo(function ChatMessage({
       <div
         className={cn(
           'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+          // A view needs the room: a timeline squeezed to 85% of a phone shows
+          // two days at a time.
+          hasViews && 'w-full max-w-full',
           isUser
             ? 'bg-primary text-primary-foreground rounded-br-md whitespace-pre-wrap'
             : 'bg-muted text-foreground rounded-bl-md',
@@ -170,8 +190,13 @@ const ChatMessage = memo(function ChatMessage({
         {isUser ? (
           displayContent || '...'
         ) : (
-          <MarkdownText content={displayContent || (hasReasoning ? '' : '...')} />
+          <MarkdownText
+            content={displayContent || (hasReasoning || hasViews ? '' : '...')}
+          />
         )}
+        {views.map((view) => (
+          <AssistantTripView key={`${message.id}-view-${view}`} view={view} />
+        ))}
         {message.queued && (
           <div
             className={cn(

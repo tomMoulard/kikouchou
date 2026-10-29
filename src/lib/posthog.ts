@@ -1030,6 +1030,7 @@ export type AnalyticsEvent =
   | 'assistant_provider_connect_started'
   | 'assistant_provider_connected'
   | 'assistant_provider_disconnected'
+  | 'assistant_view_shown'
   // Reading what the app worked out
   | 'analytics_viewed'
   | 'calendar_view_changed'

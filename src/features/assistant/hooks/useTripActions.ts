@@ -107,6 +107,7 @@ import {
 } from '@/types';
 
 import { type LLMAction, validateAction } from '../action-schema';
+import { type AssistantView, isAssistantView } from '../views';
 
 // ============================================================================
 // Type Definitions
@@ -195,6 +196,27 @@ export function listDestructiveActions(response: string): LLMAction['action'][] 
   return parseActionBlocks(response)
     .map((action) => action.action)
     .filter((name) => DESTRUCTIVE_ACTIONS.has(name));
+}
+
+/**
+ * The views an answer asks the bubble to draw, once each, in order.
+ *
+ * `showView` is the one block that writes nothing: `executeActions` skips it
+ * and `ChatMessage` reads it here, through the same parser, so a view the
+ * model asked for and a view a shortcut opened render the same way.
+ *
+ * @param response - The model's answer, or a shortcut's
+ * @returns The views to draw, empty when the answer asks for none
+ */
+export function listViewRequests(response: string): AssistantView[] {
+  const views: AssistantView[] = [];
+  for (const action of parseActionBlocks(response)) {
+    const view = action.data.view;
+    if (action.action === 'showView' && isAssistantView(view) && !views.includes(view)) {
+      views.push(view);
+    }
+  }
+  return views;
 }
 
 /**
@@ -462,7 +484,11 @@ export function useTripActions(): UseTripActionsReturn {
 
   const executeActions = useCallback(
     async (response: string): Promise<ActionExecutionResult> => {
-      const actions = parseActionBlocks(response);
+      // A view is drawn by the bubble, not run here. Leaving it out before the
+      // viewer check below also lets a read-only trip show its planning.
+      const actions = parseActionBlocks(response).filter(
+        (action) => action.action !== 'showView',
+      );
 
       if (actions.length === 0) {
         return { count: 0, summaries: [] };

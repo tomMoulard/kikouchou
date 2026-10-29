@@ -1340,6 +1340,38 @@
     }
   },
   "assistant": {
+    "views": {
+      "shortcutsLabel": "Afficher dans la discussion",
+      "open": "Ouvrir",
+      "noTrip": "Choisissez d’abord un voyage pour le voir ici.",
+      "planning": {
+        "title": "Planning",
+        "shortcut": "Planning",
+        "request": "Affiche le planning"
+      },
+      "rooms": {
+        "title": "Qui dort où",
+        "shortcut": "Chambres",
+        "request": "Affiche les chambres"
+      },
+      "rides": {
+        "title": "Arrivées et départs",
+        "shortcut": "Arrivées",
+        "request": "Affiche les arrivées et les départs",
+        "empty": "Aucune arrivée ni aucun départ pour l’instant.",
+        "driver": "Chauffeur : {{name}}"
+      },
+      "activities": {
+        "title": "Activités",
+        "shortcut": "Activités",
+        "request": "Affiche les activités"
+      },
+      "money": {
+        "title": "Soldes",
+        "shortcut": "Argent",
+        "request": "Affiche qui doit quoi"
+      }
+    },
     "title": "Assistant IA",
     "description": "Exécutez un modèle localement sur votre appareil pour gérer votre voyage en langage naturel.",
     "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",

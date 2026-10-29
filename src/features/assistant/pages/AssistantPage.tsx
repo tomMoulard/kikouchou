@@ -73,11 +73,17 @@ import {
   saveAssistantChatMessages,
   trimChatHistoryForPrompt,
 } from '../chat-storage';
-import { listDestructiveActions, useTripActions } from '../hooks/useTripActions';
+import {
+  listDestructiveActions,
+  listViewRequests,
+  useTripActions,
+} from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import { redactAiMessages, redactAiOutput } from '../ai-telemetry';
 import { splitReasoning } from '../reasoning';
 import { ACTION_SCHEMAS } from '../action-schema';
+import { ViewShortcuts } from '../components/ViewShortcuts';
+import { type AssistantView, buildShowViewBlock } from '../views';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
 import type { WebGPUSupport } from '../webgpu';
 import {
@@ -1316,6 +1322,11 @@ function AssistantPageComponent(): ReactElement {
           deletion_count: deletions.length,
           deletions_declined: !apply,
         });
+        // Which views people ask the model for, beside the ones a shortcut
+        // opens, says whether the chat is read as a way to look at the trip.
+        for (const view of listViewRequests(answer)) {
+          captureEvent('assistant_view_shown', { view, via: 'model' });
+        }
 
         // One $ai_generation per turn, sharing the turn's trace id and the
         // conversation's session id so PostHog groups them into a trace tree.
@@ -1478,6 +1489,34 @@ function AssistantPageComponent(): ReactElement {
     // Deliberately a raw confirmation: the queue lives in memory, nothing was saved.
     notify.success(t('assistant.queueCleared', { count: dropped.length }));
   }, [t]);
+
+  /**
+   * Opens a view from a shortcut, with no model turn: the label as the user's
+   * line and the `showView` block as the answer, both kept out of the history
+   * the model reads.
+   */
+  const handleShowView = useCallback(
+    (view: AssistantView): void => {
+      captureEvent('assistant_view_shown', { view, via: 'shortcut' });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextMessageId(),
+          role: 'user',
+          content: t(`assistant.views.${view}.request`),
+          shortcut: true,
+        },
+        {
+          id: nextMessageId(),
+          role: 'assistant',
+          content: buildShowViewBlock(view),
+          shortcut: true,
+        },
+      ]);
+      isPinnedToBottomRef.current = true;
+    },
+    [t],
+  );
 
   const handleClearConversation = useCallback(() => {
     // Stop the answer in flight and drop everything still waiting, or they
@@ -1670,6 +1709,15 @@ function AssistantPageComponent(): ReactElement {
 
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Disabled while an answer runs or a prompt waits, a crashed engine
+              included: the answer lands after the prompt that asked for it,
+              and a view slipped in between would split the pair the model's
+              history is rebuilt from. */}
+          <ViewShortcuts
+            onShowView={handleShowView}
+            disabled={isAnswering || queuedCount > 0}
+          />
 
           {/* Input area — stays live while answering so prompts can be queued */}
           <ChatInput

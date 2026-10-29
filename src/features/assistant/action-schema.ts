@@ -17,6 +17,8 @@ import {
   RIDE_KINDS,
 } from '@/types';
 
+import { ASSISTANT_VIEWS } from './views';
+
 // ============================================================================
 // Schema Primitive Types
 // ============================================================================
@@ -929,6 +931,23 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       },
     },
   },
+  // ---- Views ---------------------------------------------------------------
+  // Not a write: `useTripActions` skips it and the chat bubble draws the view
+  // from the live trip. It lives here so the prompt documents it, the
+  // validator checks it and Needle gets it as a tool, like every action.
+  {
+    action: 'showView',
+    label: 'Show a trip view',
+    fields: {
+      view: {
+        type: 'string',
+        required: true,
+        description: 'Which view: planning, rooms, rides, activities or money',
+        example: 'planning',
+        enum: ASSISTANT_VIEWS,
+      },
+    },
+  },
 ] as const;
 
 // ============================================================================
@@ -1054,8 +1073,10 @@ export function generateActionPrompt(
 ): string[] {
   const lines: string[] = [
     '',
-    '## Modification Actions',
-    'To modify trip data, emit a fenced block tagged EXACTLY ```action (not ```json) holding only valid JSON — no comments, no trailing commas, quoted keys.',
+    '## Actions',
+    // `(not ```json)` used to sit here. The parser takes ```json, ```action and
+    // a bare fence alike, so it bought nothing for its 14 characters.
+    'To edit trip data or show a view, emit a fenced block tagged EXACTLY ```action of strict JSON: no comments, no trailing commas.',
     // "Questions, greetings and small talk" rather than the older "to answer a
     // question": a greeting is neither a change nor a question about the trip,
     // and with no line covering it the model reached for the catalogue below
@@ -1070,7 +1091,7 @@ export function generateActionPrompt(
     '{"action":"addRoom","data":{"name":"Attic","capacity":4}}',
     '```',
     '',
-    'Actions — the example shows the required fields:',
+    'Required fields shown:',
   ];
 
   /** Enum lines already spelled out, so no value list is printed twice. */
@@ -1128,7 +1149,7 @@ export function generateActionPrompt(
     lines.push(
       // The envelope is shown once for the whole family, immediately above the
       // list, so the shape the model copies is still on screen next to it.
-      'These carry only ids, same shape — copy each id from the lists above:',
+      'Id-only, same shape, ids from the lists above:',
       `  ${buildExample(idOnlyExample)}`,
       `  ${idOnly
         .map((def) => `${def.action} ${Object.keys(def.fields).join('+')}`)
@@ -1143,7 +1164,7 @@ export function generateActionPrompt(
     // "I'll assume it's trip123" — and `validateAction` then rejects the block,
     // so the user sees a confident answer and no change.
     'Never invent an id, a name or a date the user did not give — ask for it instead.',
-    'After createTrip, the rest of the reply applies to the new trip.',
+    'After createTrip, the rest applies to the new trip.',
     // Covers rides as well as activities: membership is a join/leave verb in
     // both, and updateRide has no passenger field for the model to reach for.
     'Change who is in an activity or a car with join / leave, never with update.',

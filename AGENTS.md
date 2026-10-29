@@ -214,6 +214,24 @@ and `AssistantPage` asks before any of them run; a declined answer stands as
 words with `actionsDeclined` set. A new `remove*` action goes in
 `DESTRUCTIVE_ACTIONS` in `useTripActions.ts`.
 
+### A view is a block that writes nothing
+
+The assistant can show the trip in the chat: the planning, the rooms, the
+arrivals and departures, the activities and the balances. The model asks with
+a `showView` block, which sits in `ACTION_SCHEMAS` like a mutation, so the
+prompt documents it, `validateAction()` holds it to its enum and Needle gets it
+as a tool. `executeActions` skips it, which is also why a viewer trip can show
+one. `ChatMessage` reads it back with `listViewRequests` and draws
+`AssistantTripView` from the live contexts, so only the block is stored and an
+old answer never shows stale data.
+
+The shortcut chips over the composer write the same block with no model turn.
+Both halves of that turn carry `shortcut: true` and stay out of the history the
+model reads. The chips are disabled while an answer runs, because a pair
+slipped in there would split the turn the history is rebuilt from. A new view
+goes in `ASSISTANT_VIEWS` (`views.ts`), gets a body in `AssistantTripView` and
+its `assistant.views.<view>.*` keys in both locales.
+
 ### Three engines, and one of them never talks
 
 The presets in `models.ts` run on three different runtimes, and the `engine`
@@ -343,7 +361,8 @@ How the seed behaves, and why:
 - **A look at it is reported, not the selection.** `useSampleTripViewReport`
   in `Layout` fires `sample_trip_viewed` with `page` and `via` for each page
   of the sample that opens. `via` comes from router state: `OPENED_FROM_LIST`
-  on the trip list, `OPENED_FROM_NAV` on the navigation links. A new link
+  on the trip list, `OPENED_FROM_NAV` on the navigation links,
+  `OPENED_FROM_ASSISTANT` on a view in an assistant answer. A new link
   into a trip page sets its own, or it reports `other`. It is not a usage
   action, because a demo is not a trip being planned.
 - **It is not the user's own trip.** `TripCreatePage` does not count it, so

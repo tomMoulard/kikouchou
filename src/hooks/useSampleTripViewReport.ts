@@ -31,7 +31,7 @@ import { captureEvent } from '@/lib/posthog';
 // ============================================================================
 
 /** Where a click that opened a trip page came from. */
-export type TripPageOpenedVia = 'list' | 'nav' | 'entry';
+export type TripPageOpenedVia = 'list' | 'nav' | 'entry' | 'assistant';
 
 /** The router state a link sets to say where it is. */
 export interface TripPageNavigationState {
@@ -51,6 +51,9 @@ export const OPENED_FROM_NAV: TripPageNavigationState = { via: 'nav' };
 /** Router state for a page the app opened on by itself, from `/`. */
 export const OPENED_ON_ENTRY: TripPageNavigationState = { via: 'entry' };
 
+/** Router state for a page opened from a view in an assistant answer. */
+export const OPENED_FROM_ASSISTANT: TripPageNavigationState = { via: 'assistant' };
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -63,7 +66,9 @@ function readVia(state: unknown): TripPageOpenedVia | 'other' {
     return 'other';
   }
   const { via } = state as { readonly via: unknown };
-  return via === 'list' || via === 'nav' || via === 'entry' ? via : 'other';
+  return via === 'list' || via === 'nav' || via === 'entry' || via === 'assistant'
+    ? via
+    : 'other';
 }
 
 // ============================================================================
