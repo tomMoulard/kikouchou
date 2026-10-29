@@ -20,9 +20,9 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { stubExternalMapServices } from './support/external-services';
-import { fixtureDate } from './support/fixture-dates';
+import { fixtureDate, fixtureDatetime } from './support/fixture-dates';
 import { waitForRoute } from './support/routes';
-import { seedTrip } from './support/seed';
+import { seedPerson, seedRoom, seedTransport, seedTrip } from './support/seed';
 import { clearIndexedDB } from './support/storage';
 
 const FAKE_KEY = 'sk-or-v1-e2e';
@@ -83,6 +83,21 @@ async function stubOpenRouter(page: Page, answer: string): Promise<OpenRouterStu
   return stub;
 }
 
+/**
+ * Opens the assistant on the current trip and signs in to the stubbed
+ * OpenRouter, which is the one preset the runner can talk to.
+ */
+async function connectCloudModel(page: Page): Promise<void> {
+  await page.goto('/assistant');
+  await waitForRoute(page);
+  await page.getByRole('combobox', { name: /assistant model|modèle de l'assistant/i }).click();
+  await page.getByRole('option', { name: /^Claude Haiku/ }).click();
+  await page.getByRole('button', { name: /connect with openrouter|se connecter avec openrouter/i }).click();
+  await expect(
+    page.getByRole('button', { name: /disconnect openrouter|déconnecter openrouter/i }),
+  ).toBeVisible();
+}
+
 test.describe('Assistant on a cloud model', () => {
   test.beforeEach(async ({ page }) => {
     await stubExternalMapServices(page);
@@ -137,6 +152,70 @@ test.describe('Assistant on a cloud model', () => {
     await page.goto(`/trips/${tripId}/persons`);
     await waitForRoute(page);
     await expect(page.getByText('Zoé').first()).toBeVisible();
+  });
+
+  test('shows the planning the answer asks for, and links to the calendar', async ({ page }) => {
+    const stub = await stubOpenRouter(
+      page,
+      'Here is the week.\n```action\n{"action":"showView","data":{"view":"planning"}}\n```',
+    );
+    const { tripId } = await seedTrip(page, {
+      name: 'Planning Trip',
+      startDate: fixtureDate(14),
+      endDate: fixtureDate(17),
+    });
+    // Seeded before the trip is current, as `seedPerson` asks.
+    const personId = await seedPerson(page, tripId, 'Inès');
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: fixtureDatetime(14, '15:00:00.000Z'),
+      mode: 'train',
+      location: 'Gare de Lyon',
+    });
+
+    await page.goto(`/trips/${tripId}/persons`);
+    await waitForRoute(page);
+    await connectCloudModel(page);
+
+    await page.getByRole('textbox').fill('Show me the planning');
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText('Here is the week.')).toBeVisible();
+    const planning = page.getByRole('region', { name: /^planning$/i });
+    await expect(planning).toBeVisible();
+    await expect(planning.getByText('Inès')).toBeVisible();
+    // The block is drawn, never shown as text.
+    await expect(page.getByText('showView')).toHaveCount(0);
+    expect(stub.chats).toHaveLength(1);
+
+    await planning.getByRole('link', { name: /^(open|ouvrir)$/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/calendar`));
+  });
+
+  test('opens a view from a shortcut without asking the model', async ({ page }) => {
+    const stub = await stubOpenRouter(page, 'Hello.');
+    const { tripId } = await seedTrip(page, {
+      name: 'Shortcut Trip',
+      startDate: fixtureDate(14),
+      endDate: fixtureDate(17),
+    });
+    await seedRoom(page, { tripId, name: 'Grenier', capacity: 2 });
+
+    await page.goto(`/trips/${tripId}/rooms`);
+    await waitForRoute(page);
+    await connectCloudModel(page);
+
+    await page
+      .getByRole('group', { name: /show in the chat|afficher dans la discussion/i })
+      .getByRole('button', { name: /^(rooms|chambres)$/i })
+      .click();
+
+    const rooms = page.getByRole('region', { name: /who sleeps where|qui dort où/i });
+    await expect(rooms).toBeVisible();
+    await expect(rooms.getByText('Grenier')).toBeVisible();
+    expect(stub.chats).toHaveLength(0);
   });
 
   test('stays connected across a reload, and forgets the key on disconnect', async ({ page }) => {

@@ -61,6 +61,7 @@ function isChatMessageData(value: unknown): value is ChatMessageData {
   if (o.actionsDeclined !== undefined && typeof o.actionsDeclined !== 'boolean') {
     return false;
   }
+  if (o.shortcut !== undefined && typeof o.shortcut !== 'boolean') return false;
   return true;
 }
 
@@ -159,6 +160,9 @@ export function messagesToLLMChatHistory(
     const prompt = messages[index];
     if (prompt === undefined || prompt.role !== 'user') continue;
     if (prompt.queued === true) continue;
+    // A shortcut opened a view without asking the model. Replaying it would
+    // tell the model it said something it never said, and cost prompt room.
+    if (prompt.shortcut === true) continue;
 
     const answer = messages[index + 1];
     if (

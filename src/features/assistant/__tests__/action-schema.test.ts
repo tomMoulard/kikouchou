@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ACTION_SCHEMAS, generateActionPrompt, validateAction } from '../action-schema';
+import { ASSISTANT_VIEWS } from '../views';
 
 // ============================================================================
 // Tests
@@ -679,5 +680,47 @@ describe('generateActionPrompt narrowing', () => {
     ).join('\n');
 
     expect(narrowed.length).toBeLessThan(generateActionPrompt().join('\n').length);
+  });
+});
+
+/**
+ * `showView` is the one entry that writes nothing. It sits in the catalogue so
+ * the prompt documents it, the validator holds it to its enum and Needle gets
+ * it as a tool, exactly as it would a mutation.
+ */
+describe('action-schema — showView', () => {
+  it('is offered to the LLM with every view the chat can draw', () => {
+    const def = ACTION_SCHEMAS.find((entry) => entry.action === 'showView');
+
+    expect(def?.fields.view?.enum).toEqual([...ASSISTANT_VIEWS]);
+  });
+
+  it('is documented in the generated prompt, values included', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    expect(prompt).toContain('{"action":"showView","data":{"view":"planning"}}');
+    expect(prompt).toContain(`view: ${ASSISTANT_VIEWS.join(' | ')}`);
+    // The intro says a block is how a view is shown, not only how data changes.
+    expect(prompt).toContain('show a view, emit a fenced block');
+  });
+
+  it('accepts every view', () => {
+    for (const view of ASSISTANT_VIEWS) {
+      expect(validateAction({ action: 'showView', data: { view } })).toEqual({
+        action: 'showView',
+        data: { view },
+      });
+    }
+  });
+
+  it('refuses a view it cannot draw', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(
+      validateAction({ action: 'showView', data: { view: 'weather' } }),
+    ).toBeNull();
+    expect(validateAction({ action: 'showView', data: {} })).toBeNull();
+
+    warn.mockRestore();
   });
 });

@@ -16,6 +16,7 @@ import {
   saveAssistantChatMessages,
   trimChatHistoryForPrompt,
 } from '../chat-storage';
+import { buildShowViewBlock } from '../views';
 import type { ChatMessage as LLMChatMessage } from '../hooks/useWebLLM';
 
 // ============================================================================
@@ -125,6 +126,24 @@ describe('messagesToLLMChatHistory', () => {
       { role: 'assistant', content: 'yes' },
     ]);
   });
+
+  it('leaves out a view a shortcut opened, which the model took no part in', () => {
+    expect(
+      messagesToLLMChatHistory([
+        message('1', 'user', 'hello'),
+        message('2', 'assistant', 'hi'),
+        message('3', 'user', 'Show the planning', { shortcut: true }),
+        message('4', 'assistant', buildShowViewBlock('planning'), { shortcut: true }),
+        message('5', 'user', 'who drives?'),
+        message('6', 'assistant', 'Tom'),
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi' },
+      { role: 'user', content: 'who drives?' },
+      { role: 'assistant', content: 'Tom' },
+    ]);
+  });
 });
 
 describe('saveAssistantChatMessages', () => {
@@ -152,6 +171,26 @@ describe('saveAssistantChatMessages', () => {
       '2',
       '3',
     ]);
+  });
+  it('keeps a view a shortcut opened, so it is still there after a reload', () => {
+    saveAssistantChatMessages([
+      message('1', 'user', 'Show the rooms', { shortcut: true }),
+      message('2', 'assistant', buildShowViewBlock('rooms'), { shortcut: true }),
+    ]);
+
+    expect(loadAssistantChatMessages()).toEqual([
+      message('1', 'user', 'Show the rooms', { shortcut: true }),
+      message('2', 'assistant', buildShowViewBlock('rooms'), { shortcut: true }),
+    ]);
+  });
+
+  it('drops a stored message whose shortcut flag is not a flag', () => {
+    localStorage.setItem(
+      'kikouchou.assistant.chat.v1',
+      JSON.stringify([message('1', 'user', 'hi', { shortcut: 'yes' as unknown as boolean })]),
+    );
+
+    expect(loadAssistantChatMessages()).toEqual([]);
   });
 });
 

@@ -11,6 +11,7 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-d
 
 import {
   OPENED_FROM_LIST,
+  OPENED_FROM_ASSISTANT,
   OPENED_FROM_NAV,
   OPENED_ON_ENTRY,
   useSampleTripViewReport,
@@ -78,6 +79,12 @@ describe('useSampleTripViewReport', () => {
     renderAt(`/trips/${SAMPLE_ID}/calendar`, OPENED_ON_ENTRY);
 
     expect(sampleViews()).toEqual([{ page: 'calendar', via: 'entry' }]);
+  });
+
+  it('reports a sample page opened from a view in an assistant answer', () => {
+    renderAt(`/trips/${SAMPLE_ID}/calendar`, OPENED_FROM_ASSISTANT);
+
+    expect(sampleViews()).toEqual([{ page: 'calendar', via: 'assistant' }]);
   });
 
   it('says other when no link said where it was', () => {

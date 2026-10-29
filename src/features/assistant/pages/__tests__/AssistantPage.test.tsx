@@ -76,6 +76,14 @@ vi.mock('../../hooks/useTripActions', async (importOriginal) => ({
   }),
 }));
 
+// A view reads every trip context; the page tests render without providers,
+// and what is under test here is which view the page asks for.
+vi.mock('../../components/AssistantTripView', () => ({
+  AssistantTripView: ({ view }: { readonly view: string }) => (
+    <section aria-label={`view:${view}`} />
+  ),
+}));
+
 const mockUseWebLLM = vi.fn();
 
 // Keep the real `isFatalEngineError` — the crash-recovery path depends on it
@@ -86,6 +94,7 @@ vi.mock('../../hooks/useWebLLM', async (importOriginal) => ({
 }));
 
 import { AssistantPage } from '../AssistantPage';
+import { ASSISTANT_VIEWS, buildShowViewBlock } from '../../views';
 
 // ============================================================================
 // Test Helpers
@@ -631,5 +640,120 @@ describe('AssistantPage — request queue', () => {
       { role: 'system', content: 'system-prompt' },
       { role: 'user', content: 'second' },
     ]);
+  });
+});
+
+describe('AssistantPage — view shortcuts', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    mockUseWebLLM.mockReturnValue(readyEngine());
+  });
+
+  it('opens a view at once, with no model turn', async () => {
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'assistant.views.planning.shortcut' }),
+    );
+
+    expect(screen.getByText('assistant.views.planning.request')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'view:planning' })).toBeInTheDocument();
+    expect(mockGenerate).not.toHaveBeenCalled();
+    expect(mockCapture).toHaveBeenCalledWith('assistant_view_shown', {
+      view: 'planning',
+      via: 'shortcut',
+    });
+  });
+
+  it('offers one shortcut per view', async () => {
+    render(<AssistantPage />, { withProviders: false });
+
+    const group = await screen.findByRole('group', {
+      name: 'assistant.views.shortcutsLabel',
+    });
+    expect(
+      Array.from(group.querySelectorAll('button')).map((button) => button.textContent),
+    ).toEqual(ASSISTANT_VIEWS.map((view) => `assistant.views.${view}.shortcut`));
+  });
+
+  it('keeps a shortcut out of what the model reads next', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'assistant.views.rooms.shortcut' }),
+    );
+    await sendPrompt(user, 'who is in the attic?', 'assistant.send');
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]!.messages).toEqual([
+      { role: 'system', content: 'system-prompt' },
+      { role: 'user', content: 'who is in the attic?' },
+    ]);
+  });
+
+  it('waits while an answer runs, so the view does not split a turn', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+
+    expect(
+      screen.getByRole('button', { name: 'assistant.views.money.shortcut' }),
+    ).toBeDisabled();
+
+    await act(async () => {
+      calls[0]!.resolve('done');
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'assistant.views.money.shortcut' }),
+      ).toBeEnabled();
+    });
+  });
+
+  it('waits while a prompt is held for a crashed engine', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await sendPrompt(user, 'second', 'assistant.queueMessage');
+
+    await act(async () => {
+      calls[0]!.reject(
+        Object.assign(new Error('failed to call OrtRun()'), { fatal: true }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('assistant.engineCrashed')).toBeInTheDocument(),
+    );
+    // Nothing is answering, but "second" still waits for its answer.
+    expect(screen.getByText('assistant.queuedBadge')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'assistant.views.planning.shortcut' }),
+    ).toBeDisabled();
+  });
+
+  it('draws the view a model answer asks for, and counts it', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'show me the planning', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await act(async () => {
+      calls[0]!.resolve(`Here it is.\n\n${buildShowViewBlock('planning')}`);
+    });
+
+    expect(
+      await screen.findByRole('region', { name: 'view:planning' }),
+    ).toBeInTheDocument();
+    expect(mockCapture).toHaveBeenCalledWith('assistant_view_shown', {
+      view: 'planning',
+      via: 'model',
+    });
   });
 });

@@ -1340,6 +1340,38 @@
     }
   },
   "assistant": {
+    "views": {
+      "shortcutsLabel": "Show in the chat",
+      "open": "Open",
+      "noTrip": "Pick a trip first to see it here.",
+      "planning": {
+        "title": "Planning",
+        "shortcut": "Planning",
+        "request": "Show the planning"
+      },
+      "rooms": {
+        "title": "Who sleeps where",
+        "shortcut": "Rooms",
+        "request": "Show the rooms"
+      },
+      "rides": {
+        "title": "Arrivals and departures",
+        "shortcut": "Arrivals",
+        "request": "Show the arrivals and departures",
+        "empty": "No arrival or departure yet.",
+        "driver": "Driver: {{name}}"
+      },
+      "activities": {
+        "title": "Activities",
+        "shortcut": "Activities",
+        "request": "Show the activities"
+      },
+      "money": {
+        "title": "Balances",
+        "shortcut": "Money",
+        "request": "Show who owes what"
+      }
+    },
     "title": "AI Assistant",
     "description": "Run a local model on your device to manage your trip with natural language.",
     "pageDescription": "Ask questions or modify your trip using natural language",
