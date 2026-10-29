@@ -428,12 +428,23 @@ There are three routes. Do all three: they reach different people.
 
    3. Tell people to add `https://app.kikouchou.app/fdroid/repo` in the F-Droid
       app.
-2. IzzyOnDroid, which picks the APK from each GitHub release: open a request
-   at <https://gitlab.com/IzzyOnDroid/repo/-/issues>. Give the repository URL
+2. IzzyOnDroid, which picks the APK from each GitHub release: open an App
+   Inclusion Request at <https://codeberg.org/IzzyOnDroid/repodata/issues>.
+   IzzyOnDroid moved its requests there from GitLab. Give the repository URL
    and the file pattern `kikouchou-*-fdroid.apk`.
-3. The f-droid.org catalogue:
+3. The f-droid.org catalogue. Wait for the first release that contains
+   `gradleprops` in `metadata/app.kikouchou.yml`. The source of `v0.1.0` reads
+   the flavor from an environment variable only, which f-droid.org cannot
+   set, so that build would put Google's plugin on the classpath.
    1. Fork <https://gitlab.com/fdroid/fdroiddata>.
    2. Copy `metadata/app.kikouchou.yml` into the fork's `metadata/` folder.
+      Replace the tag in `commit:` with the full commit hash of the tag, because
+      fdroiddata refuses a tag there:
+
+      ```bash
+      git rev-parse 'v<version>^{commit}'
+      ```
+
    3. Make sure that fdroidserver accepts it, in the fork:
 
       ```bash
