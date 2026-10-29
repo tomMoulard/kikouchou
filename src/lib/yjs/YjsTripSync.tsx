@@ -17,10 +17,12 @@ import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
 import type {
   Activity,
   Expense,
+  Meal,
   Person,
   Ride,
   Room,
   RoomAssignment,
+  ShoppingItem,
   Transport,
   TripId,
   Vehicle,
@@ -190,6 +192,15 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
+  // Through the plain `tripId` index: the meal planner is behind a flag, but
+  // its rows are published by every device, flag on or off. A device that
+  // held them back would let the projection read their absence as deletions.
+  const meals = useTripScopedRows<Meal>(tripId, (id) =>
+    db.meals.where('tripId').equals(id).toArray(),
+  );
+  const shoppingItems = useTripScopedRows<ShoppingItem>(tripId, (id) =>
+    db.shoppingItems.where('tripId').equals(id).toArray(),
+  );
 
   /**
    * Every document collection this component publishes, checked at compile time.
@@ -214,6 +225,8 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     vehicles,
     activities,
     expenses,
+    meals,
+    shoppingItems,
   } satisfies Record<DocCollectionName, unknown>;
   void publishedCollections;
 
@@ -348,6 +361,26 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
   }, [readOnly, expenses, tripId, yjs?.doc, yjs?.loaded]);
+
+  useEffect(() => {
+    if (readOnly || !yjs?.loaded || !meals) {
+      return;
+    }
+
+    syncDexieToDoc(yjs.doc, 'meals', stripTripId(meals), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [readOnly, meals, tripId, yjs?.doc, yjs?.loaded]);
+
+  useEffect(() => {
+    if (readOnly || !yjs?.loaded || !shoppingItems) {
+      return;
+    }
+
+    syncDexieToDoc(yjs.doc, 'shoppingItems', stripTripId(shoppingItems), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [readOnly, shoppingItems, tripId, yjs?.doc, yjs?.loaded]);
 
   return null;
 });

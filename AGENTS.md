@@ -633,11 +633,11 @@ or `false`; without an analytics client it is `false` at once. A screen that
 swaps experiences on a flag waits on `undefined` rather than flashing the
 control arm. `localStorage['kikouchou-flag:<key>']` = `on` | `off` forces an
 arm without a PostHog project, which is how the e2e specs reach a flagged
-experience on servers that carry no key. There are three flags.
+experience on servers that carry no key. There are four flags.
 `ent-trip-templates` offers the publish control on a trip's settings screen to
-the static "enterprise customers" cohort. A screen behind a flag keeps one code
-path for the writes, so the arms differ in what they show and not in what they
-save.
+the static "enterprise customers" cohort. `meal-planner` shows the meal planner
+(see below). A screen behind a flag keeps one code path for the writes, so the
+arms differ in what they show and not in what they save.
 
 `onboarding-planning-view` is an experiment, so its flag is multivariate
 (`control`, `test`, `wizard`), and `isFeatureEnabled` answers `true` in every
@@ -701,6 +701,26 @@ opens `UpgradeOfferDialog`, the paid-tier offer, reporting
 outside the cohort can see is a feature nobody outside the cohort can ask for,
 and asking is what this measures. Undecided reads as off, so a publish button
 never goes live and then dead under somebody's cursor.
+
+### The meal planner hides behind its flag, and syncs without it
+
+`/trips/:tripId/meals` holds a lunch and a dinner for every trip day, and the
+trip's shopping list. `meal-planner` decides what a device shows: the page,
+its navigation item (`hiddenNavPages`), the diet fields of the guest form, and
+the five meal actions of the assistant (`offeredActionSchemas`; the executor
+refuses them too, because Needle's catalogue is built in its worker from the
+whole schema). Off and undecided read the same.
+
+The flag never decides what is stored or synced. `meals` and `shoppingItems`
+are published to the document by every device, flag on or off: a device that
+held a collection back would let the projection read its absence as a
+deletion. The guest form leaves the diet keys out of its submit while the flag
+is off, so saving a guest there never clears a diet another member typed.
+
+A meal does not store how many people eat it. `buildMealAttendance` reads the
+guests on site at 12:30 or 19:30 (`isGuestAtMeal`): the day rule, narrowed by
+the guest's own transports that day. The meal stores only the correction typed
+on top (`headcountAdjustment`).
 
 ### One install prompt, and the page an iPhone installs from
 
@@ -1548,7 +1568,7 @@ src/
 │   ├── native/      # NativeShell: the store apps' links, back button, bars
 │   └── pwa/         # InstallPrompt, OfflineIndicator
 ├── contexts/        # React Context providers + hooks
-├── features/        # trips | rooms | persons | guest-groups | transports | activities | calendar | analytics | assistant | sharing | settings
+├── features/        # trips | rooms | persons | guest-groups | transports | activities | meals | calendar | analytics | assistant | sharing | settings
 │   └── {name}/      # pages/ · components/ · routes.tsx · index.ts
 ├── hooks/           # Shared custom hooks
 ├── lib/

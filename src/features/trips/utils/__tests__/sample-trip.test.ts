@@ -22,10 +22,12 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import {
   ActivityFormDataSchema,
   ExpenseFormDataSchema,
+  MealFormDataSchema,
   PersonFormDataSchema,
   RideFormDataSchema,
   RoomAssignmentFormDataSchema,
   RoomFormDataSchema,
+  ShoppingItemFormDataSchema,
   TransportFormDataSchema,
   TripFormDataSchema,
   VehicleFormDataSchema,
@@ -33,8 +35,11 @@ import {
 
 import {
   ACTIVITY_CATEGORIES,
+  DIETARY_TAGS,
   EXPENSE_CATEGORIES,
   EXPENSE_KINDS,
+  MEAL_KINDS,
+  MEAL_SLOTS,
   EXPENSE_SPLIT_MODES,
   RIDE_DIRECTIONS,
   RIDE_KINDS,
@@ -83,6 +88,8 @@ function tablesOf(rows: SampleTripRows) {
     { table: 'transports', schema: TransportFormDataSchema, rows: rows.transports },
     { table: 'activities', schema: ActivityFormDataSchema, rows: rows.activities },
     { table: 'expenses', schema: ExpenseFormDataSchema, rows: rows.expenses },
+    { table: 'meals', schema: MealFormDataSchema, rows: rows.meals },
+    { table: 'shoppingItems', schema: ShoppingItemFormDataSchema, rows: rows.shoppingItems },
   ] as const;
 }
 
@@ -154,6 +161,20 @@ describe('buildSampleTrip', () => {
       expect(rows.transports.some((transport) => transport.type === 'departure')).toBe(true);
     });
 
+    it('covers both meals of the day, every kind of meal, a diet and the shopping list', () => {
+      const slots = new Set(rows.meals.map((meal) => meal.slot));
+      const mealKinds = new Set(rows.meals.map((meal) => meal.kind));
+      const tags = new Set(rows.persons.flatMap((person) => person.dietaryTags ?? []));
+
+      expect([...slots].sort()).toEqual([...MEAL_SLOTS].sort());
+      expect([...mealKinds].sort()).toEqual([...MEAL_KINDS].sort());
+      expect(tags.size).toBeGreaterThan(0);
+      expect([...tags].every((tag) => DIETARY_TAGS.includes(tag))).toBe(true);
+      expect(rows.persons.some((person) => person.dietaryNote !== undefined)).toBe(true);
+      expect(rows.shoppingItems.some((item) => item.checked)).toBe(true);
+      expect(rows.shoppingItems.some((item) => !item.checked)).toBe(true);
+    });
+
     it('points every reference at a row of the same trip', () => {
       const tripId = rows.trip.id;
       const personIds = new Set(rows.persons.map((person) => person.id));
@@ -193,6 +214,14 @@ describe('buildSampleTrip', () => {
         for (const split of expense.splits) {
           expect(personIds.has(split.personId)).toBe(true);
         }
+      }
+      for (const meal of rows.meals) {
+        for (const id of meal.organizerIds) {
+          expect(personIds.has(id)).toBe(true);
+        }
+      }
+      for (const item of rows.shoppingItems) {
+        expect(item.buyerId === undefined || personIds.has(item.buyerId)).toBe(true);
       }
     });
 
@@ -245,6 +274,9 @@ describe('buildSampleTrip', () => {
       }
       for (const expense of rows.expenses) {
         expect(inTrip(expense.date)).toBe(true);
+      }
+      for (const meal of rows.meals) {
+        expect(inTrip(meal.date)).toBe(true);
       }
     });
 

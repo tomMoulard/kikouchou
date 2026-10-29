@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_MOBILE_NAV_MODE,
   TRIP_NAV_ITEMS,
+  hiddenNavPages,
   resolveMobileNavMode,
   resolveMobileNavOrder,
   tripNavItemsInOrder,
@@ -32,6 +33,7 @@ describe('nav items load-time tables', () => {
       { labelKey: 'nav.persons', pathSuffix: 'persons', icon: lucide.Users, activeIcon: icons.UsersSolid, requiresTrip: true },
       { labelKey: 'nav.money', pathSuffix: 'money', icon: lucide.Wallet, activeIcon: icons.WalletSolid, requiresTrip: true },
       { labelKey: 'nav.activities', pathSuffix: 'activities', icon: lucide.PartyPopper, requiresTrip: true },
+      { labelKey: 'nav.meals', pathSuffix: 'meals', icon: lucide.UtensilsCrossed, requiresTrip: true },
       { labelKey: 'nav.transports', pathSuffix: 'transports', icon: lucide.Car, requiresTrip: true },
       { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: lucide.BarChart2, requiresTrip: true },
       { labelKey: 'nav.tripSettings', pathSuffix: 'edit', icon: lucide.Settings2, requiresTrip: true },
@@ -51,7 +53,7 @@ describe('resolveMobileNavOrder', () => {
   });
 
   it('keeps a complete stored order as it is', () => {
-    const stored = ['money', 'transports', 'calendar', 'rooms', 'persons', 'activities', 'analytics', 'edit'];
+    const stored = ['money', 'transports', 'calendar', 'rooms', 'persons', 'activities', 'meals', 'analytics', 'edit'];
     expect(resolveMobileNavOrder(stored)).toEqual(stored);
   });
 
@@ -74,9 +76,17 @@ describe('resolveMobileNavOrder', () => {
       'rooms',
       'persons',
       'activities',
+      'meals',
       'analytics',
       'edit',
     ]);
+  });
+});
+
+describe('hiddenNavPages', () => {
+  it('hides the meal planner while its flag is off, and nothing once it is on', () => {
+    expect([...hiddenNavPages({ mealPlanner: false })]).toEqual(['meals']);
+    expect(hiddenNavPages({ mealPlanner: true }).size).toBe(0);
   });
 });
 

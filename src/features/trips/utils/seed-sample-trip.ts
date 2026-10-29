@@ -109,6 +109,8 @@ export async function seedSampleTripOnce(
       db.activities,
       db.expenses,
       db.photos,
+      db.meals,
+      db.shoppingItems,
     ],
     async (): Promise<SeedSampleTripOutcome> => {
       const settings = await db.settings.get(SETTINGS_ID);
@@ -135,6 +137,8 @@ export async function seedSampleTripOnce(
       await db.activities.bulkAdd([...rows.activities]);
       await db.expenses.bulkAdd([...rows.expenses]);
       await db.photos.bulkAdd([...rows.photos]);
+      await db.meals.bulkAdd([...rows.meals]);
+      await db.shoppingItems.bulkAdd([...rows.shoppingItems]);
       await db.settings.add({
         ...DEFAULT_SETTINGS,
         language,

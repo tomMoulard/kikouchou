@@ -13,17 +13,19 @@ import type {
   AppSettings,
   Expense,
   GuestGroup,
+  Meal,
   Person,
   Ride,
   Room,
   RoomAssignment,
+  ShoppingItem,
   Transport,
   Trip,
   Vehicle,
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 13;
+export const DB_VERSION = 14;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -291,6 +293,22 @@ export class KikouchouDatabase extends Dexie {
    * ever read as part of its line, and nothing points at one.
    */
   expenses!: Table<Expense, string>;
+
+  /**
+   * Meals table - stores the meal planner's lunches and dinners.
+   * Primary key: id (MealId)
+   * Indexes: tripId (cascade and trip queries)
+   * Compound index: [tripId+date] for the day-by-day read
+   * Multi-entry index: *organizerIds (cascade when a guest is deleted)
+   */
+  meals!: Table<Meal, string>;
+
+  /**
+   * Shopping items table - stores the trip's shared shopping list.
+   * Primary key: id (ShoppingItemId)
+   * Indexes: tripId (cascade and trip queries), buyerId (cascade)
+   */
+  shoppingItems!: Table<ShoppingItem, string>;
 
   /**
    * Settings table - stores application settings (singleton).
@@ -760,6 +778,20 @@ export class KikouchouDatabase extends Dexie {
      */
     this.version(13).stores({
       photos: '[tripId+id], tripId, pending',
+    });
+
+    /**
+     * Schema Version 14 - The meal planner: `meals` and `shoppingItems`
+     *
+     * Two new trip-scoped tables, each with a plain `tripId` index for the
+     * cascade. A meal is read day by day, hence `[tripId+date]`, and names its
+     * cooks in an array, hence the multi-entry `*organizerIds` the guest cascade
+     * walks. A shopping line is read as one list per trip and points at its
+     * buyer, hence `buyerId`. No data migration: both tables start empty.
+     */
+    this.version(14).stores({
+      meals: 'id, tripId, *organizerIds, [tripId+date]',
+      shoppingItems: 'id, tripId, buyerId',
     });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade

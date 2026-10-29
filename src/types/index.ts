@@ -47,6 +47,12 @@ export type RideId = Brand<'RideId'>;
 /** Type-safe Vehicle identifier (nanoid generated) */
 export type VehicleId = Brand<'VehicleId'>;
 
+/** Type-safe Meal identifier (nanoid generated) */
+export type MealId = Brand<'MealId'>;
+
+/** Type-safe ShoppingItem identifier (nanoid generated) */
+export type ShoppingItemId = Brand<'ShoppingItemId'>;
+
 /** Type-safe Share identifier (shorter nanoid for sharing URLs) */
 export type ShareId = Brand<'ShareId'>;
 
@@ -164,6 +170,65 @@ export const CHILD_SEAT_KINDS: readonly ChildSeatKind[] = [
   'forwardFacing',
   'booster',
 ] as const;
+
+/**
+ * A diet a guest follows, as a fixed tag the meal planner can count.
+ *
+ * Tags rather than free text, because the cook's question is a number: "how
+ * many of the twelve at dinner eat no meat?". An allergy is too varied for a
+ * list and stays in {@link Person.dietaryNote}.
+ */
+export type DietaryTag =
+  | 'vegetarian'
+  | 'vegan'
+  | 'pescatarian'
+  | 'glutenFree'
+  | 'lactoseFree'
+  | 'noPork';
+
+/**
+ * All diet tags, in the order the guest form offers them.
+ */
+export const DIETARY_TAGS: readonly DietaryTag[] = [
+  'vegetarian',
+  'vegan',
+  'pescatarian',
+  'glutenFree',
+  'lactoseFree',
+  'noPork',
+] as const;
+
+/**
+ * Which meal of the day a {@link Meal} is.
+ *
+ * Lunch and dinner only: breakfast is the meal everybody serves themselves,
+ * and a grid with a third empty row per day buried the two that need a cook.
+ */
+export type MealSlot = 'lunch' | 'dinner';
+
+/**
+ * All meal slots, in the order of the day.
+ */
+export const MEAL_SLOTS: readonly MealSlot[] = ['lunch', 'dinner'] as const;
+
+/**
+ * Where a meal happens, which decides what the planner asks of it.
+ *
+ * - `home`: cooked in the house. Somebody cooks and somebody shops.
+ * - `restaurant`: eaten out. Somebody books, nobody cooks.
+ * - `picnic`: carried out. Somebody packs it.
+ */
+export type MealKind = 'home' | 'restaurant' | 'picnic';
+
+/**
+ * All meal kinds, in the order the meal form offers them.
+ */
+export const MEAL_KINDS: readonly MealKind[] = ['home', 'restaurant', 'picnic'] as const;
+
+/**
+ * Kind given to a meal created without one.
+ */
+export const DEFAULT_MEAL_KIND: MealKind = 'home';
 
 /**
  * Minutes before a ride's meeting time that the driver must set off, when the
@@ -548,6 +613,8 @@ export interface Identifiable {
  * - For Ride: `[tripId+meetDatetime]`
  * - For Vehicle: `tripId`
  * - For Activity: `[tripId+startDatetime]`, `[tripId+category]`, `*participantIds`
+ * - For Meal: `[tripId+date]`
+ * - For ShoppingItem: `tripId`, `buyerId`
  */
 export interface TripScoped {
   /** Foreign key reference to the parent Trip */
@@ -897,6 +964,25 @@ export interface Person extends Identifiable, TripScoped {
    * @example "booster"
    */
   childSeat?: ChildSeatKind;
+
+  /**
+   * The diets this guest follows, counted on every meal they eat.
+   *
+   * Absent or empty means no restriction. A guest row that stands for several
+   * people ({@link headcount}) carries the tags of the row: the planner counts
+   * them once per person, which is the safe side for the cook.
+   *
+   * @see {@link DietaryTag}
+   * @example ["vegetarian"]
+   */
+  dietaryTags?: DietaryTag[];
+
+  /**
+   * Allergies and anything else about food the tags cannot say.
+   * Shown on each meal the guest eats.
+   * @example "Peanuts"
+   */
+  dietaryNote?: string;
 }
 
 /**
@@ -1529,6 +1615,123 @@ export interface Expense extends Identifiable, TripScoped {
 }
 
 /**
+ * One lunch or dinner of the trip: who is in charge and what is on the menu.
+ *
+ * @description The meal planner shows a lunch and a dinner row for every day of
+ * the trip. A row is only stored once somebody fills it in, so an untouched
+ * trip has no meals at all. How many people eat is not stored: it is read from
+ * the guests on site at that time (`features/meals/utils/meal-headcount`), and
+ * the meal only stores the correction the group typed on top of it.
+ *
+ * Two members can fill the same slot while both offline, which leaves two rows
+ * for one slot. The planner shows both rather than choosing, so nothing a member
+ * typed disappears.
+ *
+ * @see {@link Trip} - Parent entity
+ * @see {@link Person} - The guests in charge
+ *
+ * @example
+ * ```typescript
+ * const meal: Meal = {
+ *   id: 'meal123' as MealId,
+ *   tripId: 'trip456' as TripId,
+ *   date: '2024-07-16' as ISODateString,
+ *   slot: 'dinner',
+ *   kind: 'home',
+ *   organizerIds: ['person789' as PersonId],
+ *   menu: 'Lasagne, salade',
+ * };
+ * ```
+ */
+export interface Meal extends Identifiable, TripScoped {
+  /** Unique meal identifier */
+  readonly id: MealId;
+
+  /** The day of the meal, as a local calendar day. */
+  date: ISODateString;
+
+  /**
+   * Lunch or dinner.
+   * @see {@link MealSlot}
+   */
+  slot: MealSlot;
+
+  /**
+   * Cooked in the house, eaten out or carried out.
+   * @see {@link MealKind}
+   */
+  kind: MealKind;
+
+  /**
+   * The guests in charge: the cooks, the one who books, the one who packs.
+   * Empty means nobody has taken the meal yet.
+   *
+   * The whole array is one document field, so two members editing it while
+   * both offline keep only the later edit, as activity participants do.
+   */
+  organizerIds: PersonId[];
+
+  /**
+   * What is on the menu, or the restaurant's name.
+   * @example "Lasagne, salade verte"
+   */
+  menu?: string;
+
+  /**
+   * People to add to, or take from, the count of guests on site.
+   *
+   * Signed: `+2` for neighbours invited to dinner, `-3` for guests who eat
+   * out that night. Absent means the count stands as computed.
+   *
+   * @example 2
+   */
+  headcountAdjustment?: number;
+}
+
+/**
+ * One line of the trip's shopping list.
+ *
+ * @description One shared list for the whole trip, independent of the meals.
+ * Each line is its own row rather than an entry in an array, so two guests
+ * ticking items off in two aisles of the same supermarket never undo each
+ * other.
+ *
+ * @see {@link Trip} - Parent entity
+ * @see {@link Person} - The guest who buys it
+ */
+export interface ShoppingItem extends Identifiable, TripScoped {
+  /** Unique shopping item identifier */
+  readonly id: ShoppingItemId;
+
+  /**
+   * What to buy.
+   * @example "Baguettes"
+   */
+  name: string;
+
+  /**
+   * How much, as the person typed it.
+   * @example "4"
+   */
+  quantity?: string;
+
+  /**
+   * Optional guest who said they would buy it.
+   * @see {@link Person}
+   */
+  buyerId?: PersonId;
+
+  /** Whether it is bought. */
+  checked: boolean;
+
+  /**
+   * When the line was added, in milliseconds since the epoch.
+   * The list shows lines in the order they were added.
+   */
+  createdAt: number;
+}
+
+/**
  * One person inside a {@link GuestGroup}.
  *
  * @description A member is a *template* for a guest, not a guest. Importing a
@@ -1686,6 +1889,7 @@ export const MOBILE_NAV_PAGES = [
   'persons',
   'money',
   'activities',
+  'meals',
   'transports',
   'analytics',
   'edit',
@@ -1870,6 +2074,10 @@ export interface PersonFormData {
   headcount?: number;
   /** The child restraint this guest needs in a car, when they need one */
   childSeat?: ChildSeatKind;
+  /** The diets this guest follows */
+  dietaryTags?: DietaryTag[];
+  /** Allergies and other food notes */
+  dietaryNote?: string;
 }
 
 /**
@@ -2081,6 +2289,44 @@ export interface ExpenseFormData {
 }
 
 /**
+ * Data required to create or update a {@link Meal}.
+ * Excludes auto-generated fields (id, tripId).
+ *
+ * @see {@link Meal}
+ */
+export interface MealFormData {
+  /** The day of the meal (YYYY-MM-DD) */
+  date: ISODateString;
+  /** Lunch or dinner */
+  slot: MealSlot;
+  /** Cooked in the house, eaten out or carried out */
+  kind: MealKind;
+  /** The guests in charge */
+  organizerIds: PersonId[];
+  /** What is on the menu */
+  menu?: string;
+  /** People to add to, or take from, the computed count */
+  headcountAdjustment?: number;
+}
+
+/**
+ * Data required to create or update a {@link ShoppingItem}.
+ * Excludes auto-generated fields (id, tripId, createdAt).
+ *
+ * @see {@link ShoppingItem}
+ */
+export interface ShoppingItemFormData {
+  /** What to buy */
+  name: string;
+  /** How much */
+  quantity?: string;
+  /** The guest who buys it */
+  buyerId?: PersonId;
+  /** Whether it is bought */
+  checked: boolean;
+}
+
+/**
  * Union of all trip-scoped entity types.
  */
 export type TripEntity =
@@ -2091,7 +2337,9 @@ export type TripEntity =
   | Ride
   | Vehicle
   | Activity
-  | Expense;
+  | Expense
+  | Meal
+  | ShoppingItem;
 
 /**
  * Union of all entity types in the application.
@@ -2250,6 +2498,27 @@ export const MAX_EXPENSE_SPLIT_VALUE = 1_000_000;
  * becoming a row nothing can render.
  */
 export const MAX_EXPENSE_SPLITS = 200;
+
+/**
+ * Largest correction a meal's headcount may carry, either way.
+ *
+ * A house of guests plus the neighbours, not a wedding. A remote value beyond
+ * it is clamped, so a peer cannot put a meal for a billion on the page.
+ */
+export const MAX_MEAL_HEADCOUNT_ADJUSTMENT = 99;
+
+/**
+ * Largest number of guests one meal may name as in charge.
+ */
+export const MAX_MEAL_ORGANIZERS = 20;
+
+/**
+ * Largest number of lines a trip's shopping list may hold.
+ *
+ * Checked by the repository on create. The list renders in one column, and a
+ * thousand lines is already far past any supermarket run.
+ */
+export const MAX_SHOPPING_ITEMS = 1_000;
 
 /**
  * Largest number of members a single {@link GuestGroup} may hold.

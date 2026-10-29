@@ -71,7 +71,8 @@
     "syncStatusRegion": "État de la synchronisation",
     "guestGroups": "Groupes",
     "vehicles": "Voitures",
-    "syncReadOnly": "Copie en lecture seule"
+    "syncReadOnly": "Copie en lecture seule",
+    "meals": "Repas"
   },
   "analytics": {
     "tripTitle": "Analyses du voyage",
@@ -1422,7 +1423,9 @@
       "removeRide": "supprimer un trajet",
       "removeVehicle": "supprimer une voiture",
       "removeActivity": "supprimer une activité",
-      "removeExpense": "supprimer une dépense"
+      "removeExpense": "supprimer une dépense",
+      "removeMeal": "vider un repas",
+      "removeShoppingItem": "retirer un article de la liste de courses"
     },
     "queuedCount_one": "1 demande en attente",
     "queuedCount_other": "{{count}} demandes en attente",
@@ -1543,7 +1546,12 @@
       "leaveRide": "{{person}} ne monte plus dans la voiture pour {{location}}",
       "addExpense": "Ajouté aux comptes : {{title}} ({{amount}})",
       "updateExpense": "Modifié dans les comptes : {{title}}",
-      "removeExpense": "Retiré des comptes : {{title}}"
+      "removeExpense": "Retiré des comptes : {{title}}",
+      "planMeal": "Organisé : {{slot}} du {{date}}",
+      "removeMeal": "Vidé : {{slot}} du {{date}}",
+      "addShoppingItem": "Ajouté à la liste de courses : {{name}}",
+      "checkShoppingItem": "Acheté : {{name}}",
+      "removeShoppingItem": "Retiré de la liste de courses : {{name}}"
     },
     "initializingCachedLoader": "Initialisation du modèle en cache…",
     "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…",
@@ -1554,7 +1562,12 @@
     "invalidVehicle": "Ces informations de voiture sont invalides, rien n'a été enregistré.",
     "readOnlyTrip": "Ce séjour est en lecture seule sur cet appareil. Connectez-vous pour le modifier.",
     "expenseNotFound": "Je n'ai pas trouvé cette ligne dans les comptes.",
-    "invalidExpense": "Je n'ai pas pu ajouter cette ligne : quelque chose ne tombe pas juste."
+    "invalidExpense": "Je n'ai pas pu ajouter cette ligne : quelque chose ne tombe pas juste.",
+    "mealPlannerOff": "Le planning des repas n’est pas disponible sur cet appareil.",
+    "mealNotFound": "Je n'ai pas trouvé ce repas.",
+    "invalidMeal": "Je n'ai pas pu organiser ce repas : le jour ou le repas n'est pas valide.",
+    "shoppingItemNotFound": "Je n'ai pas trouvé cet article dans la liste de courses.",
+    "invalidShoppingItem": "Je n'ai pas pu ajouter cet article : il lui faut un nom."
   },
   "auth": {
     "account": {
@@ -2205,5 +2218,95 @@
       "tooLarge": "Cette photo est trop lourde, même réduite.",
       "decodeFailed": "Cette photo n'a pas pu être lue. Essayez-en une autre."
     }
+  },
+  "meals": {
+    "title": "Repas",
+    "description": "Qui cuisine, ce qu’il y a au menu, et combien de personnes mangent.",
+    "view": {
+      "ariaLabel": "Vue du planning des repas",
+      "meals": "Repas",
+      "shopping": "Liste de courses"
+    },
+    "slots": {
+      "lunch": "Déjeuner",
+      "dinner": "Dîner"
+    },
+    "kinds": {
+      "home": "À la maison",
+      "restaurant": "Restaurant",
+      "picnic": "Pique-nique"
+    },
+    "kindLabel": "Où",
+    "today": "Aujourd’hui",
+    "noDays": "Ce voyage n’a pas encore de dates",
+    "noDaysDescription": "Indiquez les dates du voyage et chaque jour aura un déjeuner et un dîner à organiser.",
+    "unplanned": "Personne pour l’instant",
+    "plan": "Organiser le {{slot}} du {{date}}",
+    "open": "Ouvrir le {{slot}} du {{date}}",
+    "people_one": "{{count}} personne",
+    "people_other": "{{count}} personnes",
+    "organizers": {
+      "home": "Qui cuisine ?",
+      "restaurant": "Qui réserve ?",
+      "picnic": "Qui le prépare ?"
+    },
+    "menu": {
+      "home": "Menu",
+      "restaurant": "Restaurant",
+      "picnic": "Menu"
+    },
+    "menuPlaceholder": {
+      "home": "Lasagnes, salade verte",
+      "restaurant": "Le Bistrot du Port à 20 h",
+      "picnic": "Sandwichs et fruits"
+    },
+    "headcount": "Personnes à nourrir",
+    "headcountHint_one": "{{count}} personne est sur place à cette heure-là.",
+    "headcountHint_other": "{{count}} personnes sont sur place à cette heure-là.",
+    "decrease": "Une personne de moins",
+    "increase": "Une personne de plus",
+    "diets": "Régimes",
+    "notes": "Remarques alimentaires",
+    "dialogTitle": "{{slot}} · {{date}}",
+    "dialogDescription": "Remplissez ce que vous savez. Tout le monde sur le voyage le voit.",
+    "clear": "Vider ce repas",
+    "clearTitle": "Vider ce repas ?",
+    "clearDescription": "Le {{slot}} du {{date}} redevient vide. Les invités restent sur le voyage.",
+    "saveSuccess": "Repas enregistré",
+    "clearSuccess": "Repas vidé",
+    "shopping": {
+      "itemLabel": "Article",
+      "itemPlaceholder": "À acheter",
+      "quantityLabel": "Quantité",
+      "quantityPlaceholder": "Combien",
+      "add": "Ajouter",
+      "empty": "La liste de courses est vide",
+      "emptyDescription": "Ajoutez ce dont le groupe a besoin. Cochez chaque article au magasin.",
+      "toBuy": "À acheter",
+      "bought": "Acheté",
+      "buyer": "Qui achète {{name}}",
+      "noBuyer": "N’importe qui",
+      "check": "{{name}} est acheté",
+      "remove": "Retirer {{name}}",
+      "clearChecked": "Retirer les articles achetés",
+      "clearTitle": "Retirer les articles achetés ?",
+      "clearDescription_one": "{{count}} article acheté quitte la liste pour tout le monde sur le voyage.",
+      "clearDescription_other": "{{count}} articles achetés quittent la liste pour tout le monde sur le voyage.",
+      "cleared_one": "{{count}} article retiré",
+      "cleared_other": "{{count}} articles retirés"
+    }
+  },
+  "diets": {
+    "label": "Régime",
+    "hint": "Compté sur chaque repas que cet invité prend.",
+    "vegetarian": "Végétarien",
+    "vegan": "Végan",
+    "pescatarian": "Pescétarien",
+    "glutenFree": "Sans gluten",
+    "lactoseFree": "Sans lactose",
+    "noPork": "Sans porc",
+    "noteLabel": "Allergies et remarques alimentaires",
+    "notePlaceholder": "Arachides, pas d’œuf cru",
+    "count": "{{diet}} · {{count}}"
   }
 }

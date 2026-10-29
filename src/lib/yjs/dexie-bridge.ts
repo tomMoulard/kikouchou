@@ -21,10 +21,13 @@ import {
   isCalendarDayString,
   isInstantString,
   normalizeChildSeats,
+  normalizeDietaryTags,
   normalizeExpenseAmount,
   normalizeExpenseSplitValue,
   normalizeLeadTimeMinutes,
   normalizeMaxParticipants,
+  normalizeMealHeadcountAdjustment,
+  normalizeMealOrganizerIds,
   normalizeRoomCapacity,
   normalizeSeatCount,
   sanitizeOptionalText,
@@ -52,11 +55,13 @@ import type {
   ChildSeatKind,
   Expense,
   ExpenseSplit,
+  Meal,
   Person,
   Ride,
   Room,
   RoomAssignment,
   ShareId,
+  ShoppingItem,
   Transport,
   Trip,
   TripId,
@@ -74,6 +79,9 @@ import {
   EXPENSE_SPLIT_MODES,
   MAX_ACTIVITY_PARTICIPANTS,
   MAX_EXPENSE_SPLITS,
+  MEAL_KINDS,
+  MEAL_SLOTS,
+  DEFAULT_MEAL_KIND,
   normalizePersonHeadcount,
   RIDE_DIRECTIONS,
   RIDE_KINDS,
@@ -333,6 +341,22 @@ function buildGuestRecord(
     !(CHILD_SEAT_KINDS as readonly unknown[]).includes(person.childSeat)
   ) {
     delete person.childSeat;
+  }
+
+  // Diet tags are counted on every meal card, so an unknown tag from a newer
+  // peer is dropped on its own, as an unknown child seat is, and the note is
+  // bounded like the other free text on the guest.
+  const dietaryTags = normalizeDietaryTags(person.dietaryTags);
+  if (dietaryTags === undefined) {
+    delete person.dietaryTags;
+  } else {
+    person.dietaryTags = dietaryTags;
+  }
+  const dietaryNote = optionalBoundedText(person.dietaryNote, MAX_LENGTHS.personDietaryNote);
+  if (dietaryNote === undefined) {
+    delete person.dietaryNote;
+  } else {
+    person.dietaryNote = dietaryNote;
   }
 
   if (person.phone !== undefined) {
@@ -753,6 +777,95 @@ function buildExpenseRecord(
 }
 
 /**
+ * Projects one meal out of the document, bounding what the log carried.
+ *
+ * - `date` is the second component of `[tripId+date]`, the index every meal
+ *   read uses. A row without a calendar day could never be read or deleted
+ *   again, so it is dropped, as an expense without a date is.
+ * - `slot` and `kind` pick the row of the grid and the questions the meal
+ *   asks. An unknown slot from a newer peer has no row to show in, so that
+ *   meal is dropped. An unknown kind falls back to a meal cooked at home.
+ * - `headcountAdjustment` is added to a count of people. It is clamped, so a
+ *   peer cannot announce a dinner for a billion.
+ *
+ * @param meal - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie, or undefined when it is unusable
+ */
+function buildMealRecord(meal: SharedRecord, tripId: TripId): Meal | undefined {
+  const row = { ...meal, tripId } as Meal;
+
+  if (!isCalendarDayString(row.date)) {
+    return undefined;
+  }
+  if (!(MEAL_SLOTS as readonly unknown[]).includes(row.slot)) {
+    return undefined;
+  }
+  if (!(MEAL_KINDS as readonly unknown[]).includes(row.kind)) {
+    row.kind = DEFAULT_MEAL_KIND;
+  }
+
+  row.organizerIds = normalizeMealOrganizerIds(row.organizerIds);
+
+  const menu = optionalBoundedText(row.menu, MAX_LENGTHS.mealMenu);
+  if (menu === undefined) {
+    delete row.menu;
+  } else {
+    row.menu = menu;
+  }
+
+  const adjustment = normalizeMealHeadcountAdjustment(row.headcountAdjustment);
+  if (adjustment === undefined) {
+    delete row.headcountAdjustment;
+  } else {
+    row.headcountAdjustment = adjustment;
+  }
+
+  return row;
+}
+
+/**
+ * Projects one shopping line out of the document, bounding what the log
+ * carried.
+ *
+ * A line with no name renders as an empty checkbox nobody can identify, so it
+ * is dropped. `createdAt` only orders the list, so an unreadable one becomes 0
+ * rather than costing the line.
+ *
+ * @param item - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie, or undefined when it is unusable
+ */
+function buildShoppingItemRecord(
+  item: SharedRecord,
+  tripId: TripId,
+): ShoppingItem | undefined {
+  const row = { ...item, tripId } as ShoppingItem;
+
+  row.name = sanitizeText(boundedString(row.name), MAX_LENGTHS.shoppingItemName);
+  if (row.name.length === 0) {
+    return undefined;
+  }
+
+  const quantity = optionalBoundedText(row.quantity, MAX_LENGTHS.shoppingItemQuantity);
+  if (quantity === undefined) {
+    delete row.quantity;
+  } else {
+    row.quantity = quantity;
+  }
+
+  if (typeof row.buyerId !== 'string' || row.buyerId.length === 0) {
+    delete row.buyerId;
+  }
+
+  row.checked = row.checked === true;
+  row.createdAt =
+    typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) ? row.createdAt : 0;
+
+  return row;
+}
+
+/**
  * Writes only what actually changed, and deletes what the document dropped.
  *
  * The `bulkPut` used to be unconditional, so one guest's name arriving over
@@ -969,6 +1082,8 @@ export async function syncDocToDexie(
         db.vehicles,
         db.activities,
         db.expenses,
+        db.meals,
+        db.shoppingItems,
       ],
       async () => {
         // Rebuilt from the row as it is now, not as it was read above. The
@@ -1012,6 +1127,11 @@ export async function syncDocToDexie(
           .where('tripId')
           .equals(tripId)
           .toArray();
+        const currentMeals = await db.meals.where('tripId').equals(tripId).toArray();
+        const currentShoppingItems = await db.shoppingItems
+          .where('tripId')
+          .equals(tripId)
+          .toArray();
 
         const sharePhone = isGuestPhoneSharingEnabled();
         const localGuestsById = new Map(currentGuests.map((row) => [row.id as string, row]));
@@ -1042,6 +1162,12 @@ export async function syncDocToDexie(
         const nextExpenses = readCollection(doc, 'expenses')
           .map((expense) => buildExpenseRecord(expense, tripId))
           .filter((expense): expense is Expense => expense !== undefined);
+        const nextMeals = readCollection(doc, 'meals')
+          .map((meal) => buildMealRecord(meal, tripId))
+          .filter((meal): meal is Meal => meal !== undefined);
+        const nextShoppingItems = readCollection(doc, 'shoppingItems')
+          .map((item) => buildShoppingItemRecord(item, tripId))
+          .filter((item): item is ShoppingItem => item !== undefined);
 
         await replaceTripScopedRows(
           currentGuests,
@@ -1091,6 +1217,18 @@ export async function syncDocToDexie(
           (rows) => db.expenses.bulkPut(rows),
           (ids) => db.expenses.bulkDelete([...ids]),
         );
+        await replaceTripScopedRows(
+          currentMeals,
+          nextMeals,
+          (rows) => db.meals.bulkPut(rows),
+          (ids) => db.meals.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentShoppingItems,
+          nextShoppingItems,
+          (rows) => db.shoppingItems.bulkPut(rows),
+          (ids) => db.shoppingItems.bulkDelete([...ids]),
+        );
       },
     );
   } catch (error) {
@@ -1133,6 +1271,8 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     vehicles,
     activities,
     expenses,
+    meals,
+    shoppingItems,
   ] = await Promise.all([
       db.trips.get(tripId),
       db.persons.where('tripId').equals(tripId).toArray(),
@@ -1161,6 +1301,8 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
         .where('[tripId+date]')
         .between([tripId, ''], [tripId, '\uffff'])
         .toArray(),
+      db.meals.where('tripId').equals(tripId).toArray(),
+      db.shoppingItems.where('tripId').equals(tripId).toArray(),
     ]);
 
   if (!trip) {
@@ -1205,6 +1347,8 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       ['vehicles', vehicles],
       ['activities', activities],
       ['expenses', expenses],
+      ['meals', meals],
+      ['shoppingItems', shoppingItems],
     ];
 
     for (const [name, rows] of sources) {

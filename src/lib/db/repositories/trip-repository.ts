@@ -395,6 +395,8 @@ export async function deleteTrip(id: TripId): Promise<void> {
       db.rideNotices,
       db.activities,
       db.expenses,
+      db.meals,
+      db.shoppingItems,
       db.yjsUpdates,
       db.yjsOutbox,
       db.syncCursors,
@@ -417,6 +419,8 @@ export async function deleteTrip(id: TripId): Promise<void> {
         db.rooms.where('tripId').equals(id).delete(),
         db.activities.where('tripId').equals(id).delete(),
         db.expenses.where('tripId').equals(id).delete(),
+        db.meals.where('tripId').equals(id).delete(),
+        db.shoppingItems.where('tripId').equals(id).delete(),
         // Sync bookkeeping. Left behind, an outbox row would keep trying to
         // push edits for a trip that no longer exists, and a stale cursor would
         // make a re-joined trip skip the log it has never actually read.

@@ -290,6 +290,78 @@ export function isGuestOnSiteDuringDay(args: GuestPresenceQuery): boolean {
 }
 
 /**
+ * Minutes after local midnight at which a meal is taken to happen.
+ *
+ * Fixed rather than per meal: they only decide who is counted on the day a
+ * guest travels, and a guest landing at 15:00 misses lunch whether lunch is at
+ * noon or at one.
+ */
+export const MEAL_TIME_MINUTES = {
+  lunch: 12 * 60 + 30,
+  dinner: 19 * 60 + 30,
+} as const;
+
+/**
+ * Minutes after local midnight of a transport's instant, or null when it does
+ * not parse. Read in local time for the reason `deriveGuestStayDateBounds`
+ * gives: the instant is stored in UTC and the meal is eaten on the wall clock.
+ */
+function localMinutesOfInstant(datetime: string): number | null {
+  const date = new Date(datetime);
+  return Number.isNaN(date.getTime()) ? null : date.getHours() * 60 + date.getMinutes();
+}
+
+/**
+ * True if the guest is in the house for the meal at `minutes` on `dateKey`.
+ *
+ * The day rule ({@link isGuestOnSiteDuringDay}) first, then the guest's own
+ * transports on that day narrow it: a guest whose arrival that day is after
+ * the meal has not arrived yet, and one whose departure that day is before it
+ * has already left. A guest with no transport that day eats every meal of the
+ * day, which is the honest default when nobody said when they come.
+ *
+ * Nothing else about the day is guessed. Stay dates and room bookings carry no
+ * time, so they never take a guest away from a meal.
+ *
+ * @example
+ * ```typescript
+ * // Lands at 15:00 on the 10th: misses lunch, eats dinner.
+ * isGuestAtMeal({ ...query, dateKey: '2026-04-10', minutes: MEAL_TIME_MINUTES.lunch });  // false
+ * isGuestAtMeal({ ...query, dateKey: '2026-04-10', minutes: MEAL_TIME_MINUTES.dinner }); // true
+ * ```
+ */
+export function isGuestAtMeal(
+  args: GuestPresenceQuery & { readonly minutes: number },
+): boolean {
+  const { person, arrivals, departures, dateKey, minutes } = args;
+
+  if (!isGuestOnSiteDuringDay(args)) {
+    return false;
+  }
+
+  const onThatDay = (transport: Transport): number | null =>
+    transport.personId === person.id && localDayKeyOfInstant(transport.datetime) === dateKey
+      ? localMinutesOfInstant(transport.datetime)
+      : null;
+
+  const arrivalTimes = arrivals
+    .map(onThatDay)
+    .filter((value): value is number => value !== null);
+  if (arrivalTimes.length > 0 && Math.min(...arrivalTimes) > minutes) {
+    return false;
+  }
+
+  const departureTimes = departures
+    .map(onThatDay)
+    .filter((value): value is number => value !== null);
+  if (departureTimes.length > 0 && Math.max(...departureTimes) < minutes) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Guests sleeping on the given night, sorted by existing `persons` order
  * (typically by name). The night rule, so a guest who leaves that morning is
  * not on the list.

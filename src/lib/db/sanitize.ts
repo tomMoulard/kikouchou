@@ -12,12 +12,15 @@
 
 import {
   CHILD_SEAT_KINDS,
+  DIETARY_TAGS,
   MAX_ACTIVITY_PARTICIPANTS,
   MAX_EXPENSE_AMOUNT,
   MAX_EXPENSE_SPLITS,
   MAX_EXPENSE_SPLIT_VALUE,
   MAX_GUEST_GROUP_MEMBERS,
   MAX_LEAD_TIME_MINUTES,
+  MAX_MEAL_HEADCOUNT_ADJUSTMENT,
+  MAX_MEAL_ORGANIZERS,
   MAX_ROOM_CAPACITY,
   MAX_VEHICLE_SEAT_COUNT,
   MIN_LEAD_TIME_MINUTES,
@@ -26,7 +29,7 @@ import {
   normalizeCurrency,
   normalizePersonHeadcount,
 } from '@/types';
-import type { ChildSeatKind } from '@/types';
+import type { ChildSeatKind, DietaryTag } from '@/types';
 
 // ============================================================================
 // Constants - Maximum Lengths
@@ -98,6 +101,14 @@ export const MAX_LENGTHS = {
   rideLocation: 200,
   /** Ride notes (e.g., "Passer prendre le pain en redescendant") */
   rideNotes: 1000,
+  /** Guest food note (e.g., "Peanuts") */
+  personDietaryNote: 200,
+  /** Meal menu or restaurant (e.g., "Lasagne, salade verte") */
+  mealMenu: 500,
+  /** Shopping list line (e.g., "Baguettes") */
+  shoppingItemName: 100,
+  /** Shopping list quantity (e.g., "2 kg") */
+  shoppingItemQuantity: 30,
 } as const;
 
 // ============================================================================
@@ -215,6 +226,8 @@ export function sanitizePersonData<
     phone?: string;
     headcount?: number;
     childSeat?: string;
+    dietaryTags?: readonly string[];
+    dietaryNote?: string;
   },
 >(data: T): T {
   return {
@@ -225,6 +238,8 @@ export function sanitizePersonData<
     headcount:
       data.headcount === undefined ? undefined : normalizePersonHeadcount(data.headcount),
     childSeat: normalizeChildSeat(data.childSeat),
+    dietaryTags: normalizeDietaryTags(data.dietaryTags),
+    dietaryNote: sanitizeOptionalText(data.dietaryNote, MAX_LENGTHS.personDietaryNote),
   };
 }
 
@@ -610,6 +625,104 @@ export function normalizeChildSeat(value: string | undefined): ChildSeatKind | u
   return value !== undefined && (CHILD_SEAT_KINDS as readonly string[]).includes(value)
     ? (value as ChildSeatKind)
     : undefined;
+}
+
+/**
+ * Keeps the diet tags this build knows, once each, in the order they came.
+ *
+ * An unknown tag is dropped on its own, as an unknown child seat is: a newer
+ * peer may name a diet this build has never heard of, and losing one tag is
+ * better than losing the guest. An empty list reads as absent, so a guest
+ * with no diet stores nothing.
+ *
+ * @param value - The raw tags, from a form, a peer or the assistant
+ * @returns The known tags, or undefined when none remain
+ */
+export function normalizeDietaryTags(value: unknown): DietaryTag[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const tags = [
+    ...new Set(
+      value.filter((tag): tag is DietaryTag =>
+        (DIETARY_TAGS as readonly unknown[]).includes(tag),
+      ),
+    ),
+  ];
+  return tags.length > 0 ? tags : undefined;
+}
+
+/**
+ * Clamps a meal's headcount correction to a whole number within the bounds.
+ * Zero and anything unreadable read as absent: no correction.
+ *
+ * @param value - Raw correction (form, peer document, assistant)
+ * @returns A whole number within +/- {@link MAX_MEAL_HEADCOUNT_ADJUSTMENT}, or undefined
+ */
+export function normalizeMealHeadcountAdjustment(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const whole = Math.trunc(value);
+  const clamped = Math.max(
+    -MAX_MEAL_HEADCOUNT_ADJUSTMENT,
+    Math.min(MAX_MEAL_HEADCOUNT_ADJUSTMENT, whole),
+  );
+  return clamped === 0 ? undefined : clamped;
+}
+
+/**
+ * Keeps each guest id once, drops anything that is not a non-empty string,
+ * and bounds the list.
+ *
+ * @param value - Raw organiser ids
+ * @returns At most {@link MAX_MEAL_ORGANIZERS} distinct ids
+ */
+export function normalizeMealOrganizerIds<T extends string>(value: unknown): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const ids = value.filter(
+    (id): id is T => typeof id === 'string' && id.length > 0,
+  );
+  return [...new Set(ids)].slice(0, MAX_MEAL_ORGANIZERS);
+}
+
+/**
+ * Sanitizes meal form data.
+ *
+ * @param data - Meal form data to sanitize
+ * @returns Sanitized meal form data
+ */
+export function sanitizeMealData<
+  T extends {
+    menu?: string;
+    organizerIds: readonly string[];
+    headcountAdjustment?: number;
+  },
+>(data: T): T {
+  return {
+    ...data,
+    menu: sanitizeOptionalText(data.menu, MAX_LENGTHS.mealMenu),
+    organizerIds: normalizeMealOrganizerIds(data.organizerIds),
+    headcountAdjustment: normalizeMealHeadcountAdjustment(data.headcountAdjustment),
+  };
+}
+
+/**
+ * Sanitizes shopping item form data.
+ *
+ * @param data - Shopping item form data to sanitize
+ * @returns Sanitized shopping item form data
+ */
+export function sanitizeShoppingItemData<
+  T extends { name: string; quantity?: string },
+>(data: T): T {
+  return {
+    ...data,
+    name: sanitizeText(data.name, MAX_LENGTHS.shoppingItemName),
+    quantity: sanitizeOptionalText(data.quantity, MAX_LENGTHS.shoppingItemQuantity),
+  };
 }
 
 /**

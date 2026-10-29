@@ -53,6 +53,7 @@ export { useNowMs, NOW_REFRESH_INTERVAL_MS } from './useNowMs';
 
 // Feature flags
 export { useFeatureFlag, readFlagOverride, FLAG_OVERRIDE_PREFIX } from './useFeatureFlag';
+export { useMealPlannerEnabled } from './useMealPlannerEnabled';
 
 // Viewport shape — the breakpoints the layout itself draws
 export {
