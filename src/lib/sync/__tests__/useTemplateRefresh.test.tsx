@@ -250,6 +250,60 @@ describe('useTemplateRefresh', () => {
     expect(uploadTemplatePhotos).not.toHaveBeenCalled();
   });
 
+  it('lets the owner catch up after a member found nothing to refresh on this device', async () => {
+    let published = false;
+    const { client, updates } = stubClient(() =>
+      published ? PUBLISHED() : { data: [], error: null },
+    );
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = renderHook(
+      (props: { userId: string }) =>
+        useTemplateRefresh({
+          tripId,
+          remoteTripId: 'remote-1',
+          userId: props.userId,
+          online: true,
+          ready: true,
+          debounceMs: 0,
+        }),
+      { initialProps: { userId: 'member-1' } },
+    );
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    published = true;
+    rerender({ userId: 'owner-1' });
+
+    await waitFor(() => expect(updates).toHaveLength(2));
+    await waitFor(() => expect(uploadTemplatePhotos).toHaveBeenCalledTimes(1));
+  });
+
+  it('catches up again when the trip moves to another server row', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = renderHook(
+      (props: { remoteTripId: string }) =>
+        useTemplateRefresh({
+          tripId,
+          remoteTripId: props.remoteTripId,
+          userId: 'user-1',
+          online: true,
+          ready: true,
+          debounceMs: 0,
+        }),
+      { initialProps: { remoteTripId: 'remote-1' } },
+    );
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    rerender({ remoteTripId: 'remote-2' });
+
+    await waitFor(() => expect(updates).toHaveLength(2));
+    expect(updates[1]?.tripId).toBe('remote-2');
+  });
+
   it('sends a failed refresh again when the connection comes back', async () => {
     let attempt = 0;
     const { client, updates } = stubClient(() => {

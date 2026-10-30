@@ -82,7 +82,12 @@ interface UseTemplateRefreshOptions {
 
 /** What the server holds, as far as this device knows. */
 interface Settled {
-  readonly tripId: TripId;
+  /**
+   * The trip, its server row and the account, joined. What one account learned
+   * about one row says nothing about another: a member's `not-published` must
+   * not settle the catch-up of the owner who signs in next on the same device.
+   */
+  readonly scope: string;
   readonly key: string;
   /**
    * False for the baseline found on mount, which the server may not hold: a
@@ -143,9 +148,10 @@ export function useTemplateRefresh({
     if (!enabled || remoteTripId === null || currentKey === null) {
       return;
     }
+    const scope = `${tripId}|${remoteTripId}|${userId}`;
     let settled = settledRef.current;
-    if (settled === null || settled.tripId !== tripId) {
-      settled = { tripId, key: currentKey, confirmed: false };
+    if (settled === null || settled.scope !== scope) {
+      settled = { scope, key: currentKey, confirmed: false };
       settledRef.current = settled;
     }
     const edited = settled.key !== currentKey;
@@ -183,8 +189,8 @@ export function useTemplateRefresh({
         // again with the same payload would get the same answer. A photo that
         // could not be copied leaves it unconfirmed, so the next sync tries
         // again; the link works without it in the meantime.
-        if (settledRef.current?.tripId === tripId) {
-          settledRef.current = { tripId, key: currentKey, confirmed: photosFailed === 0 };
+        if (settledRef.current?.scope === scope) {
+          settledRef.current = { scope, key: currentKey, confirmed: photosFailed === 0 };
         }
       })();
     }, debounceMs);
@@ -193,5 +199,5 @@ export function useTemplateRefresh({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [currentKey, debounceMs, enabled, online, ready, remoteTripId, tripId]);
+  }, [currentKey, debounceMs, enabled, online, ready, remoteTripId, tripId, userId]);
 }
