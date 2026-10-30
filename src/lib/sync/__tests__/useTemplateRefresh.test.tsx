@@ -7,8 +7,10 @@
  * second time.
  *
  * The other half is what the hook must not do. It never writes what it found
- * on mount, because a device that has not hydrated yet holds an empty mirror,
- * and publishing that would strip every room from a live template.
+ * on mount before the trip has synced, because a device that has not hydrated
+ * yet holds an empty mirror, and publishing that would strip every room from a
+ * live template. Once it has synced, it sends what it holds once, so a
+ * template published before photos existed catches up without an edit.
  *
  * @module lib/sync/__tests__/useTemplateRefresh.test
  */
@@ -81,17 +83,25 @@ beforeEach(async () => {
   await waitForDb();
 });
 
-function mount(options: { online?: boolean; remoteTripId?: string | null; userId?: string | null } = {}) {
+function mount(
+  options: {
+    online?: boolean;
+    ready?: boolean;
+    remoteTripId?: string | null;
+    userId?: string | null;
+  } = {},
+) {
   return renderHook(
-    (props: { online: boolean }) =>
+    (props: { online: boolean; ready: boolean }) =>
       useTemplateRefresh({
         tripId,
         remoteTripId: options.remoteTripId === undefined ? 'remote-1' : options.remoteTripId,
         userId: options.userId === undefined ? 'user-1' : options.userId,
         online: props.online,
+        ready: props.ready,
         debounceMs: 0,
       }),
-    { initialProps: { online: options.online ?? true } },
+    { initialProps: { online: options.online ?? true, ready: options.ready ?? false } },
   );
 }
 
@@ -150,7 +160,7 @@ describe('useTemplateRefresh', () => {
     expect(uploadTemplatePhotos).not.toHaveBeenCalled();
   });
 
-  it('writes nothing for what it found on mount', async () => {
+  it('writes nothing for what it found on mount before the trip has synced', async () => {
     const { client, updates } = stubClient(PUBLISHED);
     vi.mocked(getSupabaseClient).mockResolvedValue(client);
 
@@ -159,6 +169,139 @@ describe('useTemplateRefresh', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(updates).toHaveLength(0);
+  });
+
+  it('brings an older template up to date once the trip has synced, without an edit', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+    // A template published before photos existed: the trip has a cover and a
+    // description the server copy never received.
+    await db.trips.update(tripId, {
+      photoId: 'coverPhoto0001' as PhotoId,
+      description: 'Check-in after 4pm.',
+    });
+
+    const { rerender } = mount();
+    await waitForDb();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(updates).toHaveLength(0);
+
+    rerender({ online: true, ready: true });
+
+    await waitFor(() => expect(updates).toHaveLength(1));
+    expect(updates[0]?.row).toMatchObject({
+      photo_id: 'coverPhoto0001',
+      description: 'Check-in after 4pm.',
+      rooms: [{ name: 'Attic', capacity: 4 }],
+    });
+    await waitFor(() => {
+      expect(uploadTemplatePhotos).toHaveBeenCalledWith(
+        client,
+        { id: tripId, remoteTripId: 'remote-1' },
+        expect.objectContaining({ photoId: 'coverPhoto0001' }),
+      );
+    });
+  });
+
+  it('catches up once per trip, not on every sync', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = mount({ ready: true });
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // A push flips the status to syncing and back.
+    rerender({ online: true, ready: false });
+    rerender({ online: true, ready: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(updates).toHaveLength(1);
+  });
+
+  it('tries a photo copy that failed again at the next sync', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+    vi.mocked(uploadTemplatePhotos).mockResolvedValueOnce(1);
+
+    const { rerender } = mount({ ready: true });
+    await waitFor(() => expect(uploadTemplatePhotos).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    rerender({ online: true, ready: false });
+    rerender({ online: true, ready: true });
+
+    await waitFor(() => expect(uploadTemplatePhotos).toHaveBeenCalledTimes(2));
+    expect(updates).toHaveLength(2);
+  });
+
+  it('settles the catch-up of a trip that is not published', async () => {
+    const { client, updates } = stubClient(() => ({ data: [], error: null }));
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = mount({ ready: true });
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    rerender({ online: true, ready: false });
+    rerender({ online: true, ready: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(updates).toHaveLength(1);
+    expect(uploadTemplatePhotos).not.toHaveBeenCalled();
+  });
+
+  it('lets the owner catch up after a member found nothing to refresh on this device', async () => {
+    let published = false;
+    const { client, updates } = stubClient(() =>
+      published ? PUBLISHED() : { data: [], error: null },
+    );
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = renderHook(
+      (props: { userId: string }) =>
+        useTemplateRefresh({
+          tripId,
+          remoteTripId: 'remote-1',
+          userId: props.userId,
+          online: true,
+          ready: true,
+          debounceMs: 0,
+        }),
+      { initialProps: { userId: 'member-1' } },
+    );
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    published = true;
+    rerender({ userId: 'owner-1' });
+
+    await waitFor(() => expect(updates).toHaveLength(2));
+    await waitFor(() => expect(uploadTemplatePhotos).toHaveBeenCalledTimes(1));
+  });
+
+  it('catches up again when the trip moves to another server row', async () => {
+    const { client, updates } = stubClient(PUBLISHED);
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    const { rerender } = renderHook(
+      (props: { remoteTripId: string }) =>
+        useTemplateRefresh({
+          tripId,
+          remoteTripId: props.remoteTripId,
+          userId: 'user-1',
+          online: true,
+          ready: true,
+          debounceMs: 0,
+        }),
+      { initialProps: { remoteTripId: 'remote-1' } },
+    );
+    await waitFor(() => expect(updates).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    rerender({ remoteTripId: 'remote-2' });
+
+    await waitFor(() => expect(updates).toHaveLength(2));
+    expect(updates[1]?.tripId).toBe('remote-2');
   });
 
   it('sends a failed refresh again when the connection comes back', async () => {
@@ -176,8 +319,8 @@ describe('useTemplateRefresh', () => {
     await updateTrip(tripId, { description: 'Bring slippers.' });
     await waitFor(() => expect(updates).toHaveLength(1));
 
-    rerender({ online: false });
-    rerender({ online: true });
+    rerender({ online: false, ready: false });
+    rerender({ online: true, ready: false });
 
     await waitFor(() => expect(updates).toHaveLength(2));
     expect(updates[1]?.row).toMatchObject({ description: 'Bring slippers.' });

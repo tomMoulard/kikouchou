@@ -201,6 +201,26 @@ describe('uploadTemplatePhotos', () => {
     expect(uploadPhoto).not.toHaveBeenCalled();
   });
 
+  it('counts every photo as failed when the template could not be read', async () => {
+    const list = vi.fn();
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: null, error: { message: 'Failed to fetch' } }),
+          }),
+        }),
+      }),
+      storage: { from: () => ({ list }) },
+    } as unknown as TypedSupabaseClient;
+
+    const failed = await uploadTemplatePhotos(client, TRIP, PAYLOAD);
+
+    expect(failed).toBe(2);
+    expect(list).not.toHaveBeenCalled();
+    expect(uploadPhoto).not.toHaveBeenCalled();
+  });
+
   it('does nothing without a photo or without a server trip', async () => {
     const { client, list } = stubClient({ tripRow: PUBLISHED });
 
