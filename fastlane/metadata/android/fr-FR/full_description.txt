@@ -1,0 +1,9 @@
+Kikouchou organise une maison de vacances pleine d'amis.
+
+Ajoutez les chambres, puis les invités, et donnez à chacun un lit pour chaque nuit. Le calendrier montre qui dort où, et prévient quand une chambre est pleine.
+
+Ajoutez les arrivées et les départs, en train, en avion ou en voiture. Kikouchou montre qui doit être récupéré à la gare, et à quelle heure partir.
+
+Partagez le voyage avec un lien ou un code QR. Tout le monde voit le même calendrier et peut ajouter sa propre arrivée.
+
+Tout fonctionne sur le téléphone, avec ou sans connexion. Un compte n'est utile que pour partager un voyage.

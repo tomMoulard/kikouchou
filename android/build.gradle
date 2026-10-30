@@ -1,0 +1,37 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        // Not on the F-Droid build's classpath at all: its scanner refuses a
+        // build that resolves Google's proprietary Gradle plugin. f-droid.org
+        // can pass Gradle a property (`gradleprops` in
+        // metadata/app.kikouchou.yml) but no environment variable, so either
+        // one names the flavor.
+        def flavor = System.getenv('KIKOUCHOU_ANDROID_FLAVOR') ?: findProperty('kikouchouAndroidFlavor')
+        if (flavor != 'fdroid') {
+            classpath 'com.google.gms:google-services:4.4.4'
+        }
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

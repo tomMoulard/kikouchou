@@ -1,0 +1,3 @@
+/* The iOS permission prompts, in English. Shown by the system, not the app. */
+"NSCameraUsageDescription" = "Kikouchou uses the camera to scan a trip's QR code.";
+"NSContactsUsageDescription" = "Kikouchou suggests matching contacts while you type a guest's name, to fill in their name and phone number.";

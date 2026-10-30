@@ -1,0 +1,247 @@
+/**
+ * @fileoverview Tests for assistant chat persistence and LLM history rebuild.
+ *
+ * @module features/assistant/__tests__/chat-storage
+ */
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import type { ChatMessageData } from '../components/ChatMessage';
+import {
+  MAX_PROMPT_HISTORY_CHARS,
+  MAX_PROMPT_HISTORY_MESSAGES,
+  clearAssistantChatStorage,
+  loadAssistantChatMessages,
+  messagesToLLMChatHistory,
+  saveAssistantChatMessages,
+  trimChatHistoryForPrompt,
+} from '../chat-storage';
+import { buildShowViewBlock } from '../views';
+import type { ChatMessage as LLMChatMessage } from '../hooks/useAssistantChat';
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+/**
+ * jsdom is configured without web storage here, so the round-trip needs one.
+ */
+function installMemoryLocalStorage(): void {
+  const store = new Map<string, string>();
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      get length(): number {
+        return store.size;
+      },
+      key: (index: number): string | null =>
+        Array.from(store.keys())[index] ?? null,
+      getItem: (key: string): string | null => store.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        store.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        store.delete(key);
+      },
+      clear: (): void => {
+        store.clear();
+      },
+    },
+  });
+}
+
+function message(
+  id: string,
+  role: 'user' | 'assistant',
+  content: string,
+  extra: Partial<ChatMessageData> = {},
+): ChatMessageData {
+  return { id, role, content, ...extra };
+}
+
+/** `count` complete exchanges followed by the prompt now being answered. */
+function exchanges(count: number, size = 10): LLMChatMessage[] {
+  const history: LLMChatMessage[] = [];
+  for (let index = 0; index < count; index += 1) {
+    history.push({ role: 'user', content: `q${index}`.padEnd(size, '.') });
+    history.push({ role: 'assistant', content: `a${index}`.padEnd(size, '.') });
+  }
+  history.push({ role: 'user', content: 'newest question' });
+  return history;
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('messagesToLLMChatHistory', () => {
+  it('keeps complete user/assistant pairs', () => {
+    expect(
+      messagesToLLMChatHistory([
+        message('1', 'user', 'hello'),
+        message('2', 'assistant', 'hi'),
+        message('3', 'user', 'again'),
+        message('4', 'assistant', 'sure'),
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi' },
+      { role: 'user', content: 'again' },
+      { role: 'assistant', content: 'sure' },
+    ]);
+  });
+
+  it('drops a prompt whose turn failed, so roles keep alternating', () => {
+    // Two user turns in a row make many chat templates throw, which would
+    // break every later generation rather than just the failed one.
+    const history = messagesToLLMChatHistory([
+      message('1', 'user', 'hello'),
+      message('2', 'assistant', 'hi'),
+      message('3', 'user', 'crashes'),
+      message('4', 'assistant', 'engine crashed', { failed: true }),
+      message('5', 'user', 'retry'),
+      message('6', 'assistant', 'done'),
+    ]);
+
+    expect(history).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi' },
+      { role: 'user', content: 'retry' },
+      { role: 'assistant', content: 'done' },
+    ]);
+  });
+
+  it('ignores queued prompts and answers still streaming', () => {
+    expect(
+      messagesToLLMChatHistory([
+        message('1', 'user', 'answered'),
+        message('2', 'assistant', 'yes'),
+        message('3', 'user', 'in flight'),
+        message('4', 'assistant', ''),
+        message('5', 'user', 'waiting', { queued: true }),
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'answered' },
+      { role: 'assistant', content: 'yes' },
+    ]);
+  });
+
+  it('leaves out a view a shortcut opened, which the model took no part in', () => {
+    expect(
+      messagesToLLMChatHistory([
+        message('1', 'user', 'hello'),
+        message('2', 'assistant', 'hi'),
+        message('3', 'user', 'Show the planning', { shortcut: true }),
+        message('4', 'assistant', buildShowViewBlock('planning'), { shortcut: true }),
+        message('5', 'user', 'who drives?'),
+        message('6', 'assistant', 'Tom'),
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'hi' },
+      { role: 'user', content: 'who drives?' },
+      { role: 'assistant', content: 'Tom' },
+    ]);
+  });
+});
+
+describe('saveAssistantChatMessages', () => {
+  beforeEach(() => {
+    installMemoryLocalStorage();
+    clearAssistantChatStorage();
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  it('persists only settled turns', () => {
+    saveAssistantChatMessages([
+      message('1', 'user', 'answered'),
+      message('2', 'assistant', 'yes'),
+      message('3', 'user', 'failed one'),
+      message('4', 'assistant', 'engine crashed', { failed: true }),
+      message('5', 'user', 'waiting', { queued: true }),
+      message('6', 'assistant', ''),
+    ]);
+
+    expect(loadAssistantChatMessages().map((m) => m.id)).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+  });
+  it('keeps a view a shortcut opened, so it is still there after a reload', () => {
+    saveAssistantChatMessages([
+      message('1', 'user', 'Show the rooms', { shortcut: true }),
+      message('2', 'assistant', buildShowViewBlock('rooms'), { shortcut: true }),
+    ]);
+
+    expect(loadAssistantChatMessages()).toEqual([
+      message('1', 'user', 'Show the rooms', { shortcut: true }),
+      message('2', 'assistant', buildShowViewBlock('rooms'), { shortcut: true }),
+    ]);
+  });
+
+  it('drops a stored message whose shortcut flag is not a flag', () => {
+    localStorage.setItem(
+      'kikouchou.assistant.chat.v1',
+      JSON.stringify([message('1', 'user', 'hi', { shortcut: 'yes' as unknown as boolean })]),
+    );
+
+    expect(loadAssistantChatMessages()).toEqual([]);
+  });
+});
+
+describe('trimChatHistoryForPrompt', () => {
+  it('leaves a short conversation untouched', () => {
+    const history = exchanges(2);
+
+    expect(trimChatHistoryForPrompt(history)).toEqual(history);
+  });
+
+  it('keeps only the most recent exchanges once the turn cap is passed', () => {
+    const trimmed = trimChatHistoryForPrompt(exchanges(10));
+
+    expect(trimmed).toHaveLength(MAX_PROMPT_HISTORY_MESSAGES + 1);
+    expect(trimmed.at(-1)?.content).toBe('newest question');
+    expect(trimmed[0]?.content).toContain('q7');
+  });
+
+  it('drops whole exchanges so the roles keep alternating', () => {
+    // Many chat templates reject two user turns in a row, so a history that
+    // starts on an assistant answer would break every later generation.
+    const trimmed = trimChatHistoryForPrompt(exchanges(10));
+
+    for (const [index, entry] of trimmed.entries()) {
+      expect(entry.role).toBe(index % 2 === 0 ? 'user' : 'assistant');
+    }
+  });
+
+  it('drops older exchanges when a few long answers blow the character budget', () => {
+    // Three exchanges is under the turn cap, but each answer is nearly the
+    // whole budget — a turn count alone would let this through.
+    const long = MAX_PROMPT_HISTORY_CHARS;
+    const trimmed = trimChatHistoryForPrompt(exchanges(3, long));
+
+    const size = trimmed.reduce((total, m) => total + m.content.length, 0);
+    expect(size).toBeLessThanOrEqual(MAX_PROMPT_HISTORY_CHARS);
+    expect(trimmed.at(-1)?.content).toBe('newest question');
+  });
+
+  it('keeps the prompt being answered even when it alone exceeds the budget', () => {
+    const huge = 'x'.repeat(MAX_PROMPT_HISTORY_CHARS * 2);
+    const trimmed = trimChatHistoryForPrompt([
+      { role: 'user', content: 'old' },
+      { role: 'assistant', content: 'older answer' },
+      { role: 'user', content: huge },
+    ]);
+
+    expect(trimmed).toEqual([{ role: 'user', content: huge }]);
+  });
+
+  it('returns an empty history unchanged', () => {
+    expect(trimChatHistoryForPrompt([])).toEqual([]);
+  });
+});

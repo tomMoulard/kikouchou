@@ -1,0 +1,244 @@
+/**
+ * @fileoverview E2E tests for Trip Import feature.
+ * Tests the ability to import configuration from a previous trip
+ * at the same location when creating a new trip.
+ *
+ * @module e2e/trip-import
+ */
+
+import { expect, test, type Page } from '@playwright/test';
+import { fixtureDate } from './support/fixture-dates';
+import { seedTrip } from './support/seed';
+
+// ============================================================================
+// Test Configuration & Helpers
+// ============================================================================
+
+/**
+ * The trip that gets imported from. Its dates are derived from today; see
+ * `support/fixture-dates`.
+ */
+const ORIGINAL_TRIP = {
+  name: 'Summer at Vacation Home',
+  location: 'Vacation Home',
+  // Carried by the import alongside the location — see `TripForm`'s
+  // `applyImportSource`. Without it the "pre-fills location and description"
+  // test below had no description to copy and only ever checked the location.
+  description: 'Bring your own towels and sunscreen.',
+  startDate: fixtureDate(15),
+  endDate: fixtureDate(22),
+} as const;
+
+/** The return visit, a month after the original, at the same location. */
+const RETURN_TRIP_DATES = {
+  startDate: fixtureDate(15, 3),
+  endDate: fixtureDate(22, 3),
+} as const;
+
+const ROOMS = ['Living Room', 'Master Bedroom', 'Guest Room'] as const;
+
+// Note: the location field is addressed as `#trip-location` throughout, not
+// `getByLabel(/location/i)` — once the autocomplete is open that label also
+// matches the cmdk group headed "Previously used location".
+
+/**
+ * Seeds the trip that gets imported from.
+ *
+ * Straight into IndexedDB rather than through the UI: on an empty device
+ * `/trips/new` is the first-trip wizard, and the import these tests are about
+ * lives on the one-page form a later trip gets. A trip on the device is what
+ * puts the form on screen, so the seed is also the precondition.
+ */
+async function seedOriginalTrip(page: Page): Promise<string> {
+  const { tripId } = await seedTrip(page, { ...ORIGINAL_TRIP });
+  return tripId;
+}
+
+/**
+ * Navigates to the rooms page and adds rooms to the current trip.
+ */
+async function addRooms(page: Page, roomNames: readonly string[]): Promise<void> {
+  // Navigate to rooms page via the trip menu
+  // Named exactly: the organiser's column links to the same page under
+  // "open the rooms page", so a loose match now finds three links.
+  await page.getByRole('link', { name: /^(rooms|chambres)$/i }).click();
+  await page.waitForURL(/\/rooms/);
+
+  for (const roomName of roomNames) {
+    // "New room", not "Add room" — `rooms.new` is the label the page renders,
+    // and there has never been an "Add room" button for this to find.
+    // `.first()` because the empty rooms page offers the action twice, in the
+    // header and in the empty state, exactly like the trip list.
+    await page.getByRole('button', { name: /new room/i }).first().click();
+
+    // Fill in the room name
+    await page.getByLabel(/room name/i).fill(roomName);
+
+    // Save the room
+    await page.getByRole('button', { name: /save/i }).click();
+
+    // Wait for the room to appear
+    await expect(page.getByText(roomName).first()).toBeVisible();
+  }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test.describe('Trip Import Feature', () => {
+  test.beforeEach(async ({ page }) => {
+    // The trip location field searches OpenStreetMap for places; keep that off
+    // the wire so these tests stay deterministic and don't depend on Nominatim.
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
+    await page.goto('/trips');
+    // Wait for the app to load
+    await page.waitForLoadState('load');
+  });
+
+  test('location autocomplete shows matching trips when typing', async ({ page }) => {
+    // Step 1: The first trip
+    await seedOriginalTrip(page);
+
+    // Step 2: Navigate back to create another trip
+    await page.goto('/trips');
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
+    await page.waitForURL(/\/trips\/new/);
+
+    // Step 3: Type the matching location
+    const locationInput = page.locator('#trip-location');
+    await locationInput.fill('Vacation');
+
+    // Step 4: Verify the autocomplete dropdown appears with the matching trip
+    await expect(
+      page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }),
+    ).toBeVisible({ timeout: 5000 });
+  });
+
+  test('importing a trip pre-fills location and description', async ({ page }) => {
+    // Step 1: The first trip, with a description
+    await seedOriginalTrip(page);
+
+    // Step 2: Navigate to create another trip
+    await page.goto('/trips');
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
+    await page.waitForURL(/\/trips\/new/);
+
+    // Step 3: Type the matching location and select import
+    const locationInput = page.locator('#trip-location');
+    await locationInput.fill('Vacation');
+
+    // Wait for the suggestion to appear and click it
+    // The suggestion is a cmdk `CommandItem`, so `role="option"` — there is no
+    // "import" button for `getByRole('button', { name: /import/i })` to find.
+    const importOption = page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }).first();
+    await expect(importOption).toBeVisible({ timeout: 5000 });
+    await importOption.click();
+
+    // Step 4: Verify the location field is pre-filled
+    await expect(locationInput).toHaveValue(ORIGINAL_TRIP.location);
+
+    // ...and the description, which this test has always been named for and
+    // never checked. `applyImportSource` copies both.
+    await expect(page.locator('#trip-description')).toHaveValue(
+      ORIGINAL_TRIP.description,
+    );
+
+    // Verify import badge is shown, naming the trip it is importing from.
+    await expect(
+      page.getByText(new RegExp(`importing from.*${ORIGINAL_TRIP.name}`, 'i')),
+    ).toBeVisible();
+  });
+
+  test('importing a trip clones rooms to the new trip', async ({ page }) => {
+    // Step 1: The first trip
+    const originalTripId = await seedOriginalTrip(page);
+    await page.goto(`/trips/${originalTripId}/calendar`);
+
+    // Step 2: Add rooms to the first trip
+    await addRooms(page, ROOMS);
+
+    // Step 3: Navigate to create another trip
+    await page.goto('/trips');
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
+    await page.waitForURL(/\/trips\/new/);
+
+    // Step 4: Type the matching location and import
+    const locationInput = page.locator('#trip-location');
+    await locationInput.fill('Vacation');
+
+    // The suggestion is a cmdk `CommandItem`, so `role="option"` — there is no
+    // "import" button for `getByRole('button', { name: /import/i })` to find.
+    const importOption = page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }).first();
+    await expect(importOption).toBeVisible({ timeout: 5000 });
+    await importOption.click();
+
+    // Step 5: Fill in remaining required fields and save
+    await page.getByLabel(/trip name/i).fill('Return to Vacation Home');
+
+    await page.locator('#trip-start-date').fill(RETURN_TRIP_DATES.startDate);
+    await page.locator('#trip-end-date').fill(RETURN_TRIP_DATES.endDate);
+
+    await page.getByRole('button', { name: /save/i }).click();
+
+    // Step 6: Wait for navigation and go to rooms
+    await page.waitForURL(/\/calendar/);
+    // Named exactly: the organiser's column links to the same page under
+  // "open the rooms page", so a loose match now finds three links.
+  await page.getByRole('link', { name: /^(rooms|chambres)$/i }).click();
+    await page.waitForURL(/\/rooms/);
+
+    // Step 7: Verify all rooms were cloned — every one of them, and nothing
+    // else. Scoped to the rooms list and counted: an unscoped `getByText` per
+    // name says nothing about how many rooms the clone actually produced, so a
+    // clone that duplicated each room would have passed.
+    //
+    // The rooms page opens on its occupancy timeline, whose rows are the
+    // `role="list"` named "Room rows" — the card grid's own list is not
+    // rendered in that view.
+    const rooms = page.getByRole('list', { name: /room rows/i }).getByRole('listitem');
+    await expect(rooms).toHaveCount(ROOMS.length);
+    for (const roomName of ROOMS) {
+      await expect(rooms.filter({ hasText: roomName })).toHaveCount(1);
+    }
+  });
+
+  test('can dismiss import and type a fresh location', async ({ page }) => {
+    // Step 1: A trip
+    await seedOriginalTrip(page);
+
+    // Step 2: Navigate to create another trip
+    await page.goto('/trips');
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
+    await page.waitForURL(/\/trips\/new/);
+
+    // Step 3: Type a matching location — suggestions appear
+    const locationInput = page.locator('#trip-location');
+    await locationInput.fill('Vacation');
+
+    // Wait for suggestions
+    await expect(
+      page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }),
+    ).toBeVisible({ timeout: 5000 });
+
+    // Step 4: Clear the input and type something else
+    await locationInput.clear();
+    await locationInput.fill('Brand New Place');
+
+    // Step 5: Verify no suggestions show for unmatched location
+    // Give it a moment to search
+    await page.waitForTimeout(500);
+
+    // The autocomplete should not show the old trip.
+    //
+    // Scoped to the listbox: the trip's name is also painted in the header and
+    // the sidebar because it is the current trip, so a bare `getByText` here
+    // matched the chrome and never looked at the suggestions at all.
+    await expect(
+      page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }),
+    ).toHaveCount(0);
+  });
+});

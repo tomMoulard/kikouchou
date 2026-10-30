@@ -1,0 +1,9 @@
+Kikouchou plans a holiday house full of friends.
+
+Put the rooms in, then the guests, and give each guest a bed for each night. The calendar shows who sleeps where, and warns you when a room is full.
+
+Add the arrivals and departures, by train, plane or car. Kikouchou shows who has to be picked up at the station, and when to leave.
+
+Share the trip with a link or a QR code. Everybody sees the same calendar and can add their own arrival.
+
+Everything works on the phone, with or without a connection. An account is only needed to share a trip.
