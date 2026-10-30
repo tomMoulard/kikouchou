@@ -157,11 +157,14 @@ export function SupabaseTripSync({
 
   // Keep a published template's copy in step with the trip, the same way the
   // preview above follows the name. Never from a viewer, for the same reason.
+  // `ready` waits for the document to have caught up with the server, so the
+  // catch-up write publishes the trip as it is and not a half-hydrated mirror.
   useTemplateRefresh({
     tripId,
     remoteTripId: isViewer ? null : (remoteTripId ?? null),
     userId: session !== null ? userId : null,
     online: state.status !== 'offline',
+    ready: state.status === 'synced',
   });
 
   /**

@@ -22,10 +22,13 @@
  * reader can reach.
  *
  * The copy follows the trip. `useTemplateRefresh` rewrites it from the owner's
- * device after each edit of the trip or of its rooms, so a customer who opens
- * the link reads what the trip says now. It is still a copy: an edit made on a
- * device that is offline reaches the link when that device reconnects, and an
- * edit a member makes reaches it once the owner's device has received it.
+ * device after each edit of the trip or of its rooms (the name, the
+ * description, the cover photo, the rooms and their photos), and once more
+ * whenever the owner opens the trip and it has synced, so a template published
+ * before a field existed catches up too. A customer who opens the link reads
+ * what the trip says now. It is still a copy: an edit made on a device that is
+ * offline reaches the link when that device reconnects, and an edit a member
+ * makes reaches it once the owner's device has received it.
  *
  * @module lib/sync/templates
  */
@@ -681,7 +684,8 @@ export function templatePhotoIds(payload: TripTemplatePayload): PhotoId[] {
  * @param client - The owner's signed-in client
  * @param trip - The local trip, whose cache holds the bytes
  * @param payload - The payload just written
- * @returns How many photos could not be copied
+ * @returns How many photos could not be copied, all of them when the template
+ *   itself could not be read
  */
 export async function uploadTemplatePhotos(
   client: TypedSupabaseClient,
@@ -694,7 +698,12 @@ export async function uploadTemplatePhotos(
   }
 
   const state = await readTemplateState(client, trip.remoteTripId);
-  if (state.status !== 'ok' || !state.state.isTemplate || state.state.token === null) {
+  if (state.status !== 'ok') {
+    // Nothing was checked, so nothing was copied: every photo counts as failed
+    // and the caller tries again.
+    return photoIds.length;
+  }
+  if (!state.state.isTemplate || state.state.token === null) {
     return 0;
   }
   const token = state.state.token;
