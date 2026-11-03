@@ -422,5 +422,5 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "Kikouchou ${version}" --generate-notes --verify-tag
+            gh release create "$tag" "${files[@]}" --title "$tag" --generate-notes --verify-tag
           fi
