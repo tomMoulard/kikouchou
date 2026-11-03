@@ -483,8 +483,11 @@ fingerprint, or wait for Apple's CDN (step 1.12).
 ## Part 3: every release after the first
 
 1. Change `version` in `package.json`. The Android `versionCode` comes from it
-   (`android/app/build.gradle`), and Play refuses a code it has seen. Commit
-   and merge the change.
+   (`android/app/build.gradle`), and Play refuses a code it has seen.
+   Write the release notes in
+   `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt`, for
+   `en-US` and `fr-FR`, 500 characters at most. Google Play shows them, and so
+   do F-Droid and IzzyOnDroid. Commit and merge the change.
 2. Tag and push:
 
    ```bash

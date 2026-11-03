@@ -234,11 +234,41 @@ jobs:
         if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON == '' || env.ANDROID_KEYSTORE_BASE64 == '' }}
         run: echo "::warning title=No Play upload::PLAY_SERVICE_ACCOUNT_JSON or ANDROID_KEYSTORE_BASE64 is unset, so the AAB is not uploaded to Google Play."
 
+      - uses: actions/checkout@v4
+        if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
+
       - uses: actions/download-artifact@v4
         if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
         with:
           name: android
           path: out/
+
+      # Play names a release after the versionName ("0.1.1") and shows no
+      # notes unless it is given both. The name is the tag; the notes are the
+      # store changelog of this versionCode, the same file F-Droid reads.
+      - name: Write the release name and notes
+        id: notes
+        if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          IFS=. read -r major minor patch <<< "$version"
+          code=$(( major * 1000000 + minor * 1000 + patch ))
+          echo "name=v${version}" >> "$GITHUB_OUTPUT"
+          mkdir -p whatsnew
+          for dir in fastlane/metadata/android/*/; do
+            locale="$(basename "$dir")"
+            file="${dir}changelogs/${code}.txt"
+            [ -f "$file" ] || continue
+            # Play keeps 500 characters per language. Cut characters, not
+            # bytes, so an accent is never split in two.
+            node -e 'const [f, o] = process.argv.slice(1); require("fs").writeFileSync(o, [...require("fs").readFileSync(f, "utf8").trim()].slice(0, 500).join(""))' "$file" "whatsnew/whatsnew-${locale}"
+          done
+          if ls whatsnew/whatsnew-* >/dev/null 2>&1; then
+            echo "dir=whatsnew" >> "$GITHUB_OUTPUT"
+            ls whatsnew
+          else
+            echo "::warning title=No Play release notes::No fastlane/metadata/android/*/changelogs/${code}.txt, so this Play release has no notes."
+          fi
 
       - name: Upload to the Play internal track
         if: ${{ env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
@@ -247,6 +277,8 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: app.kikouchou
           releaseFiles: out/*.aab
+          releaseName: ${{ steps.notes.outputs.name }}
+          whatsNewDirectory: ${{ steps.notes.outputs.dir }}
           track: internal
           # A new app accepts only draft releases until its first review.
           status: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
