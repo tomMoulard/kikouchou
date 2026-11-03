@@ -1,0 +1,5 @@
+Plan lunches and dinners, with a shared shopping list.
+Add a cover photo to a trip, and a photo to each room.
+See the activities as a day-by-day planning.
+Type a guest's name to get suggestions from your contacts.
+An invited guest says when they arrive as they join the trip.

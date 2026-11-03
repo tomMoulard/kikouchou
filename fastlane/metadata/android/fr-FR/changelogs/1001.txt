@@ -1,0 +1,5 @@
+Prévoyez les déjeuners et les dîners, avec une liste de courses partagée.
+Ajoutez une photo de couverture au voyage, et une photo à chaque chambre.
+Voyez les activités sous forme de planning jour par jour.
+Tapez le nom d'un invité pour voir les suggestions de vos contacts.
+Un invité dit quand il arrive au moment où il rejoint le voyage.
