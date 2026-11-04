@@ -422,5 +422,8 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "$tag" --generate-notes --verify-tag
+            # The store changelog of this version first, in both languages,
+            # then the list of changes GitHub generates.
+            scripts/release-notes.sh "$version" > "$RUNNER_TEMP/notes.md"
+            gh release create "$tag" "${files[@]}" --title "$tag" --notes-file "$RUNNER_TEMP/notes.md" --generate-notes --verify-tag
           fi

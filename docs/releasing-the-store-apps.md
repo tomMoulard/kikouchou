@@ -517,7 +517,8 @@ fingerprint, or wait for Apple's CDN (step 1.12).
    Write the release notes in
    `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt`, for
    `en-US` and `fr-FR`, 500 characters at most. Google Play shows them, and so
-   do F-Droid and IzzyOnDroid. Commit and merge the change.
+   do F-Droid and IzzyOnDroid. The GitHub release starts with them too
+   (`scripts/release-notes.sh`). Commit and merge the change.
 2. Tag and push:
 
    ```bash
