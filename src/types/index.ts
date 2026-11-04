@@ -867,6 +867,19 @@ export interface Room extends Identifiable, TripScoped {
  * };
  * ```
  */
+/**
+ * One stay of a guest: a check-in day and a check-out day.
+ *
+ * `endDate` is the check-out day, as for a room assignment, so the nights
+ * covered stop before it. A period with `startDate === endDate` is a day visit.
+ */
+export interface GuestStayPeriod {
+  /** Check-in day (YYYY-MM-DD). */
+  readonly startDate: ISODateString;
+  /** Check-out day (YYYY-MM-DD), on or after `startDate`. */
+  readonly endDate: ISODateString;
+}
+
 export interface Person extends Identifiable, TripScoped {
   /** Unique person identifier */
   readonly id: PersonId;
@@ -897,6 +910,22 @@ export interface Person extends Identifiable, TripScoped {
    * @example "2024-07-22"
    */
   stayEndDate?: ISODateString;
+
+  /**
+   * Further stays of the same guest, after the first one
+   * (`stayStartDate` → `stayEndDate`).
+   *
+   * A guest can come for the first three weeks of July, again in August, and
+   * for the last week of September: three periods, one guest. Each period has
+   * both dates, `endDate` the check-out day as everywhere else. Kept beside
+   * the first stay rather than replacing it, so a device on an older build
+   * still reads the first stay, and carries this field through sync untouched
+   * (the bridge spreads fields it does not know).
+   *
+   * Read the periods with `listStatedStayPeriods` / `resolveGuestStayPeriods`
+   * (`features/persons/utils/guest-presence`), never this field alone.
+   */
+  extraStays?: GuestStayPeriod[];
 
   /**
    * Optional free-text notes (allergies, diet, accessibility, etc.).
@@ -2045,6 +2074,8 @@ export interface PersonFormData {
   stayStartDate?: ISODateString;
   /** Optional stay end date (ISO format, YYYY-MM-DD) */
   stayEndDate?: ISODateString;
+  /** Further stays after the first one, each with both dates */
+  extraStays?: GuestStayPeriod[];
   /** Optional notes (allergies, diet, etc.) */
   notes?: string;
   /** Optional phone number, shared with everyone on the trip */

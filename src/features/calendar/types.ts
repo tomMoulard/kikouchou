@@ -235,15 +235,20 @@ export interface CalendarTimelineRowModel {
   readonly person: Person;
   readonly items: readonly TimelineItemWithLane[];
   readonly laneCount: number;
-  readonly staySpan?: {
+  /**
+   * The dashed outline of each stay no room booking covers yet, one per stay.
+   * A guest who stays several times has several, with the gaps between them
+   * left blank. Empty when every stay has a bed.
+   */
+  readonly staySpans: readonly {
     readonly startIndex: number;
     readonly endIndex: number;
-  };
+  }[];
   /**
-   * Checkout day index (within tripDays) for this person.
-   * Represents the day they leave and therefore do not sleep on that day.
+   * Checkout day index (within tripDays) of each stay of this person: the days
+   * they leave and therefore do not sleep on.
    */
-  readonly checkoutDayIndex?: number;
+  readonly checkoutDayIndices: readonly number[];
 }
 
 export interface CalendarTimelineModel {

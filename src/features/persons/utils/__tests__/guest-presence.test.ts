@@ -14,7 +14,11 @@ import {
   deriveGuestStayDateBounds,
   isGuestOnSiteDuringDay,
   isGuestOnSiteOnDate,
+  listExtraStayPeriods,
   listGuestsOnSiteOnDate,
+  listStatedStayPeriods,
+  pairTransportStays,
+  resolveGuestStayPeriods,
   resolveGuestStayWindow,
 } from '../guest-presence';
 
@@ -599,5 +603,212 @@ describe('buildGuestIdsByTripDateMap', () => {
       tripEndDate: iso('2026-04-10'),
     });
     expect(map.size).toBe(0);
+  });
+});
+
+// ============================================================================
+// Several stays
+// ============================================================================
+
+/** Ana: 1st to the 22nd of April, back 1st to 8th May, then 24th to 31st May. */
+function returningGuest(): Person {
+  return {
+    ...person('ana', { start: '2026-04-01', end: '2026-04-22' }),
+    extraStays: [
+      // Stored out of order on purpose: the readers sort.
+      { startDate: iso('2026-05-24'), endDate: iso('2026-05-31') },
+      { startDate: iso('2026-05-01'), endDate: iso('2026-05-08') },
+    ],
+  };
+}
+
+describe('listExtraStayPeriods / listStatedStayPeriods', () => {
+  it('lists every stated stay, earliest first', () => {
+    expect(listStatedStayPeriods(returningGuest())).toEqual([
+      { startDate: '2026-04-01', endDate: '2026-04-22' },
+      { startDate: '2026-05-01', endDate: '2026-05-08' },
+      { startDate: '2026-05-24', endDate: '2026-05-31' },
+    ]);
+  });
+
+  it('drops a malformed further stay on its own, as a peer might send one', () => {
+    const p = {
+      ...person('p1'),
+      extraStays: [
+        { startDate: 'soon', endDate: '2026-05-08' },
+        { startDate: '2026-05-08', endDate: '2026-05-01' },
+        null,
+        { startDate: '2026-06-01', endDate: '2026-06-03' },
+      ],
+    } as unknown as Person;
+
+    expect(listExtraStayPeriods(p)).toEqual([{ startDate: '2026-06-01', endDate: '2026-06-03' }]);
+  });
+
+  it('leaves out a first stay with only one of its days', () => {
+    const p = { ...person('p1'), stayStartDate: iso('2026-04-01') };
+    expect(listStatedStayPeriods(p)).toEqual([]);
+  });
+});
+
+describe('pairTransportStays', () => {
+  const p = person('p1');
+
+  it('pairs each arrival with the next departure', () => {
+    expect(
+      pairTransportStays(
+        p,
+        [
+          transport('a1', p.id, 'arrival', '2026-04-01', '10:00'),
+          transport('a2', p.id, 'arrival', '2026-05-01', '10:00'),
+        ],
+        [
+          transport('d1', p.id, 'departure', '2026-04-22', '10:00'),
+          transport('d2', p.id, 'departure', '2026-05-08', '10:00'),
+        ],
+      ),
+    ).toEqual([
+      { arrival: '2026-04-01', departure: '2026-04-22' },
+      { arrival: '2026-05-01', departure: '2026-05-08' },
+    ]);
+  });
+
+  it('reads a connecting arrival leg and a second leg home as one stay', () => {
+    expect(
+      pairTransportStays(
+        p,
+        [
+          transport('a1', p.id, 'arrival', '2026-04-01', '08:00'),
+          transport('a2', p.id, 'arrival', '2026-04-01', '14:00'),
+        ],
+        [
+          transport('d1', p.id, 'departure', '2026-04-10', '08:00'),
+          transport('d2', p.id, 'departure', '2026-04-11', '09:00'),
+        ],
+      ),
+    ).toEqual([{ arrival: '2026-04-01', departure: '2026-04-11' }]);
+  });
+
+  it('leaves the unknown end of a stay open', () => {
+    expect(
+      pairTransportStays(
+        p,
+        [transport('a1', p.id, 'arrival', '2026-04-12', '10:00')],
+        [transport('d1', p.id, 'departure', '2026-04-08', '10:00')],
+      ),
+    ).toEqual([
+      { arrival: null, departure: '2026-04-08' },
+      { arrival: '2026-04-12', departure: null },
+    ]);
+  });
+
+  it("ignores other guests' legs and an instant that does not parse", () => {
+    const broken = { ...transport('a1', p.id, 'arrival', '2026-04-01', '10:00'), datetime: 'nope' };
+    expect(
+      pairTransportStays(
+        p,
+        [broken as Transport, transport('a2', 'other', 'arrival', '2026-04-01', '10:00')],
+        [],
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('resolveGuestStayPeriods', () => {
+  it('reads every stated stay, and nothing from travel', () => {
+    const ana = returningGuest();
+    expect(
+      resolveGuestStayPeriods(
+        ana,
+        [transport('a1', ana.id, 'arrival', '2026-04-10', '10:00')],
+        [],
+        TRIP_WINDOW,
+      ),
+    ).toEqual([
+      { arrival: '2026-04-01', departure: '2026-04-22' },
+      { arrival: '2026-05-01', departure: '2026-05-08' },
+      { arrival: '2026-05-24', departure: '2026-05-31' },
+    ]);
+  });
+
+  it('fills the missing end of a half-dated first stay from the trip when there are more', () => {
+    const p = {
+      ...person('p1'),
+      stayStartDate: iso('2026-04-10'),
+      extraStays: [{ startDate: iso('2026-05-01'), endDate: iso('2026-05-03') }],
+    };
+    expect(resolveGuestStayPeriods(p, [], [], TRIP_WINDOW)).toEqual([
+      { arrival: '2026-04-10', departure: '2026-04-25' },
+      { arrival: '2026-05-01', departure: '2026-05-03' },
+    ]);
+  });
+
+  it('reads a guest with no stated stay from their travel, one stay per pair', () => {
+    const p = person('p1');
+    expect(
+      resolveGuestStayPeriods(
+        p,
+        [
+          transport('a1', p.id, 'arrival', '2026-04-06', '10:00'),
+          transport('a2', p.id, 'arrival', '2026-04-15', '10:00'),
+        ],
+        [transport('d1', p.id, 'departure', '2026-04-09', '10:00')],
+        TRIP_WINDOW,
+      ),
+    ).toEqual([
+      { arrival: '2026-04-06', departure: '2026-04-09' },
+      // No departure after the second arrival: the trip's end.
+      { arrival: '2026-04-15', departure: '2026-04-25' },
+    ]);
+  });
+
+  it('takes a guest with nothing for the whole trip', () => {
+    expect(resolveGuestStayPeriods(person('p1'), [], [], TRIP_WINDOW)).toEqual([
+      { arrival: '2026-04-05', departure: '2026-04-25' },
+    ]);
+  });
+
+  it('spans every stay in resolveGuestStayWindow, gaps included', () => {
+    expect(resolveGuestStayWindow(returningGuest(), [], [], TRIP_WINDOW)).toEqual({
+      arrival: '2026-04-01',
+      departure: '2026-05-31',
+    });
+  });
+});
+
+describe('presence of a guest who comes back', () => {
+  const query = (dateKey: string) => ({
+    person: returningGuest(),
+    arrivals: [],
+    departures: [],
+    assignments: [],
+    tripWindow: NO_TRIP_DATES,
+    dateKey: iso(dateKey),
+  });
+
+  it('is here on a night of each stay', () => {
+    expect(isGuestOnSiteOnDate(query('2026-04-21'))).toBe(true);
+    expect(isGuestOnSiteOnDate(query('2026-05-01'))).toBe(true);
+    expect(isGuestOnSiteOnDate(query('2026-05-30'))).toBe(true);
+  });
+
+  it('is not here between two stays', () => {
+    expect(isGuestOnSiteOnDate(query('2026-04-25'))).toBe(false);
+    expect(isGuestOnSiteDuringDay(query('2026-04-25'))).toBe(false);
+    expect(isGuestOnSiteOnDate(query('2026-05-15'))).toBe(false);
+  });
+
+  it('is here on each check-out morning, and sleeps elsewhere that night', () => {
+    expect(isGuestOnSiteDuringDay(query('2026-04-22'))).toBe(true);
+    expect(isGuestOnSiteOnDate(query('2026-04-22'))).toBe(false);
+  });
+
+  it('is here between two stays when a room is booked for that night', () => {
+    expect(
+      isGuestOnSiteOnDate({
+        ...query('2026-05-15'),
+        assignments: [assignment('ana', '2026-05-15', '2026-05-16')],
+      }),
+    ).toBe(true);
   });
 });

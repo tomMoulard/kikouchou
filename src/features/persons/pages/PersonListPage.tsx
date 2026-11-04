@@ -65,6 +65,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
+import { listStatedStayPeriods } from '@/features/persons/utils/guest-presence';
 import {
   GuestGroupImportDialog,
   SaveGuestsAsGroupDialog,
@@ -133,25 +134,23 @@ interface PersonCardProps {
 // ============================================================================
 
 /**
- * Formats guest stay dates for the card (check-out day exclusive in storage, shown as end date).
+ * Formats a guest's stays for the card (check-out day exclusive in storage,
+ * shown as end date). A guest who comes back gets every stay, joined with
+ * ` · `: "2 Jul - 8 Jul · 3 Aug - 9 Aug".
  */
 function formatPersonStayRangeLabel(
   person: Person,
   locale: Locale,
 ): string | undefined {
-  if (!person.stayStartDate || !person.stayEndDate) {
-    return undefined;
-  }
-  try {
-    const start = parseISO(person.stayStartDate);
-    const end = parseISO(person.stayEndDate);
+  const labels = listStatedStayPeriods(person).flatMap((stay) => {
+    const start = parseISO(stay.startDate);
+    const end = parseISO(stay.endDate);
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-      return undefined;
+      return [];
     }
-    return `${format(start, 'd MMM', { locale })} – ${format(end, 'd MMM', { locale })}`;
-  } catch {
-    return undefined;
-  }
+    return [`${format(start, 'd MMM', { locale })} - ${format(end, 'd MMM', { locale })}`];
+  });
+  return labels.length > 0 ? labels.join(' · ') : undefined;
 }
 
 // ============================================================================

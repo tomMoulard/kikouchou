@@ -259,9 +259,9 @@ describe('buildCalendarTimelineModel', () => {
 
     const row = model.rows[0]!;
     // Stay span should be derived from arrival (Apr 1) to departure-1 (Apr 4)
-    expect(row.staySpan).toBeDefined();
-    expect(row.staySpan!.startIndex).toBe(0);
-    expect(row.staySpan!.endIndex).toBe(3);
+    expect(row.staySpans).toHaveLength(1);
+    expect(row.staySpans[0]!.startIndex).toBe(0);
+    expect(row.staySpans[0]!.endIndex).toBe(3);
   });
 
   it('falls back to person stayStartDate/stayEndDate when no transports', () => {
@@ -282,9 +282,9 @@ describe('buildCalendarTimelineModel', () => {
     });
 
     const row = model.rows[0]!;
-    expect(row.staySpan).toBeDefined();
-    expect(row.staySpan!.startIndex).toBe(1); // Apr 2
-    expect(row.staySpan!.endIndex).toBe(2);   // Apr 3 (last night before checkout)
+    expect(row.staySpans).toHaveLength(1);
+    expect(row.staySpans[0]!.startIndex).toBe(1); // Apr 2
+    expect(row.staySpans[0]!.endIndex).toBe(2);   // Apr 3 (last night before checkout)
   });
 
   it('prefers explicit person stay dates over transport-derived bounds', () => {
@@ -323,9 +323,9 @@ describe('buildCalendarTimelineModel', () => {
     });
 
     const row = model.rows[0]!;
-    expect(row.staySpan).toBeDefined();
-    expect(row.staySpan!.startIndex).toBe(2); // Apr 3
-    expect(row.staySpan!.endIndex).toBe(2);   // Apr 3 (checkout Apr 4)
+    expect(row.staySpans).toHaveLength(1);
+    expect(row.staySpans[0]!.startIndex).toBe(2); // Apr 3
+    expect(row.staySpans[0]!.endIndex).toBe(2);   // Apr 3 (checkout Apr 4)
   });
 
   it('clips assignment bars to explicit stay dates', () => {
@@ -390,7 +390,7 @@ describe('buildCalendarTimelineModel', () => {
     expect(assignmentItem).toBeDefined();
     expect(assignmentItem!.startIndex).toBe(2); // Apr 3
     expect(assignmentItem!.endIndex).toBe(4);   // Apr 5 (last night before checkout Apr 6)
-    expect(row.staySpan).toBeUndefined();
+    expect(row.staySpans).toEqual([]);
   });
 
   it('merges transports into host assignment items', () => {
@@ -694,7 +694,7 @@ describe('buildCalendarTimelineModel', () => {
 
     const row = model.rows[0]!;
     // Stay span should be undefined since assignment covers entire stay
-    expect(row.staySpan).toBeUndefined();
+    expect(row.staySpans).toEqual([]);
   });
 
   it('keeps stay span when there is a gap in assignment coverage', () => {
@@ -740,7 +740,7 @@ describe('buildCalendarTimelineModel', () => {
 
     const row = model.rows[0]!;
     // Stay span should still be shown because there's a gap
-    expect(row.staySpan).toBeDefined();
+    expect(row.staySpans).toHaveLength(1);
   });
 
   it('handles transport with no location using unknownLabel', () => {
@@ -806,8 +806,7 @@ describe('buildCalendarTimelineModel', () => {
     });
 
     const row = model.rows[0]!;
-    expect(row.checkoutDayIndex).toBeDefined();
-    expect(row.checkoutDayIndex).toBe(2); // Apr 3 is index 2
+        expect(row.checkoutDayIndices).toEqual([2]); // Apr 3 is index 2
   });
 
   it('computes maxLaneCount across all rows', () => {
@@ -1205,7 +1204,7 @@ describe('buildCalendarTimelineModel: bars and the stay window', () => {
   it('hatches nothing for a check-out date that cannot be read', () => {
     const odd = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('nope') };
 
-    expect(rowFor(odd, []).checkoutDayIndex).toBeUndefined();
+    expect(rowFor(odd, []).checkoutDayIndices).toEqual([]);
   });
 
   it('drops a leg whose time cannot be read', () => {
@@ -1275,7 +1274,7 @@ describe('buildCalendarTimelineModel: bars and the stay window', () => {
       stayFor('p1', 'b', 'r2', '2026-04-03', '2026-04-05'),
     ]);
 
-    expect(row.staySpan).toBeUndefined();
+    expect(row.staySpans).toEqual([]);
   });
 
   it('keeps the dashed window over a night no stay covers', () => {
@@ -1285,7 +1284,7 @@ describe('buildCalendarTimelineModel: bars and the stay window', () => {
       stayFor('p1', 'b', 'r2', '2026-04-04', '2026-04-06'),
     ]);
 
-    expect(row.staySpan).toEqual({ startIndex: 1, endIndex: 4 });
+    expect(row.staySpans).toEqual([{ startIndex: 1, endIndex: 4 }]);
   });
 
   it('keeps the dashed window when only the last night is uncovered', () => {
@@ -1295,25 +1294,25 @@ describe('buildCalendarTimelineModel: bars and the stay window', () => {
       stayFor('p1', 'b', 'r2', '2026-04-04', '2026-04-05'),
     ]);
 
-    expect(row.staySpan).toEqual({ startIndex: 1, endIndex: 4 });
+    expect(row.staySpans).toEqual([{ startIndex: 1, endIndex: 4 }]);
   });
 
   it('hatches the only column of a one-day trip', () => {
     const row = rowFor(p1, [], createTrip({ endDate: iso('2026-04-01') }));
 
-    expect(row.checkoutDayIndex).toBe(0);
+    expect(row.checkoutDayIndices).toEqual([0]);
   });
 
   it('hatches the last column for a check-out past the end of the axis', () => {
     const late = { ...p1, stayStartDate: iso('2026-04-02'), stayEndDate: iso('2026-04-20') };
 
-    expect(rowFor(late, []).checkoutDayIndex).toBe(4);
+    expect(rowFor(late, []).checkoutDayIndices).toEqual([4]);
   });
 
   it('hatches nothing for a check-out before the axis begins', () => {
     const early = { ...p1, stayStartDate: iso('2026-03-20'), stayEndDate: iso('2026-03-25') };
 
-    expect(rowFor(early, []).checkoutDayIndex).toBeUndefined();
+    expect(rowFor(early, []).checkoutDayIndices).toEqual([]);
   });
 
   it('keeps another guest’s travel off the row', () => {
@@ -1441,5 +1440,71 @@ describe('buildCalendarTimelineDays', () => {
 
     // Nights of the 1st and the 2nd; the 3rd is the check-out morning.
     expect(toDayKeys(days)).toEqual(['2026-06-01', '2026-06-02']);
+  });
+});
+
+// ============================================================================
+// A guest who comes back
+// ============================================================================
+
+describe('buildCalendarTimelineModel, several stays', () => {
+  // Trip 1 to 5 April; the guest stays the 1st night, then the 3rd and 4th.
+  const returning: Person = {
+    ...p1,
+    stayStartDate: iso('2026-04-01'),
+    stayEndDate: iso('2026-04-02'),
+    extraStays: [{ startDate: iso('2026-04-03'), endDate: iso('2026-04-05') }],
+  };
+
+  function rowOf(assignments: RoomAssignment[]) {
+    return buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [returning],
+      rooms: [room1],
+      assignments,
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    }).rows[0]!;
+  }
+
+  it('outlines each stay on its own, with the gap blank', () => {
+    const row = rowOf([]);
+
+    expect(row.staySpans).toEqual([
+      { startIndex: 0, endIndex: 0 },
+      { startIndex: 2, endIndex: 3 },
+    ]);
+    expect(row.checkoutDayIndices).toEqual([1, 4]);
+  });
+
+  it('draws a booking of the second stay in place, and keeps the first stay outlined', () => {
+    const booking: RoomAssignment = {
+      id: 'a2' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: room1.id,
+      personId: p1.id,
+      startDate: iso('2026-04-03'),
+      endDate: iso('2026-04-05'),
+    };
+    const row = rowOf([booking]);
+
+    const bars = row.items.filter((item) => item.kind === 'assignment');
+    expect(bars.map((bar) => [bar.startIndex, bar.endIndex])).toEqual([[2, 3]]);
+    expect(row.staySpans).toEqual([{ startIndex: 0, endIndex: 0 }]);
+  });
+
+  it('never stretches a single booking across the gap', () => {
+    const booking: RoomAssignment = {
+      id: 'a1' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: room1.id,
+      personId: p1.id,
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-02'),
+    };
+    const bars = rowOf([booking]).items.filter((item) => item.kind === 'assignment');
+
+    expect(bars.map((bar) => [bar.startIndex, bar.endIndex])).toEqual([[0, 0]]);
   });
 });

@@ -19,6 +19,7 @@ import {
   getRoomsByTripId,
   getTransportsByTripId,
 } from '@/lib/db';
+import { normalizeExtraStays } from '@/lib/db/sanitize';
 import { getPersonHeadcount } from '@/types';
 import type {
   Person,
@@ -309,6 +310,13 @@ function processTransportModification(
 // Conflict Field Detection
 // ============================================================================
 
+/** A guest's further stays as one comparable string; absent and empty agree. */
+function extraStaysKey(person: Person): string {
+  return normalizeExtraStays(person.extraStays)
+    .map((stay) => `${stay.startDate}/${stay.endDate}`)
+    .join(',');
+}
+
 function getPersonConflictingFields(host: Person, guest: Person): string[] {
   const fields: string[] = [];
   if (host.name !== guest.name) fields.push('name');
@@ -322,6 +330,7 @@ function getPersonConflictingFields(host: Person, guest: Person): string[] {
   // guest whose only edit was their child's seat would have returned a
   // changeset the host silently discarded.
   if (host.childSeat !== guest.childSeat) fields.push('childSeat');
+  if (extraStaysKey(host) !== extraStaysKey(guest)) fields.push('extraStays');
   return fields;
 }
 

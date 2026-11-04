@@ -20,7 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useFormSubmission, useOfflineAwareNotify } from '@/hooks';
 import { useTranslation } from 'react-i18next';
-import { type Locale, isValid, parseISO } from 'date-fns';
+import { type Locale, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   Calendar,
@@ -77,6 +77,15 @@ import type {
   RoomId,
 } from '@/types';
 import { toLocalISODateString } from '@/lib/db/utils';
+import { parseLocalDayKey } from '@/lib/utils/trip-days';
+import {
+  listExtraStayPeriods,
+  resolveGuestStayPeriods,
+} from '@/features/persons/utils/guest-presence';
+import {
+  calculateUnassignedDates,
+  groupUnassignedNightsIntoStays,
+} from '@/features/rooms/utils/unassigned-guests';
 import { useStalled } from '@/hooks/useStalled';
 import { captureDeletion } from '@/lib/posthog';
 
@@ -119,9 +128,9 @@ interface AssignmentItemProps {
  * Transport dates for a person (arrival and departure).
  */
 interface PersonTransportDates {
-  /** Earliest arrival date (from arrival transports) */
+  /** Check-in of the stay to book: the first stay still missing a bed */
   readonly arrivalDate: Date | undefined;
-  /** Latest departure date (from departure transports) */
+  /** Check-out of that stay */
   readonly departureDate: Date | undefined;
 }
 
@@ -853,33 +862,51 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
     return ids;
   }, [assignments, tripAssignments]);
 
-  // Get transport dates for a person (for autofill in assignment dialog)
+  // The dates a new booking for a guest starts on: the first of their stays
+  // that still has a night with no bed, or their first stay when every night
+  // is covered. Stays come from what the guest stated, then from their travel
+  // (each arrival paired with the next departure). A guest with neither gets
+  // no suggestion: guessing the whole trip would book nights nobody asked for.
+  // For the same reason the trip's dates never fill a bound here: a guest
+  // with only an arrival gets the arrival, and picks the check-out.
   const getPersonTransportDates = useCallback(
     (personId: PersonId): PersonTransportDates => {
+      // The list first: the lookup is a cache that can lag the list by a
+      // render, and an unknown guest still has travel to borrow from.
+      const person: Person = persons.find((candidate) => candidate.id === personId) ??
+        getPersonById(personId) ?? ({ id: personId } as Person);
       const transports = getTransportsByPerson(personId);
-      
-      // Find earliest arrival and latest departure
-      let arrivalDate: Date | undefined;
-      let departureDate: Date | undefined;
+      const arrivals = transports.filter((transport) => transport.type === 'arrival');
+      const departures = transports.filter((transport) => transport.type !== 'arrival');
 
-      for (const transport of transports) {
-        const transportDate = parseISO(transport.datetime);
-        if (!isValid(transportDate)) {continue;}
-
-        if (transport.type === 'arrival') {
-          if (!arrivalDate || transportDate < arrivalDate) {
-            arrivalDate = transportDate;
-          }
-        } else if (transport.type === 'departure') {
-          if (!departureDate || transportDate > departureDate) {
-            departureDate = transportDate;
-          }
-        }
+      const hasStatedStay =
+        Boolean(person.stayStartDate || person.stayEndDate) ||
+        listExtraStayPeriods(person).length > 0;
+      if (!hasStatedStay && transports.length === 0) {
+        return { arrivalDate: undefined, departureDate: undefined };
       }
 
-      return { arrivalDate, departureDate };
+      const tripWindow = { startDate: undefined, endDate: undefined };
+      const unassigned = calculateUnassignedDates(
+        person,
+        arrivals,
+        departures,
+        tripAssignments,
+        tripWindow,
+      );
+      const firstGap = unassigned
+        ? groupUnassignedNightsIntoStays(unassigned.unassignedDates)[0]
+        : undefined;
+      const firstStay = resolveGuestStayPeriods(person, arrivals, departures, tripWindow)[0];
+      const startKey = firstGap?.startDate ?? firstStay?.arrival ?? null;
+      const endKey = firstGap?.endDate ?? firstStay?.departure ?? null;
+
+      return {
+        arrivalDate: (startKey && parseLocalDayKey(startKey)) || undefined,
+        departureDate: (endKey && parseLocalDayKey(endKey)) || undefined,
+      };
     },
-    [getTransportsByPerson],
+    [getPersonById, getTransportsByPerson, persons, tripAssignments],
   );
 
   // Get room capacity for capacity checks

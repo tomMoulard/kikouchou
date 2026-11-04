@@ -96,6 +96,20 @@ describe('Person mappers', () => {
     expect(result).toEqual(testPerson);
   });
 
+  it('round-trips the further stays of a guest who comes back', () => {
+    const person: Person = {
+      ...testPerson,
+      extraStays: [
+        { startDate: '2026-08-01' as ISODateString, endDate: '2026-08-08' as ISODateString },
+      ],
+    };
+    expect(protoToPerson(personToProto(person)).extraStays).toEqual(person.extraStays);
+  });
+
+  it('carries no further stays for a guest who stays once', () => {
+    expect(protoToPerson(personToProto(testPerson))).not.toHaveProperty('extraStays');
+  });
+
   it('handles person without stay dates', () => {
     const person: Person = { ...testPerson, stayStartDate: undefined, stayEndDate: undefined };
     const proto = personToProto(person);

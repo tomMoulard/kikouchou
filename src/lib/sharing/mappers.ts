@@ -27,11 +27,13 @@ import {
   EntityListSchema,
   PersonSchema,
   RoomAssignmentSchema,
+  StayPeriodSchema,
   TransportSchema,
   TripChangesetSchema,
 } from '@/gen/changeset_pb';
 import {
   MAX_LENGTHS,
+  normalizeExtraStays,
   normalizeRoomCapacity,
   sanitizeOptionalText,
 } from '@/lib/db/sanitize';
@@ -144,6 +146,9 @@ export function personToProto(person: Person): ProtoPerson {
       person.childSeat === undefined
         ? undefined
         : CHILD_SEAT_TO_PROTO[person.childSeat],
+    extraStays: normalizeExtraStays(person.extraStays).map((stay) =>
+      create(StayPeriodSchema, { startDate: stay.startDate, endDate: stay.endDate }),
+    ),
   });
 }
 
@@ -289,6 +294,13 @@ export function protoToPerson(proto: ProtoPerson): Person {
   };
   if (proto.notes) {
     person.notes = proto.notes;
+  }
+  // Scanned off someone else's screen, so checked like a synced guest's.
+  const extraStays = normalizeExtraStays(
+    proto.extraStays.map((stay) => ({ startDate: stay.startDate, endDate: stay.endDate })),
+  );
+  if (extraStays.length > 0) {
+    person.extraStays = extraStays;
   }
   // Bounded here rather than trusted: a changeset is scanned off someone else's
   // screen, and nothing upstream of this point clips the string.

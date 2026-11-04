@@ -66,6 +66,15 @@ message Person {
   // Child restraint this guest needs in a car. Absent = none, which is the
   // answer for every adult.
   optional ChildSeatKind child_seat = 10;
+  // Further stays after the first one (stay_start_date to stay_end_date), for
+  // a guest who comes back later in the trip. Empty for one stay.
+  repeated StayPeriod extra_stays = 11;
+}
+
+// One stay of a guest: check-in and check-out days, ISO YYYY-MM-DD.
+message StayPeriod {
+  string start_date = 1;
+  string end_date = 2;
 }
 
 // Links a person to a room for a specific date range.

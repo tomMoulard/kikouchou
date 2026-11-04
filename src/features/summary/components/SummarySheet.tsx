@@ -219,10 +219,15 @@ const GuestRow = memo(function GuestRow({
 }): ReactElement {
   const { t } = useTranslation();
 
+  // A guest who comes back prints every stay; one stay prints as it did.
   const stay =
-    guest.arrivalDate !== null && guest.departureDate !== null
-      ? formatDateRange(guest.arrivalDate, guest.departureDate, dateLocale)
-      : null;
+    guest.stayPeriods.length > 1
+      ? guest.stayPeriods
+          .map((period) => formatDateRange(period.arrival, period.departure, dateLocale))
+          .join(' · ')
+      : guest.arrivalDate !== null && guest.departureDate !== null
+        ? formatDateRange(guest.arrivalDate, guest.departureDate, dateLocale)
+        : null;
 
   return (
     <li className="break-inside-avoid py-1 text-sm">

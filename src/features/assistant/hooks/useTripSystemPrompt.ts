@@ -31,6 +31,7 @@ import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 import { computeBalances } from '@/features/money/lib/balances';
 import { loadTripMoney } from '@/features/money/lib/trip-money';
 import { buildMealAttendance } from '@/features/meals/utils/meal-headcount';
+import { listStatedStayPeriods } from '@/features/persons/utils/guest-presence';
 
 import {
   collectDrivenRideIds,
@@ -405,10 +406,17 @@ function formatGuestLine(person: Person, withDiet: boolean): string {
   // A guest with no dates of their own is here for the whole trip, the way the
   // rest of the app reads them — saying nothing let the model answer that it
   // did not know when they were around.
+  // A guest who comes back has several stays; each is listed so the model can
+  // answer "is she here on the 3rd?" with the gap in mind.
+  const statedStays = listStatedStayPeriods(person);
   const stay =
-    person.stayStartDate && person.stayEndDate
-      ? ` (stay: ${person.stayStartDate} to ${person.stayEndDate})`
-      : ' (stay: whole trip)';
+    statedStays.length > 1
+      ? ` (stays: ${statedStays.map((period) => `${period.startDate} to ${period.endDate}`).join('; ')})`
+      : person.stayStartDate && person.stayEndDate
+        ? ` (stay: ${person.stayStartDate} to ${person.stayEndDate})`
+        : statedStays[0]
+          ? ` (stay: ${statedStays[0].startDate} to ${statedStays[0].endDate})`
+          : ' (stay: whole trip)';
   const headcount = getPersonHeadcount(person);
   const headcountLabel = headcount > 1 ? ` — counts as ${headcount} people` : '';
   const phone = person.phone ? ` — phone: ${toPromptText(person.phone)}` : '';

@@ -141,8 +141,8 @@ async function renderInFrench(
           person: makePerson('Alice'),
           laneCount: 1,
           items: [],
-          staySpan: undefined,
-          checkoutDayIndex: undefined,
+          staySpans: [],
+          checkoutDayIndices: [],
           ...model,
         }}
         viewport={viewport}

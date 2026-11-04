@@ -131,14 +131,21 @@ async function upsertRoom(room: Room): Promise<void> {
  * asymmetry, as the Yjs projection in `lib/yjs/dexie-bridge`.
  */
 async function upsertPerson(person: Person): Promise<void> {
-  if (person.phone === undefined) {
-    const existing = await db.persons.get(person.id);
-    if (existing?.phone !== undefined) {
-      await db.persons.put({ ...person, phone: existing.phone });
-      return;
-    }
-  }
-  await db.persons.put(person);
+  const existing =
+    person.phone === undefined || person.extraStays === undefined
+      ? await db.persons.get(person.id)
+      : undefined;
+  // Further stays follow the phone's rule for the same reason: a sender on an
+  // older build carries none, so their absence is silence, not a removal.
+  const carried: Partial<Person> = {
+    ...(person.phone === undefined && existing?.phone !== undefined
+      ? { phone: existing.phone }
+      : {}),
+    ...(person.extraStays === undefined && existing?.extraStays !== undefined
+      ? { extraStays: existing.extraStays }
+      : {}),
+  };
+  await db.persons.put({ ...person, ...carried });
 }
 
 async function upsertAssignment(assignment: RoomAssignment): Promise<void> {

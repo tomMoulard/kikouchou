@@ -75,7 +75,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Trip ----------------------------------------------------------------
   {
     action: 'createTrip',
-    label: 'Make another trip and switch to it',
+    label: 'Make another trip',
     fields: {
       name: {
         type: 'string',
@@ -123,7 +123,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateTrip',
-    label: 'Edit the selected trip; a new location clears its map pin',
+    label: 'Edit the trip; a new location clears its pin',
     fields: {
       name: {
         type: 'string',
@@ -215,8 +215,32 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
     },
   },
   {
+    action: 'addStay',
+    label: 'Guest returns',
+    fields: {
+      personId: {
+        type: 'string',
+        required: true,
+        description: 'Guest id',
+        example: '<guest id>',
+      },
+      from: {
+        type: 'string',
+        required: true,
+        description: 'Arrival (YYYY-MM-DD)',
+        example: '2026-05-01',
+      },
+      to: {
+        type: 'string',
+        required: true,
+        description: 'Departure (YYYY-MM-DD)',
+        example: '2026-05-08',
+      },
+    },
+  },
+  {
     action: 'importGuestGroup',
-    label: 'Copy a saved group in as guests',
+    label: 'Copy a saved group in',
     fields: {
       groupId: {
         type: 'string',
@@ -292,7 +316,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Room Assignments ----------------------------------------------------
   {
     action: 'assignRoom',
-    label: 'Give a guest a room for a date range',
+    label: 'Give a guest a room',
     fields: {
       personId: {
         type: 'string',
@@ -336,7 +360,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Transport -----------------------------------------------------------
   {
     action: 'addTransport',
-    label: "A guest's own arrival or departure",
+    label: "A guest's arrival or departure",
     fields: {
       personId: {
         type: 'string',
@@ -456,7 +480,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateRide',
-    label: 'Edit a car journey, never creates one',
+    label: 'Edit a car journey',
     fields: {
       rideId: {
         type: 'string',
@@ -629,7 +653,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Activities (shared agenda) ------------------------------------------
   {
     action: 'addActivity',
-    label: 'Add to the shared agenda',
+    label: 'Add to the agenda',
     fields: {
       title: {
         type: 'string',
@@ -696,7 +720,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateActivity',
-    label: 'Edit an agenda entry, never creates one',
+    label: 'Edit an agenda entry',
     fields: {
       activityId: {
         type: 'string',
@@ -812,7 +836,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Money ---------------------------------------------------------------
   {
     action: 'addExpense',
-    label: 'Add a line to the accounts',
+    label: 'Add an accounts line',
     fields: {
       title: {
         type: 'string',
@@ -874,7 +898,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateExpense',
-    label: 'Edit a line, never creates one',
+    label: 'Edit a line',
     fields: {
       expenseId: {
         type: 'string',
@@ -945,7 +969,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // validator checks it, like every action.
   {
     action: 'showView',
-    label: 'Show a trip view',
+    label: 'Show a view',
     fields: {
       view: {
         type: 'string',
@@ -1310,7 +1334,7 @@ export function generateActionPrompt(
     'After createTrip, the rest applies to the new trip.',
     // Covers rides as well as activities: membership is a join/leave verb in
     // both, and updateRide has no passenger field for the model to reach for.
-    'Change who is in an activity or a car with join / leave, never with update.',
+    'Change who is in an activity or a car with join / leave, never with update. Updates never create.',
   );
 
   return lines;

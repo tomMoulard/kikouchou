@@ -23,16 +23,28 @@
  * that can be given to somebody else that night, or a person who is in the
  * house that morning.
  *
+ * ## A guest can stay several times
+ *
+ * A guest's stay is a list of periods, not one span: the first three weeks of
+ * July, again in August, the last week of September. {@link resolveGuestStayPeriods}
+ * is the one reader. Stated stays win (`stayStartDate`/`stayEndDate` as the
+ * first, `extraStays` after it); a guest with none is read from their travel,
+ * each arrival paired with the next departure; a guest with no travel either
+ * stays for the whole trip. The presence questions ask whether *any* period
+ * covers the night or the day, so a guest between two stays is not here.
+ *
  * @module features/persons/utils/guest-presence
  */
 
 import { isDateInStayRange } from '@/features/rooms/utils/capacity-utils';
+import { normalizeExtraStays } from '@/lib/db/sanitize';
 import {
   buildDayColumns,
   localDayKeyOfInstant,
   toDayKeys,
 } from '@/lib/utils/trip-days';
 import type {
+  GuestStayPeriod,
   ISODateString,
   Person,
   PersonId,
@@ -142,6 +154,181 @@ export function deriveGuestStayDateBounds(
 }
 
 /**
+ * One stay of a guest as the app reads it: each bound may be unknown (`null`)
+ * when neither the guest's records nor the trip say it.
+ */
+export interface ResolvedStayPeriod {
+  readonly arrival: ISODateString | null;
+  readonly departure: ISODateString | null;
+}
+
+/**
+ * The guest's further stays (`extraStays`), as usable periods: both bounds a
+ * calendar day, the check-out on or after the check-in, sorted by check-in.
+ * See `normalizeExtraStays`, which the sync bridge applies on the way in too.
+ *
+ * @param person - The guest
+ * @returns The usable further stays, earliest first
+ */
+export function listExtraStayPeriods(person: Pick<Person, 'extraStays'>): GuestStayPeriod[] {
+  return normalizeExtraStays(person.extraStays);
+}
+
+/**
+ * Every stay the guest *stated*: the first (`stayStartDate` → `stayEndDate`)
+ * when both of its dates are set, then the further ones. Sorted by check-in.
+ *
+ * Only what was typed: no travel, no trip. Reach for this to show or edit the
+ * stays; to ask where the guest is, use {@link resolveGuestStayPeriods}.
+ *
+ * @param person - The guest
+ * @returns The stated stays, earliest first
+ */
+export function listStatedStayPeriods(
+  person: Pick<Person, 'stayStartDate' | 'stayEndDate' | 'extraStays'>,
+): GuestStayPeriod[] {
+  const periods = listExtraStayPeriods(person);
+  if (
+    person.stayStartDate &&
+    person.stayEndDate &&
+    person.stayStartDate <= person.stayEndDate
+  ) {
+    periods.push({ startDate: person.stayStartDate, endDate: person.stayEndDate });
+  }
+  return periods.sort((left, right) => left.startDate.localeCompare(right.startDate));
+}
+
+/**
+ * The guest's stays read from their travel: each arrival opens a stay and the
+ * next departure closes it.
+ *
+ * - A second arrival while a stay is open is a connecting leg, not a new stay.
+ * - A departure with no open stay extends the previous stay (a second leg
+ *   home), or, before any arrival, closes a stay whose start is unknown.
+ * - An arrival never followed by a departure leaves the end unknown.
+ *
+ * Days are read with `localDayKeyOfInstant`, for the reason
+ * {@link deriveGuestStayDateBounds} gives; an instant that does not parse is
+ * skipped.
+ *
+ * @param person - The guest
+ * @param arrivals - Arrival transports of the trip (filtered here)
+ * @param departures - Departure transports of the trip (filtered here)
+ * @returns The stays, in time order; empty when the guest has no usable travel
+ */
+export function pairTransportStays(
+  person: Pick<Person, 'id'>,
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+): ResolvedStayPeriod[] {
+  const events: { readonly at: number; readonly day: ISODateString; readonly kind: 'in' | 'out' }[] = [];
+  const collect = (list: readonly Transport[], kind: 'in' | 'out'): void => {
+    for (const transport of list) {
+      if (transport.personId !== person.id) {
+        continue;
+      }
+      const day = localDayKeyOfInstant(transport.datetime);
+      const at = new Date(transport.datetime).getTime();
+      if (day && !Number.isNaN(at)) {
+        events.push({ at, day, kind });
+      }
+    }
+  };
+  collect(arrivals, 'in');
+  collect(departures, 'out');
+  events.sort((left, right) => left.at - right.at);
+
+  const periods: { arrival: ISODateString | null; departure: ISODateString | null }[] = [];
+  let open: { arrival: ISODateString | null; departure: ISODateString | null } | null = null;
+  for (const event of events) {
+    if (event.kind === 'in') {
+      if (open === null) {
+        open = { arrival: event.day, departure: null };
+        periods.push(open);
+      }
+      continue;
+    }
+    if (open !== null) {
+      open.departure = event.day;
+      open = null;
+      continue;
+    }
+    const previous = periods[periods.length - 1];
+    if (previous) {
+      previous.departure = event.day;
+    } else {
+      periods.push({ arrival: null, departure: event.day });
+    }
+  }
+  return periods;
+}
+
+/**
+ * The guest's stays as the app should read them, each bound falling back on
+ * the trip's dates when nothing else says it.
+ *
+ * 1. Stated stays win. The first stay may be half filled in: a missing bound
+ *    comes from the guest's travel (earliest arrival, latest departure) when
+ *    it is their only stay, and from the trip otherwise.
+ * 2. A guest with no stated stay is read from their travel, one stay per
+ *    arrival and departure pair ({@link pairTransportStays}).
+ * 3. A guest with neither is taken to be there for the whole trip.
+ *
+ * The trip's last day is the check-out, matching what a host types when they
+ * do fill the dates in. A trip without dates offers no fallback, and a bound
+ * nothing accounts for stays `null`.
+ *
+ * @returns At least one period (possibly all-null), earliest first
+ */
+export function resolveGuestStayPeriods(
+  person: Person,
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+  tripWindow: TripStayWindow,
+): readonly ResolvedStayPeriod[] {
+  const tripStart = tripWindow.startDate || null;
+  const tripEnd = tripWindow.endDate || null;
+  const extras = listExtraStayPeriods(person);
+  const hasFirst = Boolean(person.stayStartDate || person.stayEndDate);
+
+  if (hasFirst || extras.length > 0) {
+    const periods: ResolvedStayPeriod[] = extras.map((period) => ({
+      arrival: period.startDate,
+      departure: period.endDate,
+    }));
+    if (hasFirst) {
+      if (extras.length === 0) {
+        // The single-stay case reads exactly as it always did.
+        const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
+        periods.push({ arrival: arrival ?? tripStart, departure: departure ?? tripEnd });
+      } else {
+        periods.push({
+          arrival: person.stayStartDate ?? tripStart,
+          departure: person.stayEndDate ?? tripEnd,
+        });
+      }
+    }
+    return sortPeriods(periods);
+  }
+
+  const paired = pairTransportStays(person, arrivals, departures);
+  if (paired.length === 0) {
+    return [{ arrival: tripStart, departure: tripEnd }];
+  }
+  return paired.map((period) => ({
+    arrival: period.arrival ?? tripStart,
+    departure: period.departure ?? tripEnd,
+  }));
+}
+
+/** Earliest check-in first; an unknown check-in sorts first. */
+function sortPeriods(periods: ResolvedStayPeriod[]): ResolvedStayPeriod[] {
+  return periods.sort((left, right) =>
+    (left.arrival ?? '').localeCompare(right.arrival ?? ''),
+  );
+}
+
+/**
  * The guest's stay window as the app should read it: their own records, with
  * the trip's dates standing in for whatever they never filled in.
  *
@@ -157,6 +344,11 @@ export function deriveGuestStayDateBounds(
  * fill the dates in, so the last night covered is the one before it.
  *
  * A trip with blank dates offers no fallback and the bound stays `null`.
+ *
+ * A guest who stays several times gets the span of all their stays: the
+ * earliest check-in to the latest check-out, gaps included. Ask presence
+ * through {@link isGuestOnSiteOnDate} or {@link resolveGuestStayPeriods}, which
+ * know about the gaps; this span is for sorting and for a window to draw.
  */
 export function resolveGuestStayWindow(
   person: Person,
@@ -164,12 +356,19 @@ export function resolveGuestStayWindow(
   departures: readonly Transport[],
   tripWindow: TripStayWindow,
 ): { readonly arrival: ISODateString | null; readonly departure: ISODateString | null } {
-  const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
-
-  return {
-    arrival: arrival ?? (tripWindow.startDate || null),
-    departure: departure ?? (tripWindow.endDate || null),
-  };
+  // The span of every stay: the earliest check-in to the latest check-out.
+  // For a guest with one stay this is that stay, read as it always was.
+  let arrival: ISODateString | null = null;
+  let departure: ISODateString | null = null;
+  for (const period of resolveGuestStayPeriods(person, arrivals, departures, tripWindow)) {
+    if (period.arrival && (arrival === null || period.arrival < arrival)) {
+      arrival = period.arrival;
+    }
+    if (period.departure && (departure === null || period.departure > departure)) {
+      departure = period.departure;
+    }
+  }
+  return { arrival, departure };
 }
 
 // ============================================================================
@@ -189,11 +388,13 @@ function isWithinStayWindow(
   tripWindow: TripStayWindow,
   dateKey: ISODateString,
 ): boolean {
-  const { arrival, departure } = resolveGuestStayWindow(person, arrivals, departures, tripWindow);
-  if (!arrival || !departure || arrival >= departure) {
-    return false;
-  }
-  return isDateInStayRange(arrival, departure, dateKey);
+  return resolveGuestStayPeriods(person, arrivals, departures, tripWindow).some(
+    ({ arrival, departure }) =>
+      arrival !== null &&
+      departure !== null &&
+      arrival < departure &&
+      isDateInStayRange(arrival, departure, dateKey),
+  );
 }
 
 /**
@@ -279,8 +480,11 @@ function isDateInStayDays(
 export function isGuestOnSiteDuringDay(args: GuestPresenceQuery): boolean {
   const { person, arrivals, departures, assignments, tripWindow, dateKey } = args;
 
-  const { arrival, departure } = resolveGuestStayWindow(person, arrivals, departures, tripWindow);
-  if (arrival && departure && isDateInStayDays(arrival, departure, dateKey)) {
+  const inAStay = resolveGuestStayPeriods(person, arrivals, departures, tripWindow).some(
+    ({ arrival, departure }) =>
+      arrival !== null && departure !== null && isDateInStayDays(arrival, departure, dateKey),
+  );
+  if (inAStay) {
     return true;
   }
 

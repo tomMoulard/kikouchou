@@ -250,3 +250,79 @@ describe('calculateUnassignedDates, a booking that holds no night', () => {
     expect(result?.unassignedDates).toEqual([tripDay(2), tripDay(3), tripDay(4)]);
   });
 });
+
+// ============================================================================
+// A guest who comes back
+// ============================================================================
+
+describe('calculateUnassignedDates, several stays', () => {
+  const returning = makePerson({
+    stayStartDate: '2026-04-01' as ISODateString,
+    stayEndDate: '2026-04-03' as ISODateString,
+    extraStays: [
+      { startDate: '2026-04-10' as ISODateString, endDate: '2026-04-12' as ISODateString },
+    ],
+  });
+
+  it('needs a bed for the nights of each stay, and none for the gap', () => {
+    const result = calculateUnassignedDates(returning, [], [], [], tripWindow('2026-04-01', '2026-04-30'));
+
+    expect(result).toEqual({
+      startDate: '2026-04-01',
+      endDate: '2026-04-12',
+      unassignedDates: ['2026-04-01', '2026-04-02', '2026-04-10', '2026-04-11'],
+    });
+    // One chip per stay, so dropping one books that stay only.
+    expect(groupUnassignedNightsIntoStays(result!.unassignedDates)).toEqual([
+      { startDate: '2026-04-01', endDate: '2026-04-03' },
+      { startDate: '2026-04-10', endDate: '2026-04-12' },
+    ]);
+  });
+
+  it('still needs the second stay once the first has a bed', () => {
+    const result = calculateUnassignedDates(
+      returning,
+      [],
+      [],
+      [makeAssignment('2026-04-01', '2026-04-03')],
+      tripWindow('2026-04-01', '2026-04-30'),
+    );
+
+    expect(result?.unassignedDates).toEqual(['2026-04-10', '2026-04-11']);
+  });
+
+  it('needs nothing once every stay has a bed, whatever the gap holds', () => {
+    expect(
+      calculateUnassignedDates(
+        returning,
+        [],
+        [],
+        [makeAssignment('2026-04-01', '2026-04-03'), { ...makeAssignment('2026-04-10', '2026-04-12'), id: 'a2' as RoomAssignmentId }],
+        tripWindow('2026-04-01', '2026-04-30'),
+      ),
+    ).toBeNull();
+  });
+
+  it('reads two trips from travel alone as two stays', () => {
+    const traveller = makePerson();
+    const leg = (id: string, type: 'arrival' | 'departure', day: string) => ({
+      id: id as never,
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type,
+      datetime: new Date(`${day}T12:00:00`).toISOString() as never,
+      location: 'Station',
+      needsPickup: false,
+    });
+
+    const result = calculateUnassignedDates(
+      traveller,
+      [leg('a1', 'arrival', '2026-04-01'), leg('a2', 'arrival', '2026-04-10')],
+      [leg('d1', 'departure', '2026-04-02'), leg('d2', 'departure', '2026-04-11')],
+      [],
+      tripWindow('2026-04-01', '2026-04-30'),
+    );
+
+    expect(result?.unassignedDates).toEqual(['2026-04-01', '2026-04-10']);
+  });
+});

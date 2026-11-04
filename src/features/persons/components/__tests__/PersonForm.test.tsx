@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@/test/utils';
+import { act, fireEvent, render, screen, waitFor, within } from '@/test/utils';
 import type { Person, PersonFormData, Trip } from '@/types';
 
 /**
@@ -82,8 +82,43 @@ vi.mock('@/components/shared/ColorPicker', () => ({
   ),
 }));
 
+// A stand-in with the real picker's shape: a named group of two inputs. The
+// real one has its own tests; this one lets a test fill a stay in.
 vi.mock('@/components/shared/DateRangePicker', () => ({
-  DateRangePicker: () => <div data-testid="date-range-picker" />,
+  DateRangePicker: ({
+    value,
+    onChange,
+    'aria-label': label,
+  }: {
+    value: { from?: Date; to?: Date } | undefined;
+    onChange: (range: { from?: Date; to?: Date } | undefined) => void;
+    'aria-label'?: string;
+  }) => {
+    const toKey = (date: Date | undefined): string =>
+      date
+        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        : '';
+    const fromKey = (key: string): Date | undefined =>
+      key ? new Date(`${key}T00:00:00`) : undefined;
+    return (
+      <div data-testid="date-range-picker" role="group" aria-label={label}>
+        <input
+          aria-label="dateRangePicker.start"
+          value={toKey(value?.from)}
+          onChange={(event) => {
+            onChange({ from: fromKey(event.target.value), to: value?.to });
+          }}
+        />
+        <input
+          aria-label="dateRangePicker.end"
+          value={toKey(value?.to)}
+          onChange={(event) => {
+            onChange({ from: value?.from, to: fromKey(event.target.value) });
+          }}
+        />
+      </div>
+    );
+  },
 }));
 
 vi.mock('@/lib/contacts', () => ({
@@ -712,6 +747,115 @@ describe('PersonForm', () => {
       answerOld([MARY]);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(screen.queryByRole('option', { name: /Mary Poppins/ })).not.toBeInTheDocument();
+    });
+  });
+});
+
+// ============================================================================
+// A guest who comes back
+// ============================================================================
+
+describe('PersonForm further stays', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTripContext).mockReturnValue({
+      currentTrip: mockTrip,
+    } as unknown as ReturnType<typeof useTripContext>);
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [existingPerson],
+    } as unknown as ReturnType<typeof usePersonContext>);
+    vi.mocked(isContactSearchAvailable).mockReturnValue(false);
+  });
+
+  /** The pickers of the further stays, in order. */
+  const extraStayGroups = () => screen.getAllByRole('group', { name: 'persons.extraStayLabel' });
+
+  function pick(group: HTMLElement, start: string, end: string): void {
+    fireEvent.change(within(group).getByLabelText('dateRangePicker.start'), {
+      target: { value: start },
+    });
+    fireEvent.change(within(group).getByLabelText('dateRangePicker.end'), {
+      target: { value: end },
+    });
+  }
+
+  it('adds a stay, and sends it after the first one', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm person={existingPerson} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+
+    await user.click(screen.getByRole('button', { name: 'persons.addStay' }));
+    pick(extraStayGroups()[0]!, '2026-07-01', '2026-07-05');
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stayStartDate: '2026-06-02',
+        stayEndDate: '2026-06-08',
+        extraStays: [{ startDate: '2026-07-01', endDate: '2026-07-05' }],
+      }),
+    );
+  });
+
+  it('shows the stored further stays, and clears them when removed', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const returning: Person = {
+      ...existingPerson,
+      extraStays: [
+        { startDate: '2026-07-01' as never, endDate: '2026-07-05' as never },
+      ],
+    };
+    const { user } = render(
+      <PersonForm person={returning} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+
+    expect(within(extraStayGroups()[0]!).getByLabelText('dateRangePicker.start')).toHaveValue(
+      '2026-07-01',
+    );
+    await user.click(screen.getByRole('button', { name: 'persons.removeStay' }));
+    await user.click(screen.getByText('common.save'));
+
+    // Sent as `undefined`, which removes the stored list.
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ extraStays: undefined }));
+  });
+
+  it('refuses a further stay with only one day, and says so', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm person={existingPerson} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+
+    await user.click(screen.getByRole('button', { name: 'persons.addStay' }));
+    fireEvent.change(within(extraStayGroups()[0]!).getByLabelText('dateRangePicker.start'), {
+      target: { value: '2026-07-01' },
+    });
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('persons.stayIncomplete');
+  });
+
+  it('reports an added stay as an unsaved change', async () => {
+    const onDirtyChange = vi.fn();
+    const { user } = render(
+      <PersonForm
+        person={existingPerson}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+      { withProviders: false },
+    );
+
+    await user.click(screen.getByRole('button', { name: 'persons.addStay' }));
+    pick(extraStayGroups()[0]!, '2026-07-01', '2026-07-05');
+
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
     });
   });
 });

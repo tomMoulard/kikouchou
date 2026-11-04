@@ -12,6 +12,9 @@ import { addDays, eachDayOfInterval, format, isSameDay, parseISO } from 'date-fn
 
 import {
   deriveGuestStayDateBounds,
+  listExtraStayPeriods,
+  pairTransportStays,
+  resolveGuestStayPeriods,
   type TripStayWindow,
 } from '@/features/persons/utils/guest-presence';
 import type { Person, RoomAssignment, Transport } from '@/types';
@@ -94,6 +97,11 @@ function resolveBookedSpan(
  * Uses the check-in / check-out model throughout: a stay from `start` to `end`
  * covers the nights `start … end - 1`.
  *
+ * A guest who stays several times (further stays, or several arrival and
+ * departure pairs) needs a bed for the nights of each stay and none for the
+ * gaps between them. `startDate`/`endDate` then span every stay, and
+ * `unassignedDates` holds only nights inside a stay.
+ *
  * @param person - The guest
  * @param arrivals - All arrival transports in the trip
  * @param departures - All departure transports in the trip
@@ -110,6 +118,18 @@ export function calculateUnassignedDates(
   tripWindow: TripStayWindow,
 ): UnassignedGuestDates | null {
   const personAssignments = assignments.filter((a) => a.personId === person.id);
+
+  const hasStatedStay = Boolean(person.stayStartDate || person.stayEndDate);
+  const staysSeveralTimes =
+    listExtraStayPeriods(person).length > 0 ||
+    (!hasStatedStay && pairTransportStays(person, arrivals, departures).length > 1);
+  if (staysSeveralTimes) {
+    return calculateUnassignedNightsOfStays(
+      resolveGuestStayPeriods(person, arrivals, departures, tripWindow),
+      personAssignments,
+    );
+  }
+
   const stated = deriveGuestStayDateBounds(person, arrivals, departures);
   const booked = resolveBookedSpan(personAssignments);
 
@@ -166,6 +186,53 @@ export function calculateUnassignedDates(
   return {
     startDate: arrivalDate,
     endDate: departureDate,
+    unassignedDates,
+  };
+}
+
+/**
+ * The nights of a booking, check-in to the night before check-out.
+ */
+function nightsOf(startDate: string, endDate: string): string[] {
+  const start = parseISO(startDate);
+  const lastNight = addDays(parseISO(endDate), -1);
+  if (isNaN(start.getTime()) || isNaN(lastNight.getTime()) || start > lastNight) {
+    return [];
+  }
+  return eachDayOfInterval({ start, end: lastNight }).map((d) => format(d, 'yyyy-MM-dd'));
+}
+
+/**
+ * {@link calculateUnassignedDates} for a guest who stays several times: the
+ * nights of every stay, less the nights a booking covers.
+ */
+function calculateUnassignedNightsOfStays(
+  periods: readonly { readonly arrival: string | null; readonly departure: string | null }[],
+  personAssignments: readonly RoomAssignment[],
+): UnassignedGuestDates | null {
+  const known = periods.filter(
+    (period): period is { arrival: string; departure: string } =>
+      period.arrival !== null && period.departure !== null && period.arrival < period.departure,
+  );
+  if (known.length === 0) {
+    return null;
+  }
+
+  const covered = new Set(
+    personAssignments.flatMap((assignment) => nightsOf(assignment.startDate, assignment.endDate)),
+  );
+  const unassignedDates = [
+    ...new Set(known.flatMap((period) => nightsOf(period.arrival, period.departure))),
+  ]
+    .filter((night) => !covered.has(night))
+    .sort();
+  if (unassignedDates.length === 0) {
+    return null;
+  }
+
+  return {
+    startDate: known.reduce((min, period) => (period.arrival < min ? period.arrival : min), known[0]!.arrival),
+    endDate: known.reduce((max, period) => (period.departure > max ? period.departure : max), known[0]!.departure),
     unassignedDates,
   };
 }

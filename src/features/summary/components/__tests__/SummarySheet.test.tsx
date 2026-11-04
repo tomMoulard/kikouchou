@@ -92,6 +92,9 @@ function buildSummary(overrides: Partial<TripSummary> = {}): TripSummary {
         notes: 'No peanuts',
         arrivalDate: '2026-07-01' as ISODateString,
         departureDate: '2026-07-08' as ISODateString,
+        stayPeriods: [
+          { arrival: '2026-07-01' as ISODateString, departure: '2026-07-08' as ISODateString },
+        ],
       },
     ],
     ...overrides,

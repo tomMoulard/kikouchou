@@ -94,8 +94,8 @@ function makeModel(overrides: Partial<CalendarTimelineRowModel> = {}): CalendarT
     person,
     laneCount: 1,
     items: [],
-    staySpan: undefined,
-    checkoutDayIndex: undefined,
+    staySpans: [],
+    checkoutDayIndices: [],
     ...overrides,
   };
 }
@@ -508,7 +508,7 @@ describe('CalendarTimelineRow', () => {
 
   it('renders stay span background when staySpan is provided', () => {
     const model = makeModel({
-      staySpan: { startIndex: 0, endIndex: 3 },
+      staySpans: [{ startIndex: 0, endIndex: 3 }],
     });
 
     const { container } = render(
@@ -663,7 +663,7 @@ describe('CalendarTimelineRow', () => {
     });
 
     it('hatches the check-out day and widens the pill over it', () => {
-      const { container } = renderStay(stayItem(), { model: { checkoutDayIndex: 3 } });
+      const { container } = renderStay(stayItem(), { model: { checkoutDayIndices: [3] } });
 
       expect(screen.getByRole('button')).toHaveStyle({ width: '296px' });
       const hatch = container.querySelector('.pointer-events-none.right-0') as HTMLElement;
@@ -673,7 +673,7 @@ describe('CalendarTimelineRow', () => {
 
     it('hatches in dark stripes on a light pill', () => {
       const { container } = renderStay(stayItem({ textColor: 'black' }), {
-        model: { checkoutDayIndex: 3 },
+        model: { checkoutDayIndices: [3] },
       });
 
       const hatch = container.querySelector('.pointer-events-none.right-0') as HTMLElement;
@@ -685,7 +685,7 @@ describe('CalendarTimelineRow', () => {
       ['past the end of the axis', 3, 3],
     ])('does not hatch a check-out %s', (_, checkoutDayIndex, dayCount) => {
       const { container } = renderStay(stayItem(), {
-        model: { checkoutDayIndex },
+        model: { checkoutDayIndices: [checkoutDayIndex] },
         viewport: { dayCount },
       });
 
@@ -695,7 +695,7 @@ describe('CalendarTimelineRow', () => {
 
     it('hatches the first column for a stay whose last night is just before the axis', () => {
       const { container } = renderStay(stayItem({ startIndex: -2, endIndex: -1 }), {
-        model: { checkoutDayIndex: 0 },
+        model: { checkoutDayIndices: [0] },
       });
 
       expect(container.querySelector('.pointer-events-none.right-0')).not.toBeNull();
@@ -703,7 +703,7 @@ describe('CalendarTimelineRow', () => {
 
     it('hatches nothing for a check-out that is itself before the axis', () => {
       const { container } = renderStay(stayItem({ startIndex: -4, endIndex: -3 }), {
-        model: { checkoutDayIndex: -2 },
+        model: { checkoutDayIndices: [-2] },
       });
 
       expect(container.querySelector('.pointer-events-none.right-0')).toBeNull();
@@ -711,7 +711,7 @@ describe('CalendarTimelineRow', () => {
 
     it('never runs past the end of the canvas', () => {
       renderStay(stayItem({ startIndex: 5, endIndex: 5 }), {
-        model: { checkoutDayIndex: 6 },
+        model: { checkoutDayIndices: [6] },
         viewport: { dayCount: 7 },
       });
 
@@ -1092,7 +1092,7 @@ describe('CalendarTimelineRow', () => {
     it('draws the stay window behind the pills', () => {
       const { container } = render(
         <CalendarTimelineRow
-          model={makeModel({ staySpan: { startIndex: 1, endIndex: 3 }, laneCount: 2 })}
+          model={makeModel({ staySpans: [{ startIndex: 1, endIndex: 3 }], laneCount: 2 })}
           viewport={defaultViewport}
           dateLocale={enUS}
           onAssignmentClick={vi.fn()}

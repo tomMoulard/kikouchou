@@ -110,10 +110,10 @@ describe('calendar day boundary', () => {
     expect(row?.person.id).toBe(GUEST.id);
     // Index 1 is 11 April. Reading the UTC day gave index 0 for a viewer ahead
     // of UTC — the guest appeared a column early.
-    expect(row?.staySpan?.startIndex).toBe(1);
+    expect(row?.staySpans[0]?.startIndex).toBe(1);
     // Check-out is 13 April (index 3), so the last night slept is the 12th.
-    expect(row?.staySpan?.endIndex).toBe(2);
-    expect(row?.checkoutDayIndex).toBe(3);
+    expect(row?.staySpans[0]?.endIndex).toBe(2);
+    expect(row?.checkoutDayIndices).toEqual([3]);
   });
 
   it('counts the guest from the day they land to the day they leave, locally', () => {

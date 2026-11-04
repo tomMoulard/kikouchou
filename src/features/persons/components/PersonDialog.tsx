@@ -46,6 +46,11 @@ export interface PersonDialogProps {
   readonly onOpenChange: (open: boolean) => void;
 }
 
+/** How many stays a saved guest has: the first, when dated, and the further ones. */
+function countStays(data: PersonFormData): number {
+  return (data.stayStartDate && data.stayEndDate ? 1 : 0) + (data.extraStays?.length ?? 0);
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -144,10 +149,13 @@ const PersonDialog = memo(function PersonDialog({
   const handleSubmit = useCallback(
     async (data: PersonFormData) => {
       if (isEditMode && personId) {
+        // Only for a guest who stays once: with several stays, the one booking
+        // belongs to one of them, and moving it onto the first would undo it.
         const shouldSyncSingleAssignmentDates =
           person &&
           data.stayStartDate &&
           data.stayEndDate &&
+          (data.extraStays?.length ?? 0) === 0 &&
           (person.stayStartDate !== data.stayStartDate || person.stayEndDate !== data.stayEndDate);
 
         await updatePerson(personId, data);
@@ -170,6 +178,7 @@ const PersonDialog = memo(function PersonDialog({
           operation: 'updated',
           headcount: data.headcount,
           has_stay_dates: Boolean(data.stayStartDate && data.stayEndDate),
+          stay_count: countStays(data),
         });
       } else {
         await createPerson(data);
@@ -178,6 +187,7 @@ const PersonDialog = memo(function PersonDialog({
           operation: 'created',
           headcount: data.headcount,
           has_stay_dates: Boolean(data.stayStartDate && data.stayEndDate),
+          stay_count: countStays(data),
         });
       }
       onOpenChange(false);

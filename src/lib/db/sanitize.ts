@@ -29,7 +29,7 @@ import {
   normalizeCurrency,
   normalizePersonHeadcount,
 } from '@/types';
-import type { ChildSeatKind, DietaryTag } from '@/types';
+import type { ChildSeatKind, DietaryTag, ISODateString } from '@/types';
 
 // ============================================================================
 // Constants - Maximum Lengths
@@ -228,10 +228,18 @@ export function sanitizePersonData<
     childSeat?: string;
     dietaryTags?: readonly string[];
     dietaryNote?: string;
+    extraStays?: readonly unknown[];
   },
 >(data: T): T {
+  // Present only when the caller sent it, so a patch that does not touch the
+  // stays does not clear them. Empty becomes absent.
+  const extraStays =
+    data.extraStays === undefined ? undefined : normalizeExtraStays(data.extraStays);
   return {
     ...data,
+    ...(data.extraStays === undefined
+      ? {}
+      : { extraStays: extraStays && extraStays.length > 0 ? extraStays : undefined }),
     name: sanitizeText(data.name, MAX_LENGTHS.personName),
     notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.personNotes),
     phone: sanitizeOptionalText(data.phone, MAX_LENGTHS.personPhone),
@@ -541,6 +549,40 @@ export function isCalendarDayString(value: unknown): value is string {
   const month = Number(value.slice(5, 7));
   const day = Number(value.slice(8, 10));
   return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+}
+
+/** The most further stays one guest may carry; a peer's longer list is cut. */
+export const MAX_EXTRA_STAYS = 20;
+
+/**
+ * A guest's further stays (`Person.extraStays`), kept only where usable: both
+ * bounds a calendar day, the check-out on or after the check-in. Sorted by
+ * check-in and cut at {@link MAX_EXTRA_STAYS}.
+ *
+ * The field arrives from other devices, so a malformed entry is dropped on its
+ * own rather than taking the guest's other stays with it, and the list is
+ * bounded because every presence question walks it for every night.
+ *
+ * @param raw - The field as stored or received
+ * @returns The usable stays, earliest first (empty when none)
+ */
+export function normalizeExtraStays(
+  raw: unknown,
+): { startDate: ISODateString; endDate: ISODateString }[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const periods: { startDate: ISODateString; endDate: ISODateString }[] = [];
+  for (const entry of raw.slice(0, MAX_EXTRA_STAYS)) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const { startDate, endDate } = entry as Record<string, unknown>;
+    if (isCalendarDayString(startDate) && isCalendarDayString(endDate) && startDate <= endDate) {
+      periods.push({ startDate: startDate as ISODateString, endDate: endDate as ISODateString });
+    }
+  }
+  return periods.sort((left, right) => left.startDate.localeCompare(right.startDate));
 }
 
 /**
