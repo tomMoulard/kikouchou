@@ -215,6 +215,7 @@ describe('runLiveUpdate', () => {
   it.each([
     ['checksum', 'CHECKSUM_MISMATCH'],
     ['network', 'Unable to resolve host "app.kikouchou.app"'],
+    ['download', 'Bundle could not be downloaded.'],
     ['error', 'something else'],
   ])('reports a %s failure', async (reason, message) => {
     const plugin = api(null, {
@@ -226,6 +227,21 @@ describe('runLiveUpdate', () => {
     await runLiveUpdate(deps({ api: plugin }));
 
     expect(capture).toHaveBeenCalledWith('live_update_failed', { reason });
+  });
+
+  it('logs a caught failure as a warning, so it is not a second, unhandled exception', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const plugin = api(null, {
+      downloadBundle: vi.fn(async () => {
+        throw new Error('Bundle could not be downloaded.');
+      }),
+    });
+
+    await runLiveUpdate(deps({ api: plugin }));
+
+    expect(warn).toHaveBeenCalledWith('Live update failed:', expect.any(Error));
+    expect(error).not.toHaveBeenCalled();
   });
 
   it('reports a rollback, and still marks the default bundle ready', async () => {
