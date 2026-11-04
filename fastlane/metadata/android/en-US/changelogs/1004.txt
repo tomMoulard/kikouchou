@@ -1,0 +1,2 @@
+The store listing now shows screenshots of the app.
+No change in the app itself.
