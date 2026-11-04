@@ -218,7 +218,15 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
       if (error instanceof GeocodingError && error.kind === 'aborted') {
         return;
       }
-      console.error('Failed to search places:', error);
+      // A geocoder that times out or cannot be reached is the device's
+      // connection, not a bug: a warning, because PostHog captures every
+      // console.error as an exception. Anything else escaped searchPlaces's
+      // own wrapping, and is one.
+      if (error instanceof GeocodingError) {
+        console.warn('Failed to search places:', error);
+      } else {
+        console.error('Failed to search places:', error);
+      }
       setPlaces([]);
     } finally {
       if (abortControllerRef.current === controller) {
