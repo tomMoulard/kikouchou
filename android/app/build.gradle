@@ -10,6 +10,11 @@ import groovy.json.JsonSlurper
 // major * 1_000_000 + minor * 1_000 + patch, so it only ever grows when the
 // version does, and F-Droid, which builds from a tag, computes the same number
 // Play was given. Bump `version` for every store release.
+//
+// package.json also states the result as `versionCode`, because f-droid.org's
+// update check reads a version code with one regex per tag and cannot do the
+// arithmetic (`UpdateCheckData` in metadata/app.kikouchou.yml). The build
+// stops when the two disagree, so the stated number can never drift.
 // `ANDROID_VERSION_CODE` overrides the derived number, for a one-off rebuild.
 def packageJson = new JsonSlurper().parse(file('../../package.json'))
 def appVersion = packageJson.version as String
@@ -17,6 +22,11 @@ def versionParts = appVersion.tokenize('.-')
 def derivedVersionCode = (versionParts[0] as int) * 1_000_000 +
         (versionParts[1] as int) * 1_000 +
         (versionParts[2] as int)
+if (packageJson.versionCode != derivedVersionCode) {
+    throw new GradleException(
+        "package.json says versionCode ${packageJson.versionCode}, but version ${appVersion} " +
+        "makes it ${derivedVersionCode}. Set \"versionCode\": ${derivedVersionCode}.")
+}
 def appVersionCode = System.getenv('ANDROID_VERSION_CODE')?.toInteger() ?: derivedVersionCode
 
 // ============================================================================
