@@ -12,7 +12,9 @@
  * `KIKOUCHOU_ANDROID_FLAVOR=fdroid` builds the F-Droid variant. F-Droid ships
  * free software only, and `@capacitor/push-notifications` brings Firebase
  * Cloud Messaging, which is not. That variant leaves the plugin out, and the
- * app then reports push as unsupported, which hides the reminder card.
+ * app then reports push as unsupported, which hides the reminder card. It
+ * also leaves out live updates: f-droid.org builds every release from source,
+ * and a bundle downloaded at run time would ship code it never built.
  *
  * @module capacitor.config
  */
@@ -37,9 +39,32 @@ const PLUGINS = [
   '@capacitor/push-notifications',
   '@capacitor/share',
   '@capacitor/splash-screen',
+  '@capawesome/capacitor-live-update',
 ] as const;
 
-const NON_FREE_PLUGINS: readonly string[] = ['@capacitor/push-notifications'];
+/** Left out of the F-Droid build, for the reasons in the header. */
+const NOT_FOR_FDROID: readonly string[] = [
+  '@capacitor/push-notifications',
+  '@capawesome/capacitor-live-update',
+];
+
+/**
+ * Verifies every live update bundle (`scripts/build-live-update.sh` signs it
+ * with the private half, the `LIVE_UPDATE_PRIVATE_KEY` secret). A bundle that
+ * fails the check is never applied. RSA 2048: the iOS side of the plugin reads
+ * no other size. Changing it changes the native fingerprint, so the new key
+ * ships in a store release before any bundle is signed with it.
+ */
+const LIVE_UPDATE_PUBLIC_KEY =
+  '-----BEGIN PUBLIC KEY-----\n' +
+  'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsY2FOHL3reuoFUEA2Zex\n' +
+  'y8DmoPlOSfv9H+fxtMlz8v6HRnWwwgj0nb/dBXhxlDcOEhuN+k0/RqpENSpPjXqA\n' +
+  'LPCEiNFcVIHEhYzzwhNxS1psFZQX7ocDS+1wPVZjDc5z9FOMYMJl0OyKoWLStycu\n' +
+  '7rxkaABHzAihSn3KGjg0hA8hPhQqb237UZqM9qKgqgwJBY6N/kHe7YyFIuk7KuG1\n' +
+  'L85IkAXyevGN2uhJVfXYGCnwMbEkj7FNKa0btuv8UhW0T4YWjtoOGLbSNbeZcz34\n' +
+  'HwfMc4+BR4+S+f6G/dp9BrIAywLJxNLm8nX4us7Gm+Th0F7aUhYFEOv8lM4qYxuc\n' +
+  'HwIDAQAB\n' +
+  '-----END PUBLIC KEY-----';
 
 const isFdroid = process.env.KIKOUCHOU_ANDROID_FLAVOR === 'fdroid';
 
@@ -56,7 +81,7 @@ const config: CapacitorConfig = {
   appendUserAgent: 'Kikouchou-Native',
   android: {
     includePlugins: isFdroid
-      ? PLUGINS.filter((plugin) => !NON_FREE_PLUGINS.includes(plugin))
+      ? PLUGINS.filter((plugin) => !NOT_FOR_FDROID.includes(plugin))
       : [...PLUGINS],
     flavor: isFdroid ? 'fdroid' : 'play',
   },
@@ -91,6 +116,17 @@ const config: CapacitorConfig = {
     },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
+    },
+    // Self-hosted: `src/lib/native/live-update.ts` fetches and applies the
+    // bundles, and nothing talks to Capawesome Cloud.
+    LiveUpdate: {
+      publicKey: LIVE_UPDATE_PUBLIC_KEY,
+      // `NativeShell` calls `ready()` once React has painted. A bundle that
+      // never gets that far is rolled back to the one in the store build, and
+      // blocked so the app does not download it again.
+      readyTimeout: 15000,
+      autoBlockRolledBackBundles: true,
+      autoDeleteBundles: true,
     },
   },
 };

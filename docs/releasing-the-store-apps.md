@@ -273,6 +273,34 @@ in step 2.3, and the F-Droid key in step 2.7. Separate them with commas.
 4. Make sure that the contact address `admin@kikouchou.app` on the privacy
    page reaches you. It must work before the first review.
 
+### 1.13 Turn on live updates
+
+A website deploy also publishes the apps' web build, signed, at
+`https://app.kikouchou.app/live/`. An installed app downloads it and runs it
+from its next launch, with no store release. AGENTS.md, in the section on the
+store apps, says what still needs a store release.
+
+1. Store the signing key. The public half is in `capacitor.config.ts`. The
+   private half goes in a repository secret:
+
+   ```bash
+   gh secret set LIVE_UPDATE_PRIVATE_KEY < live-update-private.pem
+   ```
+
+2. Keep `live-update-private.pem` in your password manager, then delete the
+   file. If you lose the key, generate a new pair, put the public half in
+   `capacitor.config.ts`, and ship a store release. Installed apps accept
+   only bundles that are signed with the key they were built with.
+
+3. After the next deploy, make sure that the manifest answers:
+
+   ```bash
+   curl -sS "https://app.kikouchou.app/live/$(node scripts/native-fingerprint.js).json"
+   ```
+
+   A 404 means that the deploy log has a warning that starts with
+   "No live update".
+
 ## Part 2: the first release
 
 ### 2.1 Tag the release

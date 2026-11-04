@@ -1050,6 +1050,10 @@ export type AnalyticsEvent =
   | 'reminders_disabled'
   | 'reminders_enable_result'
   | 'run_calendar_exported'
+  // Store apps: a web bundle downloaded without a store release
+  | 'live_update_downloaded'
+  | 'live_update_failed'
+  | 'live_update_reset'
   // Preferences
   | 'language_changed'
   | 'nav_bar_reordered'

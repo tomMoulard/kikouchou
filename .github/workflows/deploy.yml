@@ -222,6 +222,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
 
+      # The store apps' live update, at app.kikouchou.app/live/: this commit's
+      # web build for the apps, signed, under the fingerprint of the native
+      # layer it needs (scripts/build-live-update.sh). An installed app with
+      # that native layer runs it from its next launch, with no store release.
+      # Never fails the deploy: without the key it is a warning.
+      - name: Build the live update for the store apps
+        run: scripts/build-live-update.sh dist
+        env:
+          LIVE_UPDATE_PRIVATE_KEY: ${{ secrets.LIVE_UPDATE_PRIVATE_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          VITE_SHARE_ORIGIN: https://share.kikouchou.app
+          VITE_PUBLIC_APP_ORIGIN: https://app.kikouchou.app
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
