@@ -1,21 +1,8 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# The app's own R8 rules. Capacitor's consumer rules (capacitor-android)
+# already keep every class that extends com.getcapacitor.Plugin, which covers
+# ContactSearchPlugin, and the @PluginMethod methods the bridge calls by name.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Keep the line numbers, so a crash report points at a line. The source file
+# name is replaced, so the stack trace says nothing about the source layout.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
