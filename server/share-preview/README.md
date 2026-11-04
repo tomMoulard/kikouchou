@@ -46,7 +46,7 @@ read.
 | `/healthz` | `ok`, with no database behind it |
 | `/robots.txt` | Permissive |
 | `/.well-known/apple-app-site-association` | The iOS app-link file; see [The store apps](#the-store-apps) |
-| `/.well-known/assetlinks.json` | The Android app-link file |
+| `/.well-known/assetlinks.json` | The Android app-link file, with credential sharing (`get_login_creds`) |
 | `POST /push/send` | Sends one trip reminder; see [Trip reminders](#trip-reminders) |
 | anything else | 404, with the English generic card |
 
