@@ -469,6 +469,7 @@ describe('LocationAutocomplete lookups', () => {
 describe('LocationAutocomplete place lookup failures', () => {
   it('clears the places when the newest place lookup fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { user, container } = await renderHarness();
 
     await user.type(combobox(), 'Bre');
@@ -488,12 +489,34 @@ describe('LocationAutocomplete place lookup failures', () => {
 
     expect(screen.queryByRole('option', { name: /^Brest/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Places on the map')).not.toBeInTheDocument();
-    expect(consoleError).toHaveBeenCalledWith('Failed to search places:', failure);
+    // A geocoder that cannot be reached is the network, not a bug, and
+    // PostHog reports every console.error as an exception.
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith('Failed to search places:', failure);
     expect(spinner(container)).not.toBeNull();
   });
 
+  it('reports a timed-out place lookup as a warning, not an error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { user } = await renderHarness();
+
+    await user.type(combobox(), 'Bre');
+    const failing = await placeLookup(1);
+    const failure = new GeocodingError('timeout');
+    await settle(() => {
+      failing.answer.reject(failure);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith('Failed to search places:', failure);
+  });
+
   it('clears the places on a failure that is not a geocoding error', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { user } = await renderHarness();
 
     await user.type(combobox(), 'Bre');
@@ -502,14 +525,17 @@ describe('LocationAutocomplete place lookup failures', () => {
 
     await user.type(combobox(), 's');
     const failing = await placeLookup(2);
+    const failure = new TypeError('Failed to fetch');
     await settle(() => {
-      failing.answer.reject(new TypeError('Failed to fetch'));
+      failing.answer.reject(failure);
     });
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(screen.queryByRole('option', { name: /^Brest/ })).not.toBeInTheDocument();
+    // searchPlaces wraps every failure of its own, so this one is a bug.
+    expect(consoleError).toHaveBeenCalledWith('Failed to search places:', failure);
   });
 
   it('says nothing about an aborted lookup and keeps the newer places', async () => {
