@@ -50,7 +50,9 @@ Builds:
     prebuild:
       - cd ../..
       - bun run build
-      - KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx cap sync android
+      # On Bun's runtime: the Capacitor CLI requires Node 22, and the build
+      # server has Debian's Node 20.
+      - KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx --bun cap sync android
     scandelete:
       - node_modules
     gradle:
