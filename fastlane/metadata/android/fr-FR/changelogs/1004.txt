@@ -1,0 +1,2 @@
+La fiche du store montre maintenant des captures d'écran de l'app.
+Aucun changement dans l'app elle-même.
