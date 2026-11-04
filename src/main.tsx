@@ -5,10 +5,14 @@
  * @module main
  */
 
-// FIRST OF ALL. Reads the OAuth `?code=` synchronously at import time, before
-// router.tsx is evaluated and before main() awaits i18n and the database — by
-// which point the query string has had seconds and a router initialisation to
-// disappear in. See lib/supabase/auth-callback for the bug this fixes.
+// Before anything else runs: react-markdown calls `Object.hasOwn`, which an
+// old Android WebView lacks. See lib/polyfills.
+import '@/lib/polyfills';
+
+// FIRST OF ALL, after the polyfills. Reads the OAuth `?code=` synchronously at
+// import time, before router.tsx is evaluated and before main() awaits i18n and
+// the database — by which point the query string has had seconds and a router
+// initialisation to disappear in. See lib/supabase/auth-callback for the bug this fixes.
 import '@/lib/supabase/auth-callback';
 
 // Initialize i18n before any React components load.
