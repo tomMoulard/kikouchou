@@ -11,9 +11,11 @@
 #
 # f-droid.org accepts free software only. The project is MIT (LICENSE).
 
+# fdroiddata's own list (config/categories.yml in fdroiddata); `fdroid lint`
+# refused the generic Time and Internet.
 Categories:
-  - Time
-  - Internet
+  - Calendar & Agenda
+  - Schedule
 License: MIT
 AuthorName: Tom Moulard
 WebSite: https://www.kikouchou.app
