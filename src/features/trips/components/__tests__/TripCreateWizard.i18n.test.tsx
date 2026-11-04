@@ -26,26 +26,6 @@ vi.unmock('react-i18next');
 // Test doubles
 // ============================================================================
 
-vi.mock('@/components/shared/DateRangePicker', () => ({
-  DateRangePicker: ({
-    onChange,
-    'aria-label': label,
-  }: {
-    onChange: (range: { from: Date; to: Date }) => void;
-    'aria-label'?: string;
-  }) => (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={() => {
-        onChange({ from: new Date(2026, 6, 15), to: new Date(2026, 6, 22) });
-      }}
-    >
-      pick dates
-    </button>
-  ),
-}));
-
 // The panel words itself and has its own French test. Here it only moves the
 // screen between the signed-out and the link states.
 vi.mock('@/features/sharing/components/ShareLinkPanel', () => ({
@@ -80,7 +60,7 @@ vi.mock('@/lib/posthog', () => ({
 const mockedCreate = vi.mocked(createTripWithDetails);
 
 const OUTCOME = {
-  trip: { id: 'trip-1', shareId: 'share-1', name: 'Lac', startDate: '2026-07-15', endDate: '2026-07-22' },
+  trip: { id: 'trip-1', shareId: 'share-1', name: 'Lac' },
   selfPersonId: undefined,
   counts: { guests: 0, importedGuests: 0, rooms: 0, importedRooms: false },
   warnings: [],
@@ -103,10 +83,10 @@ beforeEach(() => {
 // ============================================================================
 
 describe('TripCreateWizard in French', () => {
-  it('words the name and dates questions from the catalogue', async () => {
+  it('words the name question from the catalogue', async () => {
     const user = await renderInFrench();
 
-    expect(screen.getByRole('list', { name: 'Étape 1 sur 3' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Étape 1 sur 2' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: "Comment s'appelle le séjour ?" })).toBeInTheDocument();
     expect(
       screen.getByText("La maison, la ville, l'occasion : le nom que le groupe lui donne."),
@@ -117,26 +97,13 @@ describe('TripCreateWizard in French', () => {
     );
     expect(screen.getByRole('button', { name: 'Retour' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Suivant' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Donnez un nom au séjour pour continuer.');
-
-    await user.type(screen.getByLabelText('Nom du séjour'), 'Lac{Enter}');
-    expect(screen.getByRole('heading', { name: "C'est quand ?" })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Premier et dernier jour. Les invités peuvent arriver et partir entre les deux.',
-      ),
-    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Créer le séjour' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Choisissez le premier et le dernier jour pour continuer.',
-    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Donnez un nom au séjour pour continuer.');
   });
 
   it('words the invite screen from the catalogue', async () => {
     const user = await renderInFrench();
-    await user.type(screen.getByLabelText('Nom du séjour'), 'Lac{Enter}');
-    await user.click(screen.getByRole('button', { name: 'Dates du séjour' }));
+    await user.type(screen.getByLabelText('Nom du séjour'), 'Lac');
 
     let settle: (value: never) => void = () => {};
     mockedCreate.mockImplementation(
@@ -172,8 +139,7 @@ describe('TripCreateWizard in French', () => {
     mockedCreate.mockRejectedValue(new Error('disk full'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = await renderInFrench();
-    await user.type(screen.getByLabelText('Nom du séjour'), 'Lac{Enter}');
-    await user.click(screen.getByRole('button', { name: 'Dates du séjour' }));
+    await user.type(screen.getByLabelText('Nom du séjour'), 'Lac');
     await user.click(screen.getByRole('button', { name: 'Créer le séjour' }));
 
     await waitFor(() => {

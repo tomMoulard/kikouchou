@@ -17,13 +17,13 @@ import {
   updateTimestamp,
 } from '@/lib/db/utils';
 import { planTripDateShiftAssignmentUpdates } from '@/features/trips/utils/trip-date-shift';
-import type { Trip, TripFormData, TripId } from '@/types';
+import type { ISODateString, Trip, TripFormData, TripId } from '@/types';
 
 /** Maximum retry attempts for ID collision recovery */
 const MAX_ID_RETRIES = 3;
 
 /**
- * Refuses a trip window that runs backwards.
+ * Refuses a trip window that runs backwards, or that has only one end.
  *
  * The form's Zod schema already says `endDate >= startDate`, but the repository
  * is reached by three writers that never see it: the assistant's `updateTrip`
@@ -32,14 +32,83 @@ const MAX_ID_RETRIES = 3;
  * yields no days at all, and the calendar, the room timeline and the night
  * split each render an empty trip that nothing in the UI explains.
  *
- * @param startDate - First day of the trip
- * @param endDate - Last day of the trip
- * @throws {Error} If the trip ends before it starts
+ * A trip may have no dates at all: it is created without them and the
+ * organiser sets them later. It may not have one date alone, because every
+ * reader of the window treats "both set" as the only dated state.
+ *
+ * @param startDate - First day of the trip, or undefined while it has none
+ * @param endDate - Last day of the trip, or undefined while it has none
+ * @throws {Error} If the trip ends before it starts, or has only one date
  */
-function validateTripWindow(startDate: string, endDate: string): void {
-  if (startDate.length > 0 && endDate.length > 0 && endDate < startDate) {
+function validateTripWindow(
+  startDate: string | undefined,
+  endDate: string | undefined,
+): void {
+  const hasStart = startDate !== undefined && startDate.length > 0;
+  const hasEnd = endDate !== undefined && endDate.length > 0;
+  if (hasStart !== hasEnd) {
+    throw new Error('Trip start and end dates must be set together');
+  }
+  if (hasStart && hasEnd && endDate < startDate) {
     throw new Error('Trip end date must be on or after its start date');
   }
+}
+
+/**
+ * A patch for {@link updateTrip}.
+ *
+ * `null` on a date clears it, which turns the trip back into a trip without
+ * dates. `undefined` (or an absent key) leaves the stored date alone, so a
+ * caller that only renames the trip cannot clear its dates by accident.
+ */
+export type TripUpdateData = Omit<Partial<TripFormData>, 'startDate' | 'endDate'> & {
+  startDate?: ISODateString | null;
+  endDate?: ISODateString | null;
+};
+
+/**
+ * Resolves one date of an {@link updateTrip} patch against the stored value.
+ *
+ * @param patch - The patch's value: `null` clears, `undefined` keeps
+ * @param stored - The value the record holds now
+ * @returns The value the record holds after the update
+ */
+function mergeTripDate(
+  patch: ISODateString | null | undefined,
+  stored: ISODateString | undefined,
+): ISODateString | undefined {
+  if (patch === null) {
+    return undefined;
+  }
+  return patch ?? stored;
+}
+
+/**
+ * Orders trips the way the trip list shows them: a trip without dates first
+ * (it is still being planned), then by start date, latest first.
+ *
+ * Sorted in memory rather than with `orderBy('startDate')`, because IndexedDB
+ * leaves a record out of an index when the indexed field is absent: a trip
+ * without dates would vanish from every list read through that index.
+ *
+ * @param trips - Trips in any order
+ * @returns A new array in display order
+ */
+export function sortTripsForDisplay(trips: readonly Trip[]): Trip[] {
+  return [...trips].sort((a, b) => {
+    const aKey = a.startDate ?? '';
+    const bKey = b.startDate ?? '';
+    if (aKey === bKey) {
+      return b.createdAt - a.createdAt;
+    }
+    if (aKey === '') {
+      return -1;
+    }
+    if (bKey === '') {
+      return 1;
+    }
+    return aKey < bKey ? 1 : -1;
+  });
 }
 
 /**
@@ -66,14 +135,18 @@ function validateTripWindow(startDate: string, endDate: string): void {
  */
 export async function createTrip(data: TripFormData): Promise<Trip> {
   // Sanitize input data (trim whitespace, enforce max lengths)
-  const sanitizedData = sanitizeTripData(data);
-  validateTripWindow(sanitizedData.startDate, sanitizedData.endDate);
+  const { startDate, endDate, ...rest } = sanitizeTripData(data);
+  validateTripWindow(startDate, endDate);
+  // An absent date is left off the record rather than stored as `undefined`,
+  // so the row reads the same as one whose dates were cleared.
+  const dates = startDate && endDate ? { startDate, endDate } : {};
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_ID_RETRIES; attempt++) {
     const trip: Trip = {
       id: createTripId(),
-      ...sanitizedData,
+      ...rest,
+      ...dates,
       shareId: createShareId(),
       ...createTimestamps(),
     };
@@ -100,11 +173,10 @@ export async function createTrip(data: TripFormData): Promise<Trip> {
 }
 
 /**
- * Retrieves all trips ordered by start date (most recent first).
+ * Retrieves all trips: trips without dates first, then by start date (most
+ * recent first). See {@link sortTripsForDisplay}.
  *
- * Uses the `startDate` index for efficient sorting.
- *
- * @returns Array of all trips, sorted by startDate descending
+ * @returns Array of all trips in display order
  *
  * @example
  * ```typescript
@@ -113,7 +185,7 @@ export async function createTrip(data: TripFormData): Promise<Trip> {
  * ```
  */
 export async function getAllTrips(): Promise<Trip[]> {
-  return db.trips.orderBy('startDate').reverse().toArray();
+  return sortTripsForDisplay(await db.trips.toArray());
 }
 
 /**
@@ -164,7 +236,7 @@ export async function getTripByShareId(
  * is always refreshed automatically. Uses atomic update to avoid TOCTOU race conditions.
  *
  * @param id - The trip's unique identifier
- * @param data - Partial trip form data to update
+ * @param data - Partial trip form data to update; `null` on a date clears it
  * @throws {Error} If the trip with the given ID does not exist
  *
  * @example
@@ -181,11 +253,11 @@ export async function getTripByShareId(
  */
 export async function updateTrip(
   id: TripId,
-  data: Partial<TripFormData>,
+  data: TripUpdateData,
 ): Promise<void> {
   // Sanitize input data (trim whitespace, enforce max lengths)
   // Only sanitize text fields that are present in the partial update
-  const sanitizedData: Partial<TripFormData> = { ...data };
+  const sanitizedData: TripUpdateData = { ...data };
   if (sanitizedData.name !== undefined) {
     sanitizedData.name = sanitizeTripData({ name: sanitizedData.name }).name;
   }
@@ -214,16 +286,21 @@ export async function updateTrip(
     // Checked against the merged window rather than the patch: a caller moving
     // only `endDate` can still invert a trip, and this repository is what the
     // assistant and the importers write through.
+    const nextStartDate = mergeTripDate(sanitizedData.startDate, previous?.startDate);
+    const nextEndDate = mergeTripDate(sanitizedData.endDate, previous?.endDate);
     if (previous) {
-      validateTripWindow(
-        sanitizedData.startDate ?? previous.startDate,
-        sanitizedData.endDate ?? previous.endDate,
-      );
+      validateTripWindow(nextStartDate, nextEndDate);
     }
 
-    // Use update() return value to check existence atomically (avoids TOCTOU race)
+    // Dexie's `update` deletes a key whose value is `undefined`, which is how a
+    // cleared date leaves the record.
+    const fields = Object.fromEntries(
+      Object.entries(sanitizedData).filter(([key]) => key !== 'startDate' && key !== 'endDate'),
+    ) as Omit<TripUpdateData, 'startDate' | 'endDate'>;
     const updatedCount = await db.trips.update(id, {
-      ...sanitizedData,
+      ...fields,
+      ...(sanitizedData.startDate !== undefined ? { startDate: nextStartDate } : {}),
+      ...(sanitizedData.endDate !== undefined ? { endDate: nextEndDate } : {}),
       ...updateTimestamp(),
     });
 
@@ -235,9 +312,19 @@ export async function updateTrip(
       return;
     }
 
-    const nextStartDate = sanitizedData.startDate ?? previous.startDate;
-    const nextEndDate = sanitizedData.endDate ?? previous.endDate;
     if (nextStartDate === previous.startDate && nextEndDate === previous.endDate) {
+      return;
+    }
+
+    // A booking follows the trip only from one dated window to another. A trip
+    // that gains its first dates had no "whole trip" booking to follow, and one
+    // that loses its dates keeps every booking where it was.
+    if (
+      previous.startDate === undefined ||
+      previous.endDate === undefined ||
+      nextStartDate === undefined ||
+      nextEndDate === undefined
+    ) {
       return;
     }
 
@@ -310,8 +397,8 @@ export async function getTripsByLocation(query: string): Promise<Trip[]> {
     return [];
   }
 
-  // Fetch all trips with a location, sorted by startDate descending (most recent first)
-  const allTrips = await db.trips.orderBy('startDate').reverse().toArray();
+  // Fetch all trips in display order (most recent first)
+  const allTrips = sortTripsForDisplay(await db.trips.toArray());
 
   // Filter by location match and deduplicate by normalized location
   const seenLocations = new Set<string>();

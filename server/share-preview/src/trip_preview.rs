@@ -71,6 +71,8 @@ pub struct TemplatePreview {
 }
 
 /// The `trips` row, which is authoritative for the name and the dates.
+///
+/// Both dates are empty strings for a trip without dates (null columns).
 #[derive(Debug, Clone)]
 pub struct TripRow {
     pub name: String,

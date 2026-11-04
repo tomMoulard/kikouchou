@@ -38,7 +38,7 @@ const TRIP: Trip = {
   updatedAt: 0,
 };
 
-const RANGE = { startDate: TRIP.startDate, endDate: TRIP.endDate };
+const RANGE = { startDate: TRIP.startDate!, endDate: TRIP.endDate! };
 
 const ATTIC: Room = { id: 'r1' as RoomId, tripId: TRIP.id, name: 'Attic', capacity: 3, order: 0 };
 const BARN: Room = { id: 'r2' as RoomId, tripId: TRIP.id, name: 'Barn', capacity: 1, order: 1 };

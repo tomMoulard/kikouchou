@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  buildCalendarTimelineDays,
   buildCalendarTimelineModel,
   collectAssignmentDayKeys,
   collectTransportDayKeys,
@@ -21,6 +22,7 @@ import type {
   PersonId,
   RoomId,
 } from '@/types';
+import { toDayKeys } from '@/lib/utils/trip-days';
 
 // ============================================================================
 // Helpers
@@ -1364,5 +1366,80 @@ describe('buildCalendarTimelineModel: bars and the stay window', () => {
       columns: [hour, { ...hour, key: 'hour', dayKey: undefined }],
     });
     expect(partial.dayKeys).toEqual(['2026-04-01']);
+  });
+});
+
+// ============================================================================
+// buildCalendarTimelineDays
+// ============================================================================
+
+describe('buildCalendarTimelineDays', () => {
+  const today = iso('2026-11-04');
+  const base = { persons: [], arrivals: [], departures: [], assignments: [], todayKey: today };
+
+  it('draws the trip days, widened to an event just outside them', () => {
+    const days = buildCalendarTimelineDays({
+      ...base,
+      trip: { startDate: iso('2026-04-01'), endDate: iso('2026-04-03') },
+      arrivals: [
+        {
+          id: 't1',
+          tripId: 'trip-1',
+          personId: 'p1',
+          type: 'arrival',
+          datetime: localInstant(2026, 3, 31, 10),
+          location: 'Station',
+          needsPickup: false,
+        } as unknown as Transport,
+      ],
+    });
+
+    expect(toDayKeys(days)).toEqual(['2026-03-31', '2026-04-01', '2026-04-02', '2026-04-03']);
+  });
+
+  it('draws one week from today for a trip without dates and nothing known', () => {
+    const days = buildCalendarTimelineDays({ ...base, trip: {} });
+
+    expect(toDayKeys(days)[0]).toBe('2026-11-04');
+    expect(days).toHaveLength(7);
+  });
+
+  it('draws the span of the guests\' stays for a trip without dates', () => {
+    const days = buildCalendarTimelineDays({
+      ...base,
+      trip: {},
+      persons: [
+        { ...p1, stayStartDate: iso('2026-05-10'), stayEndDate: iso('2026-05-12') },
+        { ...p2, stayStartDate: iso('2026-05-11'), stayEndDate: iso('2026-05-14') },
+      ],
+    });
+
+    expect(toDayKeys(days)).toEqual([
+      '2026-05-10',
+      '2026-05-11',
+      '2026-05-12',
+      '2026-05-13',
+      '2026-05-14',
+    ]);
+  });
+
+  it('reaches a booking night of a trip without dates', () => {
+    const days = buildCalendarTimelineDays({
+      ...base,
+      trip: {},
+      assignments: [
+        {
+          id: 'a1',
+          tripId: 'trip-1',
+          roomId: 'r1',
+          personId: 'p1',
+          startDate: iso('2026-06-01'),
+          endDate: iso('2026-06-03'),
+        } as unknown as RoomAssignment,
+      ],
+    });
+
+    // Nights of the 1st and the 2nd; the 3rd is the check-out morning.
+    expect(toDayKeys(days)).toEqual(['2026-06-01', '2026-06-02']);
   });
 });

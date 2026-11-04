@@ -65,11 +65,13 @@ function renderChecklist(
   readonly onAddRooms: ReturnType<typeof vi.fn>;
   readonly onAssignRooms: ReturnType<typeof vi.fn>;
   readonly onAddArrivals: ReturnType<typeof vi.fn>;
+  readonly onSetDates: ReturnType<typeof vi.fn>;
 } {
   const onAddGuests = vi.fn(),
     onAddRooms = vi.fn(),
     onAssignRooms = vi.fn(),
-    onAddArrivals = vi.fn();
+    onAddArrivals = vi.fn(),
+    onSetDates = vi.fn();
 
   render(
     <TripSetupChecklist
@@ -78,6 +80,7 @@ function renderChecklist(
       onAddRooms={onAddRooms}
       onAssignRooms={onAssignRooms}
       onAddArrivals={onAddArrivals}
+      onSetDates={onSetDates}
     />,
   );
 
@@ -87,6 +90,7 @@ function renderChecklist(
     onAddRooms,
     onAssignRooms,
     onAddArrivals,
+    onSetDates,
   };
 }
 
@@ -139,6 +143,41 @@ describe('TripSetupChecklist', () => {
     expect(screen.getByRole('button', { name: 'New room' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assign rooms' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New arrival' })).toBeInTheDocument();
+  });
+
+  it('asks for the dates of a trip without dates, and sends the button to its callback', async () => {
+    const { user, onSetDates } = renderChecklist({
+      steps: [
+        { key: 'dates', count: 0, isDone: false },
+        { key: 'guests', count: 0, isDone: false },
+      ],
+      doneCount: 0,
+      stepCount: 2,
+      isComplete: false,
+    });
+
+    expect(screen.getByText('Set the trip dates')).toBeInTheDocument();
+    expect(
+      screen.getByText('No dates yet, the calendar shows what is planned'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Set dates' }));
+    expect(onSetDates).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the dates step done once the trip has dates', () => {
+    renderChecklist({
+      steps: [
+        { key: 'dates', count: 1, isDone: true },
+        { key: 'guests', count: 0, isDone: false },
+      ],
+      doneCount: 1,
+      stepCount: 2,
+      isComplete: false,
+    });
+
+    expect(screen.getByText('Dates set')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set dates' })).not.toBeInTheDocument();
   });
 
   it('hands the buttons to their own callbacks', async () => {
@@ -254,6 +293,7 @@ describe('TripSetupChecklist', () => {
         onAddRooms={vi.fn()}
         onAssignRooms={vi.fn()}
         onAddArrivals={vi.fn()}
+        onSetDates={vi.fn()}
       />,
     );
 

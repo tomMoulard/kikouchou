@@ -51,8 +51,8 @@ const TRIP_END = '2026-07-22';
 interface FakeTripRow {
   id: string;
   name: string;
-  start_date: string;
-  end_date: string;
+  start_date: string | null;
+  end_date: string | null;
 }
 
 interface FakeClientOptions {
@@ -214,6 +214,40 @@ describe('ensureRemoteTrip', () => {
       start_date: TRIP_START,
       end_date: TRIP_END,
     });
+  });
+
+  it('uploads a trip without dates with null dates', async () => {
+    const trip = await createTrip({ name: TRIP_NAME });
+
+    const { client, inserts } = clientWithRows([]);
+    const result = await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(result).toEqual({ status: 'ready', remoteTripId: FRESH_ID });
+    // Both null: the columns are a pair, and '' is not a `date`.
+    expect(inserts[0]).toMatchObject({ start_date: null, end_date: null });
+  });
+
+  it('leaves the preview of a trip without dates alone when it agrees', async () => {
+    const trip = await createTrip({ name: TRIP_NAME });
+    await db.trips.update(trip.id, { remoteTripId: REMOTE_ID });
+
+    const { client, updates } = clientWithRows([
+      { id: REMOTE_ID, name: TRIP_NAME, start_date: null, end_date: null },
+    ]);
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    // Null columns are a full preview of a trip without dates, not a missing one.
+    expect(updates).toHaveLength(0);
+  });
+
+  it('clears the preview dates once the trip loses its dates', async () => {
+    const trip = await makeSharedTrip();
+    await db.trips.update(trip.id, { startDate: undefined, endDate: undefined });
+
+    const { client, rows } = clientWithRows([matchingRow()]);
+    await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(rows[0]).toMatchObject({ start_date: null, end_date: null });
   });
 
   it('creates a new server row when the old one has been deleted', async () => {

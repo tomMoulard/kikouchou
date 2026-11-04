@@ -263,6 +263,18 @@ describe('TripSnapshot mappers', () => {
     expect(result).toEqual(snapshot);
   });
 
+  it('round-trips a trip without dates as one without dates', () => {
+    // The proto fields are plain strings: '' on the wire means "no dates".
+    const undated: TripSnapshotMeta = { name: 'Summer Trip' };
+    const proto = tripSnapshotToProto(undated);
+    expect(proto.startDate).toBe('');
+    expect(proto.endDate).toBe('');
+
+    const result = protoToTripSnapshot(proto);
+    expect(result.startDate).toBeUndefined();
+    expect(result.endDate).toBeUndefined();
+  });
+
   it('handles snapshot without coordinates', () => {
     const noCoords: TripSnapshotMeta = { ...snapshot, coordinates: undefined };
     const proto = tripSnapshotToProto(noCoords);

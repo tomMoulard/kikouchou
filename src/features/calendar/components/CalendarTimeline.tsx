@@ -11,16 +11,16 @@ import { Calendar as CalendarIcon, Users } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { ActivityAgenda } from '@/features/activities/components/ActivityAgenda';
+import { getTripDates } from '@/features/trips/utils/trip-window';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { columnsFromDays } from '@/lib/utils/timeline-scale';
-import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
+import { toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString } from '@/types';
 import type { CalendarTimelineProps } from '../types';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
 import {
+  buildCalendarTimelineDays,
   buildCalendarTimelineModel,
-  collectAssignmentDayKeys,
-  collectTransportDayKeys,
 } from '../utils/timeline-utils';
 import { CalendarTimelineRow } from './CalendarTimelineRow';
 
@@ -43,25 +43,34 @@ export const CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX = 200;
 const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineProps): ReactElement {
   const { t } = useTranslation();
 
-  const guestDayKeys = useMemo(
-    () => [
-      ...collectTransportDayKeys([...props.arrivals, ...props.departures]),
-      ...collectAssignmentDayKeys(props.assignments),
-    ],
-    [props.arrivals, props.assignments, props.departures],
+  const tripDates = useMemo(
+    () => getTripDates({ startDate: props.trip.startDate, endDate: props.trip.endDate }),
+    [props.trip.startDate, props.trip.endDate],
   );
 
-  // The trip's own days, widened to reach every event drawn on them: a guest
-  // who flies in the day before the trip starts has no column on a trip-only
-  // axis, and a pill with no column is a pill nobody can see.
+  const todayKey = toLocalISODateString(props.today) as ISODateString;
+
+  // The axis: the trip widened to its events, or for a trip without dates the
+  // span of what is known. See `buildCalendarTimelineDays`.
   const tripDays = useMemo(
     () =>
-      buildDayColumnsCovering({
-        startKey: props.trip.startDate,
-        endKey: props.trip.endDate,
-        mustInclude: guestDayKeys,
+      buildCalendarTimelineDays({
+        trip: { startDate: props.trip.startDate, endDate: props.trip.endDate },
+        persons: props.persons,
+        arrivals: props.arrivals,
+        departures: props.departures,
+        assignments: props.assignments,
+        todayKey,
       }),
-    [props.trip.startDate, props.trip.endDate, guestDayKeys],
+    [
+      props.trip.startDate,
+      props.trip.endDate,
+      props.persons,
+      props.arrivals,
+      props.departures,
+      props.assignments,
+      todayKey,
+    ],
   );
 
   const tripDayKeys = useMemo(() => toDayKeys(tripDays), [tripDays]);
@@ -95,13 +104,13 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
     ],
   );
 
-  const todayKey = toLocalISODateString(props.today) as ISODateString;
-
   // The axis can now reach past the trip, so the header says which columns are
-  // the trip itself and which are the days either side of it.
+  // the trip itself and which are the days either side of it. A trip without
+  // dates has no inside or outside.
   const tripRange = useMemo(
-    () => ({ startKey: props.trip.startDate, endKey: props.trip.endDate }),
-    [props.trip.startDate, props.trip.endDate],
+    () =>
+      tripDates ? { startKey: tripDates.startDate, endKey: tripDates.endDate } : undefined,
+    [tripDates],
   );
 
   // People on site each night — hosts read this row to plan meals.

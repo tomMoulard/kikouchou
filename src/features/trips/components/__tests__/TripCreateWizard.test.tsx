@@ -1,5 +1,6 @@
 /**
- * @fileoverview The first-trip wizard: a name, the dates, then the invite link.
+ * @fileoverview The first-trip wizard: a name, then the invite link. The dates
+ * are not asked: the calendar's setup checklist asks for them later.
  *
  * @module features/trips/components/__tests__/TripCreateWizard.test
  */
@@ -7,7 +8,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { format } from 'date-fns';
 
 import { TripCreateWizard } from '../TripCreateWizard';
 import { createTripWithDetails } from '../../lib/create-trip-with-details';
@@ -40,28 +40,6 @@ vi.mock('react-i18next', () => ({
     },
     i18n: { language: 'en' },
   }),
-}));
-
-// The picker is react-day-picker behind a popover; one button standing in
-// for it keeps this file about the wizard. The real picker has its own tests.
-vi.mock('@/components/shared/DateRangePicker', () => ({
-  DateRangePicker: ({
-    onChange,
-    'aria-label': label,
-  }: {
-    onChange: (range: { from: Date; to: Date }) => void;
-    'aria-label'?: string;
-  }) => (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={() => {
-        onChange({ from: new Date(2026, 6, 15), to: new Date(2026, 6, 22) });
-      }}
-    >
-      pick dates
-    </button>
-  ),
 }));
 
 // The panel has its own tests. Here it only has to say what it was given and
@@ -122,8 +100,6 @@ const CREATED_TRIP = {
   id: 'trip-1',
   shareId: 'share-1',
   name: 'Lake house',
-  startDate: '2026-07-15',
-  endDate: '2026-07-22',
 };
 
 function outcome() {
@@ -166,16 +142,9 @@ function renderTemplateWizard(): ReturnType<typeof render> {
   );
 }
 
-/** Answers the name and lands on the dates, the last question. */
-async function answerName(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
-  await screen.findByText('When is it?');
-}
-
-/** Answers both questions and creates the trip. */
+/** Answers the one question, which creates the trip. */
 async function createTrip(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await answerName(user);
-  await user.click(screen.getByRole('button', { name: 'Trip dates' }));
+  await user.type(screen.getByLabelText('Trip name'), 'Lake house');
   await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 }
 
@@ -219,7 +188,7 @@ beforeEach(() => {
 // ============================================================================
 
 describe('TripCreateWizard', () => {
-  it('asks one question at a time, and Enter answers it', async () => {
+  it('asks one question, and Enter on it creates the trip', async () => {
     const user = userEvent.setup();
     renderWizard();
 
@@ -229,66 +198,50 @@ describe('TripCreateWizard', () => {
 
     await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
 
-    expect(screen.getByText('When is it?')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedCreate).toHaveBeenCalledTimes(1);
+    });
     expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'name', outcome: 'next' });
+    expect(await screen.findByTestId('trip-wizard-invite')).toBeInTheDocument();
+    // The dates were never a question.
+    expect(screen.queryByText('When is it?')).not.toBeInTheDocument();
   });
 
-  it('will not move on without a name, and says so', async () => {
+  it('will not create the trip without a name, and says so', async () => {
     const user = userEvent.setup();
     renderWizard();
-
-    await user.click(screen.getByRole('button', { name: 'Next' }));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
-    expect(screen.getByText('What is the trip called?')).toBeInTheDocument();
-  });
-
-  it('will not create the trip without both dates', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerName(user);
 
     await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Pick the first and the last day');
+    expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
+    expect(screen.getByText('What is the trip called?')).toBeInTheDocument();
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
-  it('counts the link as a step of its own', async () => {
-    const user = userEvent.setup();
+  it('counts the link as a step of its own', () => {
     renderWizard();
 
-    expect(screen.getByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
-
-    expect(screen.getByRole('list', { name: 'Step 2 of 3' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Step 1 of 2' })).toBeInTheDocument();
   });
 
-  it('goes back a question, and leaves from the first one', async () => {
+  it('leaves from its one question on Back', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await answerName(user);
-
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByText('What is the trip called?')).toBeInTheDocument();
-    // The name typed is still there.
-    expect(screen.getByLabelText('Trip name')).toHaveValue('Lake house');
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'dates', outcome: 'back' });
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('creates the trip from the dates, with no place, guest or room asked', async () => {
+  it('creates the trip with no dates, place, guest or room asked', async () => {
     const user = userEvent.setup();
     renderWizard();
     await createTrip(user);
 
-    // Exactly these keys: nothing the wizard did not ask for is sent empty.
+    // Exactly these keys: nothing the wizard did not ask for is sent empty,
+    // and no date at all, because the trip is created without them.
     await waitFor(() => {
       expect(createdDraft()).toStrictEqual({
-        form: { name: 'Lake house', startDate: '2026-07-15', endDate: '2026-07-22' },
+        form: { name: 'Lake house' },
         guests: [],
         rooms: [],
         importSourceTripId: null,
@@ -297,7 +250,7 @@ describe('TripCreateWizard', () => {
       });
     });
     expect(await screen.findByTestId('trip-wizard-invite')).toBeInTheDocument();
-    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'dates', outcome: 'next' });
+    expect(capture).toHaveBeenCalledWith('trip_wizard_step', { step: 'name', outcome: 'next' });
     expect(vi.mocked(captureUsage)).toHaveBeenCalledWith(
       'trip_created',
       expect.objectContaining({ via: 'wizard' }),
@@ -330,21 +283,18 @@ describe('TripCreateWizard', () => {
 
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), '  Lake house  {Enter}');
-    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
-    await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
     await waitFor(() => {
       expect(mockedCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ form: expect.objectContaining({ name: 'Lake house' }) }),
+        expect.objectContaining({ form: { name: 'Lake house' } }),
       );
     });
   });
 
-  it('creates the trip on Enter from the dates', async () => {
+  it('creates the trip on a form submit', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await answerName(user);
-    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
+    await user.type(screen.getByLabelText('Trip name'), 'Lake house');
 
     fireEvent.submit(screen.getByTestId('trip-wizard'));
 
@@ -388,27 +338,23 @@ describe('TripCreateWizard', () => {
   // --------------------------------------------------------------------------
 
   describe('with a template', () => {
-    it("starts on the template's name and today, so Next alone reaches the link", async () => {
+    it("starts on the template's name, so one press reaches the link", async () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
       expect(screen.getByLabelText('Trip name')).toHaveValue('Chalet Marmotte');
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      await screen.findByText('When is it?');
       await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
-      const today = format(new Date(), 'yyyy-MM-dd');
       await waitFor(() => {
         expect(mockedCreate).toHaveBeenCalledWith(
           expect.objectContaining({
-            form: expect.objectContaining({
-              name: 'Chalet Marmotte',
-              startDate: today,
-              endDate: today,
-            }),
+            form: expect.objectContaining({ name: 'Chalet Marmotte' }),
           }),
         );
       });
+      // No date stands in for the ones nobody gave.
+      expect(mockedCreate.mock.calls[0]?.[0].form).not.toHaveProperty('startDate');
+      expect(mockedCreate.mock.calls[0]?.[0].form).not.toHaveProperty('endDate');
       expect(await screen.findByTestId('trip-wizard-invite')).toBeInTheDocument();
     });
 
@@ -417,32 +363,28 @@ describe('TripCreateWizard', () => {
       renderTemplateWizard();
 
       await user.clear(screen.getByLabelText('Trip name'));
-      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
     });
 
-    it('asks the same two questions as the ordinary wizard', () => {
+    it('asks the same one question as the ordinary wizard', () => {
       renderTemplateWizard();
 
-      expect(screen.getByRole('list', { name: 'Step 1 of 3' })).toBeInTheDocument();
+      expect(screen.getByRole('list', { name: 'Step 1 of 2' })).toBeInTheDocument();
     });
 
-    it('creates the trip with the template values and the answers', async () => {
+    it('creates the trip with the template values and the answer', async () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
       await user.clear(screen.getByLabelText('Trip name'));
       await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
-      await user.click(screen.getByRole('button', { name: 'Trip dates' }));
-      await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       await waitFor(() => {
         expect(createdDraft()).toStrictEqual({
           form: {
             name: 'Ski week',
-            startDate: '2026-07-15',
-            endDate: '2026-07-22',
             location: 'Chamonix',
             coordinates: { lat: 45.9237, lon: 6.8694 },
             description: 'Check-in after 3pm.',
@@ -471,7 +413,6 @@ describe('TripCreateWizard', () => {
           onCancel={onCancel}
         />,
       );
-      await user.click(screen.getByRole('button', { name: 'Next' }));
       await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       await waitFor(() => {
@@ -479,8 +420,6 @@ describe('TripCreateWizard', () => {
       });
       expect(mockedCreate.mock.calls[0]?.[0].form).toStrictEqual({
         name: 'Chalet Marmotte',
-        startDate: format(new Date(), 'yyyy-MM-dd'),
-        endDate: format(new Date(), 'yyyy-MM-dd'),
       });
     });
 
@@ -488,7 +427,6 @@ describe('TripCreateWizard', () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
-      await user.click(screen.getByRole('button', { name: 'Next' }));
       await user.click(screen.getByRole('button', { name: 'Create the trip' }));
 
       await waitFor(() => {
@@ -526,41 +464,25 @@ describe('TripCreateWizard screens', () => {
     expect(screen.getByText('Trip name')).toHaveClass('sr-only');
     expect(screen.getByTestId('trip-wizard')).toHaveClass('space-y-6');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create the trip' })).not.toBeInTheDocument();
+    // The name is the last question, so its button creates the trip.
+    expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create the trip' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
   });
 
-  it('marks the current step and fills the dots up to it', async () => {
-    const user = userEvent.setup();
+  it('marks the current step and fills the dots up to it', () => {
     renderWizard();
-    await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
 
-    const dots = within(screen.getByRole('list', { name: 'Step 2 of 3' })).getAllByRole(
+    const dots = within(screen.getByRole('list', { name: 'Step 1 of 2' })).getAllByRole(
       'listitem',
     );
-    expect(dots).toHaveLength(3);
-    expect(dots.map((dot) => dot.getAttribute('aria-current'))).toEqual([null, 'step', null]);
+    expect(dots).toHaveLength(2);
+    expect(dots.map((dot) => dot.getAttribute('aria-current'))).toEqual(['step', null]);
     expect(dots[0]).toHaveClass('bg-primary', 'size-2.5');
-    expect(dots[1]).toHaveClass('bg-primary');
-    expect(dots[2]).toHaveClass('bg-muted-foreground/30');
-    expect(dots[2]).not.toHaveClass('bg-primary');
-    expect(dots[1]).not.toHaveClass('bg-muted-foreground/30');
-    expect(dots[1]).toHaveTextContent('dates');
-    expect(dots[2]).toHaveTextContent('invite');
-  });
-
-  it('words the dates screen, which creates the trip', async () => {
-    const user = userEvent.setup();
-    renderWizard();
-    await answerName(user);
-
-    expect(screen.getByRole('heading', { name: 'When is it?' })).toBeInTheDocument();
-    expect(
-      screen.getByText('First and last day. Guests can arrive and leave in between.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create the trip' })).toBeInTheDocument();
+    expect(dots[1]).toHaveClass('bg-muted-foreground/30');
+    expect(dots[1]).not.toHaveClass('bg-primary');
+    expect(dots[0]).toHaveTextContent('name');
+    expect(dots[1]).toHaveTextContent('invite');
   });
 
   it('cancels the browser submit on every Enter', () => {
@@ -666,17 +588,18 @@ describe('TripCreateWizard creating', () => {
   it('is no longer dirty once the trip exists', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await answerName(user);
+    await user.type(screen.getByLabelText('Trip name'), 'Lake house');
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
-    await user.click(screen.getByRole('button', { name: 'Trip dates' }));
     await user.click(screen.getByRole('button', { name: 'Create the trip' }));
     await screen.findByTestId('trip-wizard-invite');
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('counts template dates as unsaved even under an empty name', () => {
+  it('holds nothing unsaved for a template with an empty name', () => {
+    // The template used to prefill today's dates, which counted as an answer.
+    // With no dates asked, an empty name is an untouched screen.
     render(
       <TripCreateWizard
         prefill={{ ...PREFILL, name: '' }}
@@ -686,7 +609,7 @@ describe('TripCreateWizard creating', () => {
       />,
     );
 
-    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
   it("cuts a template's long name to the length a trip name may have", () => {

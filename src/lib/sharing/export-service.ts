@@ -186,8 +186,9 @@ export async function buildHostChangeset(trip: Trip): Promise<AppChangeset | nul
     baseSnapshotAt: trip.createdAt,
     tripSnapshot: {
       name: trip.name,
-      startDate: trip.startDate,
-      endDate: trip.endDate,
+      ...(trip.startDate && trip.endDate
+        ? { startDate: trip.startDate, endDate: trip.endDate }
+        : {}),
       location: trip.location,
       description: trip.description,
       coordinates: trip.coordinates,

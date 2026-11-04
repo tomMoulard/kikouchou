@@ -99,6 +99,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: false,
     });
 
     expect(checklist.steps.map((s) => s.key)).toEqual([...TRIP_SETUP_STEP_KEYS]);
@@ -115,10 +116,12 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'guests')).toMatchObject({ count: 1, isDone: true });
-    expect(checklist.doneCount).toBe(1);
+    // The dates and the guests.
+    expect(checklist.doneCount).toBe(2);
   });
 
   it('counts people rather than guest rows', () => {
@@ -129,6 +132,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'guests').count).toBe(5);
@@ -142,6 +146,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'assignments')).toMatchObject({
@@ -161,6 +166,7 @@ describe('buildTripSetupChecklist', () => {
       ],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'assignments')).toMatchObject({
@@ -177,6 +183,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [makeAssignment({ id: 'a1', personId: 'deleted' })],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'assignments')).toMatchObject({ count: 0, isDone: false });
@@ -189,6 +196,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
       arrivals: [makeArrival('t1', 'p1')],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'assignments').isDone).toBe(false);
@@ -202,6 +210,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     // 0 of 0 is not "everybody has a room", it is "there is nobody yet".
@@ -219,6 +228,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [makeArrival('t1', 'p1')],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(step(checklist, 'arrivals')).toMatchObject({ count: 1, isDone: true });
@@ -235,11 +245,12 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [],
       tripHasNoNights: true,
+      tripHasDates: true,
     });
 
-    expect(checklist.steps.map((s) => s.key)).toEqual(['guests', 'rooms', 'arrivals']);
-    expect(checklist.stepCount).toBe(3);
-    expect(checklist.doneCount).toBe(2);
+    expect(checklist.steps.map((s) => s.key)).toEqual(['dates', 'guests', 'rooms', 'arrivals']);
+    expect(checklist.stepCount).toBe(4);
+    expect(checklist.doneCount).toBe(3);
     expect(checklist.isComplete).toBe(false);
   });
 
@@ -250,9 +261,46 @@ describe('buildTripSetupChecklist', () => {
       assignments: [],
       arrivals: [makeArrival('t1', 'p1')],
       tripHasNoNights: true,
+      tripHasDates: true,
     });
 
     expect(checklist.isComplete).toBe(true);
+  });
+
+  it('asks for the dates first, and ticks them off once the trip has some', () => {
+    const undated = buildTripSetupChecklist({
+      persons: [],
+      rooms: [],
+      assignments: [],
+      arrivals: [],
+      tripHasNoNights: false,
+      tripHasDates: false,
+    });
+    expect(undated.steps[0]).toMatchObject({ key: 'dates', count: 0, isDone: false });
+
+    const dated = buildTripSetupChecklist({
+      persons: [],
+      rooms: [],
+      assignments: [],
+      arrivals: [],
+      tripHasNoNights: false,
+      tripHasDates: true,
+    });
+    expect(step(dated, 'dates')).toMatchObject({ count: 1, isDone: true });
+  });
+
+  it('is not complete without dates, whatever else is done', () => {
+    const checklist = buildTripSetupChecklist({
+      persons: [makePerson({ id: 'p1' })],
+      rooms: [makeRoom('room-1')],
+      assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
+      arrivals: [makeArrival('t1', 'p1')],
+      tripHasNoNights: false,
+      tripHasDates: false,
+    });
+
+    expect(checklist.doneCount).toBe(checklist.stepCount - 1);
+    expect(checklist.isComplete).toBe(false);
   });
 
   it('is complete once every guest has a room and travel is booked', () => {
@@ -262,6 +310,7 @@ describe('buildTripSetupChecklist', () => {
       assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
       arrivals: [makeArrival('t1', 'p1')],
       tripHasNoNights: false,
+      tripHasDates: true,
     });
 
     expect(checklist.doneCount).toBe(checklist.stepCount);
@@ -281,7 +330,7 @@ describe('shouldShowTripSetupChecklist', () => {
   it('stays on screen once guests have rooms but nobody has travel yet', () => {
     expect(
       shouldShowTripSetupChecklist({
-        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [], tripHasNoNights: false }),
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [], tripHasNoNights: false, tripHasDates: true }),
         arrivals: [],
         departures: [],
       }),
@@ -293,11 +342,32 @@ describe('shouldShowTripSetupChecklist', () => {
 
     expect(
       shouldShowTripSetupChecklist({
-        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals, tripHasNoNights: false }),
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals, tripHasNoNights: false, tripHasDates: true }),
         arrivals,
         departures: [],
       }),
     ).toBe(false);
+  });
+
+  it('stays on screen after travel while the trip has no dates', () => {
+    // The checklist is the one place that asks for the dates: hiding it at the
+    // first arrival would leave a trip without dates that nothing asks about.
+    const arrivals = [makeArrival('t1', 'p1')];
+
+    expect(
+      shouldShowTripSetupChecklist({
+        checklist: buildTripSetupChecklist({
+          persons,
+          rooms,
+          assignments,
+          arrivals,
+          tripHasNoNights: false,
+          tripHasDates: false,
+        }),
+        arrivals,
+        departures: [],
+      }),
+    ).toBe(true);
   });
 
   it('goes away on a departure alone, for a host who only drives people home', () => {
@@ -305,7 +375,7 @@ describe('shouldShowTripSetupChecklist', () => {
 
     expect(
       shouldShowTripSetupChecklist({
-        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [], tripHasNoNights: false }),
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [], tripHasNoNights: false, tripHasDates: true }),
         arrivals: [],
         departures,
       }),

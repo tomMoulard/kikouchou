@@ -24,6 +24,7 @@ import {
   getTripById,
   setCurrentTrip as repositorySetCurrentTrip,
 } from '@/lib/db';
+import { sortTripsForDisplay } from '@/lib/db/repositories/trip-repository';
 import { TripNotFoundError } from '@/lib/db/trip-not-found-error';
 import type { Trip, TripId } from '@/types';
 
@@ -199,11 +200,13 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
    queryResult = useLiveQuery(async (): Promise<TripQueryResult> => {
     try {
       const [trips, settings] = await Promise.all([
-        db.trips.orderBy('startDate').reverse().toArray(),
+        // Not `orderBy('startDate')`: IndexedDB leaves a trip without dates out
+        // of that index, so it would vanish from the app.
+        db.trips.toArray(),
         getSettings(),
       ]);
       return {
-        trips,
+        trips: sortTripsForDisplay(trips),
         currentTripId: settings.currentTripId,
         sampleTripId: settings.sampleTripId,
       };

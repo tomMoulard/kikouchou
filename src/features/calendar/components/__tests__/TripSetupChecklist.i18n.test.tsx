@@ -34,6 +34,7 @@ async function renderInFrench(checklist: TripSetupChecklistModel): Promise<void>
       onAddRooms={vi.fn()}
       onAssignRooms={vi.fn()}
       onAddArrivals={vi.fn()}
+      onSetDates={vi.fn()}
     />,
     { language: 'fr', withProviders: false },
   );

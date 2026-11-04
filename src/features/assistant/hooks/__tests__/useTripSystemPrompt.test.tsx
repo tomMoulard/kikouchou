@@ -211,6 +211,27 @@ describe('useTripSystemPrompt', () => {
     );
   });
 
+  it('says a trip without dates has none, rather than "undefined to undefined"', async () => {
+    const trip = await createTrip({ name: 'Undated Trip' });
+    const result = await renderWithTrip(trip.id);
+
+    const prompt = result.current.prompt.systemPrompt;
+    expect(prompt).toContain('- Dates: Not set');
+    expect(prompt).toContain(`\`${trip.id}\` — no dates`);
+    expect(prompt).not.toContain('undefined');
+  });
+
+  it('states the dates of a dated trip', async () => {
+    const trip = await createTrip({
+      name: 'Dated Trip',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-30'),
+    });
+    const result = await renderWithTrip(trip.id);
+
+    expect(result.current.prompt.systemPrompt).toContain('- Dates: 2024-07-15 to 2024-07-30');
+  });
+
   it('says the trip is unpinned rather than omitting the line', async () => {
     const { tripId } = await seedTrip();
     const result = await renderWithTrip(tripId);

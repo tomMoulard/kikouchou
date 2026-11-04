@@ -21,7 +21,7 @@ import { QRCodeSVG } from 'qrcode.react';
 
 import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
-import { formatDateRange, formatFullDate } from '@/lib/utils/date-format';
+import { formatDateRange, formatFullDate, formatTripDateRange } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import type {
@@ -285,7 +285,8 @@ export const SummarySheet = memo(function SummarySheet({
       <header className="border-b border-border pb-3">
         <h2 className="text-2xl font-bold">{summary.name}</h2>
         <p className="text-muted-foreground">
-          {formatDateRange(summary.startDate, summary.endDate, dateLocale)}
+          {formatTripDateRange(summary.startDate, summary.endDate, dateLocale) ??
+            t('trips.datesNotSet', 'Dates not set')}
           {summary.location ? ` · ${summary.location}` : ''}
         </p>
         <p className="text-sm text-muted-foreground">

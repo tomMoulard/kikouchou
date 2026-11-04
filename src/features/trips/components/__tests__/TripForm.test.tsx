@@ -41,6 +41,14 @@ function createTestTrip(overrides?: Partial<Trip>): Trip {
 }
 
 /**
+ * A trip without dates, opened in the edit form: where the date fields live
+ * now that a new trip is created without them.
+ */
+function createUndatedTrip(): Trip {
+  return createTestTrip({ startDate: undefined, endDate: undefined });
+}
+
+/**
  * An onSubmit whose save stays pending until the test settles it.
  *
  * A save that resolves on a wall-clock timer races the assertions: on a loaded
@@ -105,8 +113,9 @@ describe('TripForm Basic Rendering', () => {
 
     expect(screen.getByLabelText(/trips\.name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/trips\.location/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/trips\.startDate/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/trips\.endDate/i)).toBeInTheDocument();
+    // A new trip is created without dates: the calendar asks for them later.
+    expect(screen.queryByLabelText(/trips\.startDate/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/trips\.endDate/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /common\.save/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /common\.cancel/i })).toBeInTheDocument();
   });
@@ -138,15 +147,11 @@ describe('TripForm Basic Rendering', () => {
     expect(locationInput).toHaveValue('Brittany, France');
   });
 
-  it('shows required indicators for name and dates', () => {
-    const onSubmit = vi.fn();
-    const onCancel = vi.fn();
+  it('marks only the name as required', () => {
+    render(<TripForm trip={createUndatedTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
 
-    render(<TripForm onSubmit={onSubmit} onCancel={onCancel} />);
-
-    // Required fields should have asterisk
-    const requiredIndicators = screen.getAllByText('*');
-    expect(requiredIndicators.length).toBeGreaterThanOrEqual(3); // name, startDate, endDate
+    // The dates are optional, even where they are asked.
+    expect(screen.getAllByText('*')).toHaveLength(1);
   });
 });
 
@@ -773,10 +778,9 @@ describe('TripForm Description', () => {
 
   it('start date shows aria-invalid when error', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    // Submit without dates to trigger error
-    const nameInput = screen.getByLabelText(/trips\.name/i);
-    await user.type(nameInput, 'Test');
+    render(<TripForm trip={createUndatedTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    // An end alone: the dates go together.
+    pickDate('end', '2024-07-15');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     await waitFor(() => {
       const startBtn = screen.getByLabelText(/trips\.startDate/i);
@@ -880,11 +884,10 @@ describe('TripForm Date Selection Branches', () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
-    render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+    render(<TripForm trip={createUndatedTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    // Submit without dates to trigger start date error
-    const nameInput = screen.getByLabelText(/trips\.name/i);
-    await user.type(nameInput, 'Test Trip');
+    // An end alone triggers the start date error.
+    pickDate('end', '2024-07-15');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     await waitFor(() => {
@@ -960,21 +963,20 @@ describe('TripForm Date Selection Branches', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('shows error when submitting without start date', async () => {
+  it('saves a new trip with a name and no dates', async () => {
     const user = userEvent.setup();
-    const onSubmit = vi.fn();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
-    // Fill in name but not dates
-    const nameInput = screen.getByLabelText(/trips\.name/i);
-    await user.clear(nameInput);
-    await user.type(nameInput, 'My Trip');
+    await user.type(screen.getByLabelText(/trips\.name/i), 'My Trip');
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
-    const submitBtn = screen.getByRole('button', { name: /common\.save/i });
-    await user.click(submitBtn);
-
-    expect(onSubmit).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('startDate');
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('endDate');
   });
 });
 
@@ -1118,7 +1120,7 @@ describe('TripForm Date Inputs', () => {
   });
 
   it('keeps the end date from going before the start', () => {
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    render(<TripForm trip={createUndatedTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByLabelText(/trips\.endDate/i)).not.toHaveAttribute('min');
 
     pickDate('start', '2024-10-15');
@@ -1167,10 +1169,8 @@ function guestInputs(): readonly HTMLInputElement[] {
 async function fillRequiredTripFields(
   user: ReturnType<typeof userEvent.setup>,
 ): Promise<void> {
+  // The name is all a new trip needs: the form asks for no dates.
   await user.type(screen.getByLabelText(/trips\.name/i), 'Beach Vacation');
-
-  pickDate('start', '2024-07-10');
-  pickDate('end', '2024-07-15');
 }
 
 describe('TripForm Guest List', () => {
@@ -1747,26 +1747,24 @@ describe('TripForm switching trips', () => {
     expect(screen.getByLabelText(/trips\.name/i)).toHaveValue('');
     expect(screen.getByLabelText(/trips\.location/i)).toHaveValue('');
     expect(screen.getByLabelText(/trips\.description/i)).toHaveValue('');
-    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveValue('');
-    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveValue('');
+    expect(screen.queryByLabelText(/trips\.startDate/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/trips\.endDate/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /trips\.removePin/i })).not.toBeInTheDocument();
   });
 
-  it('asks for both dates again once the trip is taken away', async () => {
+  it('carries none of the old trip dates once the trip is taken away', async () => {
     const user = userEvent.setup();
-    const { rerender } = render(<TripForm trip={tripA} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    rerender(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<TripForm trip={tripA} onSubmit={onSubmit} onCancel={vi.fn()} />);
+    rerender(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
 
+    await user.type(screen.getByLabelText(/trips\.name/i), 'Next');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
-    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
-    expect(screen.getByLabelText(/trips\.endDate/i)).toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('startDate');
   });
 
   it('starts the guest list afresh, following the account again', async () => {
@@ -1790,8 +1788,9 @@ describe('TripForm required fields', () => {
   it('refuses a nameless trip even with both dates chosen', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+    render(<TripForm trip={createUndatedTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />);
 
+    await user.clear(screen.getByLabelText(/trips\.name/i));
     pickDate('start', '2024-07-10');
     pickDate('end', '2024-07-15');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
@@ -1804,9 +1803,10 @@ describe('TripForm required fields', () => {
   it('asks for the end date when only the start is chosen', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    const { container } = render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+    const { container } = render(
+      <TripForm trip={createUndatedTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />,
+    );
 
-    await user.type(screen.getByLabelText(/trips\.name/i), 'Lake');
     pickDate('start', '2024-07-10');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
@@ -1815,7 +1815,22 @@ describe('TripForm required fields', () => {
       'aria-invalid',
       'true',
     );
-    expect(container.querySelector('#trip-end-date-error')).toHaveTextContent('common.required');
+    expect(container.querySelector('#trip-end-date-error')).toHaveTextContent(
+      'trips.datesTogether',
+    );
+  });
+
+  it('saves a trip without dates when both are left empty', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<TripForm trip={createUndatedTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('startDate');
   });
 
   it('cancels the browser submit', () => {
@@ -1839,8 +1854,13 @@ describe('TripForm picking dates', () => {
     pickDate('end', `2024-07-${String(day).padStart(2, '0')}`);
   }
 
+  /** The edit form of a trip without dates, where the dates are picked. */
+  function renderUndated(onSubmit = vi.fn()) {
+    return render(<TripForm trip={createUndatedTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />);
+  }
+
   it('keeps an end date the new start date has not overtaken', () => {
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    renderUndated();
     pickStart(10);
     pickEnd(15);
 
@@ -1849,11 +1869,10 @@ describe('TripForm picking dates', () => {
     expect(endInput()).toHaveValue('2024-07-15');
   });
 
-  it('drops an end date overtaken in a new trip, and then asks for one', async () => {
+  it('drops an end date overtaken, and then asks for one', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
-    await user.type(screen.getByLabelText(/trips\.name/i), 'Lake');
+    renderUndated(onSubmit);
     pickStart(10);
     pickEnd(15);
 
@@ -1867,8 +1886,8 @@ describe('TripForm picking dates', () => {
 
   it('keeps the name error when only the start date is chosen', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await user.click(screen.getByLabelText(/trips\.name/i));
+    renderUndated();
+    await user.clear(screen.getByLabelText(/trips\.name/i));
     await user.tab();
     expect(screen.getByLabelText(/trips\.name/i)).toHaveAttribute('aria-invalid', 'true');
 
@@ -1879,11 +1898,12 @@ describe('TripForm picking dates', () => {
 
   it('keeps asking for the end date after the start is chosen', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    renderUndated();
+    pickStart(10);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     expect(endInput()).toHaveAttribute('aria-invalid', 'true');
 
-    pickStart(10);
+    pickStart(11);
 
     expect(startInput()).toHaveAttribute('aria-invalid', 'false');
     expect(endInput()).toHaveAttribute('aria-invalid', 'true');
@@ -1922,24 +1942,29 @@ describe('TripForm picking dates', () => {
     });
   });
 
-  it('lets a chosen start date be cleared again', async () => {
+  it('lets a chosen start date be cleared again, back to a trip without dates', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderUndated(onSubmit);
     pickStart(10);
     expect(startInput()).toHaveValue('2024-07-10');
 
     pickDate('start', '');
 
     expect(startInput()).toHaveValue('');
-    // Unselected means unset: the form asks for it again.
+    // Both empty again: the trip saves without dates.
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
-    expect(startInput()).toHaveAttribute('aria-invalid', 'true');
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('startDate');
   });
 
   it('lets a chosen end date be cleared again', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    pickEnd(10);
+    renderUndated();
+    pickStart(10);
+    pickEnd(12);
 
     pickDate('end', '');
 
@@ -1950,7 +1975,8 @@ describe('TripForm picking dates', () => {
 
   it('clears the end date complaint once an end is chosen, and only that one', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    renderUndated();
+    await user.clear(screen.getByLabelText(/trips\.name/i));
     pickStart(10);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     expect(endInput()).toHaveAttribute('aria-invalid', 'true');
@@ -1961,12 +1987,12 @@ describe('TripForm picking dates', () => {
     expect(screen.getByLabelText(/trips\.name/i)).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('clears the end date complaint even with no start yet, and only that one', async () => {
+  it('asks for the start when only the end is chosen, and not for the end', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: /common\.save/i }));
-
+    renderUndated();
     pickEnd(15);
+
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     expect(endInput()).toHaveAttribute('aria-invalid', 'false');
     expect(startInput()).toHaveAttribute('aria-invalid', 'true');
@@ -1974,29 +2000,56 @@ describe('TripForm picking dates', () => {
 
   it('marks a missing date in error and ties the message to it', async () => {
     const user = userEvent.setup();
-    const { container } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    const { container } = renderUndated();
     expect(startInput()).toHaveAttribute('aria-invalid', 'false');
     expect(endInput()).toHaveAttribute('aria-invalid', 'false');
     expect(container.querySelector('#trip-start-date-error')).toBeNull();
     expect(container.querySelector('#trip-end-date-error')).toBeNull();
 
+    pickEnd(15);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     expect(startInput()).toHaveAttribute('aria-invalid', 'true');
-    expect(endInput()).toHaveAttribute('aria-invalid', 'true');
     expect(startInput()).toHaveAttribute('aria-describedby', 'trip-start-date-error');
-    expect(endInput()).toHaveAttribute('aria-describedby', 'trip-end-date-error');
-    expect(container.querySelector('#trip-start-date-error')).toHaveTextContent('common.required');
+    expect(container.querySelector('#trip-start-date-error')).toHaveTextContent(
+      'trips.datesTogether',
+    );
 
     pickStart(10);
     expect(startInput()).toHaveAttribute('aria-invalid', 'false');
   });
 
   it('keeps the end input from going before the start', () => {
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    renderUndated();
     pickStart(10);
 
     expect(endInput()).toHaveAttribute('min', '2024-07-10');
+  });
+
+  it('clears both dates with one button, and saves a trip without dates', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<TripForm trip={createTestTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(startInput()).toHaveValue('2024-07-15');
+
+    await user.click(screen.getByRole('button', { name: 'trips.clearDates' }));
+
+    expect(startInput()).toHaveValue('');
+    expect(endInput()).toHaveValue('');
+    // Nothing left to clear.
+    expect(screen.queryByRole('button', { name: 'trips.clearDates' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('startDate');
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('endDate');
+  });
+
+  it('offers no clear button while both dates are empty', () => {
+    renderUndated();
+
+    expect(screen.queryByRole('button', { name: 'trips.clearDates' })).not.toBeInTheDocument();
   });
 });
 
@@ -2081,7 +2134,10 @@ describe('TripForm name checks', () => {
 
   it('clears only the name error while the name is typed', async () => {
     const user = userEvent.setup();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    render(<TripForm trip={createUndatedTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await user.clear(screen.getByLabelText(/trips\.name/i));
+    // An end alone, so the start carries an error of its own.
+    pickDate('end', '2024-07-15');
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
 
     await user.type(screen.getByLabelText(/trips\.name/i), 'L');
@@ -2116,7 +2172,14 @@ describe('TripForm unsaved changes', () => {
 
   it('is dirty once the start date alone changes', () => {
     const onDirtyChange = vi.fn();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />);
+    render(
+      <TripForm
+        trip={createUndatedTrip()}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+    );
 
     pickDate('start', '2024-07-10');
 
@@ -2125,7 +2188,14 @@ describe('TripForm unsaved changes', () => {
 
   it('is dirty once the end date alone changes', () => {
     const onDirtyChange = vi.fn();
-    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />);
+    render(
+      <TripForm
+        trip={createUndatedTrip()}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+    );
 
     pickDate('end', '2024-07-10');
 

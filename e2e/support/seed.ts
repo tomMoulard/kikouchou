@@ -27,9 +27,9 @@ export interface SeedTripOptions {
   /** Free-text description, which an import copies with the location. */
   readonly description?: string;
   /** ISO `yyyy-MM-dd`. */
-  readonly startDate: string;
+  readonly startDate?: string;
   /** ISO `yyyy-MM-dd`. */
-  readonly endDate: string;
+  readonly endDate?: string;
   /** Pin the trip on the map; without it no map preview renders. */
   readonly coordinates?: { readonly lat: number; readonly lon: number };
   /**
@@ -113,8 +113,8 @@ export async function seedTrip(
             name,
             ...(location === undefined ? {} : { location }),
             ...(description === undefined ? {} : { description }),
-            startDate,
-            endDate,
+            // Left off a trip without dates, as the app stores one.
+            ...(startDate === undefined || endDate === undefined ? {} : { startDate, endDate }),
             ...(coordinates === undefined ? {} : { coordinates }),
             ...(currency === undefined ? {} : { currency }),
             createdAt: now,

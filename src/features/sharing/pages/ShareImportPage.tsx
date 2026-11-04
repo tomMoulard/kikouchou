@@ -35,7 +35,7 @@ import { getTripByShareId, setCurrentTrip } from '@/lib/db';
 import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
-import { formatDateRange } from '@/lib/utils/date-format';
+import { formatTripDateRange } from '@/lib/utils/date-format';
 import { notify } from '@/lib/notifications';
 import type { ShareId, Trip } from '@/types';
 
@@ -166,8 +166,11 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
    */
    formattedDateRange = useMemo(() => {
     if (!trip) {return '';}
-    return formatDateRange(trip.startDate, trip.endDate, dateLocale);
-  }, [trip, dateLocale]);
+    return (
+      formatTripDateRange(trip.startDate, trip.endDate, dateLocale) ??
+      t('trips.datesNotSet', 'Dates not set')
+    );
+  }, [trip, dateLocale, t]);
 
   // ============================================================================
   // Effects

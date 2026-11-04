@@ -1,9 +1,11 @@
 /**
  * @fileoverview How far a trip is from having anything to show on its calendar.
  *
- * A trip is created with a name, dates and a guest list, and lands on the
- * calendar — where there is nothing to draw until it also has rooms, guests
- * sleeping in them and travel. This module turns that gap into an ordered list
+ * A trip is created with a name and a guest list, and lands on the calendar,
+ * where there is nothing to draw until it also has dates, rooms, guests
+ * sleeping in them and travel. The dates are asked for here rather than at
+ * creation: a group often does not know them yet, and a required question up
+ * front made people stop. This module turns that gap into an ordered list
  * of steps with counts, so the empty calendar can say what to do next instead
  * of only that it is empty.
  *
@@ -31,7 +33,7 @@ import type { Person, PersonId, Room, RoomAssignment, Transport } from '@/types'
  * A union built from a `const` array rather than an enum — `erasableSyntaxOnly`
  * forbids enums — so the render order and the type come from one declaration.
  */
-export const TRIP_SETUP_STEP_KEYS = ['guests', 'rooms', 'assignments', 'arrivals'] as const;
+export const TRIP_SETUP_STEP_KEYS = ['dates', 'guests', 'rooms', 'assignments', 'arrivals'] as const;
 
 /** One step of {@link TRIP_SETUP_STEP_KEYS}. */
 export type TripSetupStepKey = (typeof TRIP_SETUP_STEP_KEYS)[number];
@@ -92,6 +94,13 @@ export interface TripSetupChecklistInput {
    * that this field exists to remove. Read it from `isZeroNightWindow`.
    */
   readonly tripHasNoNights: boolean;
+  /**
+   * True when the trip has its own dates. Read it from `tripHasDates`.
+   *
+   * Required for the same reason as `tripHasNoNights`: a call site that forgot
+   * it would mark every trip as dated, and nobody would be asked for the dates.
+   */
+  readonly tripHasDates: boolean;
 }
 
 // ============================================================================
@@ -100,6 +109,9 @@ export interface TripSetupChecklistInput {
 
 /**
  * Works out which trip-setup steps are done and how far along the rest are.
+ *
+ * The "dates" step completes once the trip has its own dates. It is first,
+ * because the timeline reads every other step against them.
  *
  * The "assignments" step completes only when **every** guest has a room: a
  * guest with nowhere to sleep is the thing this list exists to surface. It is
@@ -120,15 +132,16 @@ export interface TripSetupChecklistInput {
  *   assignments: [aliceInAttic],
  *   arrivals: [],
  *   tripHasNoNights: false,
+ *   tripHasDates: true,
  * });
- * // checklist.doneCount === 2  (guests, rooms)
- * // checklist.steps[2] === { key: 'assignments', count: 1, total: 2, isDone: false }
+ * // checklist.doneCount === 3  (dates, guests, rooms)
+ * // checklist.steps[3] === { key: 'assignments', count: 1, total: 2, isDone: false }
  * ```
  */
 export function buildTripSetupChecklist(
   input: TripSetupChecklistInput,
 ): TripSetupChecklist {
-  const { persons, rooms, assignments, arrivals, tripHasNoNights } = input;
+  const { persons, rooms, assignments, arrivals, tripHasNoNights, tripHasDates } = input;
 
   const assignedPersonIds = new Set<PersonId>();
   for (const assignment of assignments) {
@@ -147,6 +160,11 @@ export function buildTripSetupChecklist(
   }
 
   const steps: readonly TripSetupStep[] = [
+    {
+      key: 'dates',
+      count: tripHasDates ? 1 : 0,
+      isDone: tripHasDates,
+    },
     {
       key: 'guests',
       count: totalPeople,
@@ -210,6 +228,10 @@ export interface TripSetupChecklistVisibilityInput {
  * leg exists the user has plainly found the transport screen and does not need
  * to be pointed at it.
  *
+ * Missing dates keep it on screen even after travel exists: the checklist is
+ * the one place that asks for the dates, so hiding it would leave a trip
+ * without dates that nothing asks about.
+ *
  * @param input - The checklist and the trip's travel
  * @returns True while the checklist should be on screen
  *
@@ -223,5 +245,9 @@ export function shouldShowTripSetupChecklist(
 ): boolean {
   const { checklist, arrivals, departures } = input;
 
-  return !checklist.isComplete && arrivals.length === 0 && departures.length === 0;
+  if (checklist.isComplete) {
+    return false;
+  }
+  const datesMissing = checklist.steps.some((step) => step.key === 'dates' && !step.isDone);
+  return datesMissing || (arrivals.length === 0 && departures.length === 0);
 }

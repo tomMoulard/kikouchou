@@ -1132,8 +1132,10 @@ describe('RoomListPage — claiming a room', () => {
   });
 
   it('opens on the trip when the trip has no usable range', () => {
+    // No guest with dates either, so nothing stands in for the trip's window.
     resetWorld({
       trip: { ...TRIP, startDate: '' as Trip['startDate'] },
+      persons: [],
       rooms: [{ ...ATTIC, capacity: 0 }],
     });
     renderPage();
@@ -1157,6 +1159,8 @@ describe('RoomListPage — claiming a room', () => {
         startDate: undefined as unknown as Trip['startDate'],
         endDate: undefined as unknown as Trip['endDate'],
       },
+      // Nobody with dates of their own, so there is no window to plan in.
+      persons: [],
       // No beds: a capacity check run on no dates would call it full.
       rooms: [{ ...ATTIC, capacity: 0 }],
     });
@@ -1171,6 +1175,28 @@ describe('RoomListPage — claiming a room', () => {
       open: true,
       suggestedStartDate: '',
       suggestedEndDate: '',
+    });
+  });
+
+  it('opens on the guests\' stays on a trip without dates', () => {
+    // A trip without dates plans over its guests' own stays: Alice's 2 to 8.
+    resetWorld({
+      trip: {
+        ...TRIP,
+        startDate: undefined as unknown as Trip['startDate'],
+        endDate: undefined as unknown as Trip['endDate'],
+      },
+    });
+    renderPage();
+
+    act(() => {
+      card(BARN.id).onClaim?.(BARN);
+    });
+
+    expect(quickAssign()).toMatchObject({
+      open: true,
+      suggestedStartDate: ALICE.stayStartDate,
+      suggestedEndDate: ALICE.stayEndDate,
     });
   });
 

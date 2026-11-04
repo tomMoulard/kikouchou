@@ -720,6 +720,55 @@ describe('buildTripRecord: the window, the clock and the fallbacks', () => {
     });
   });
 
+  it('clears the window when a member cleared it (the explicit marker)', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ startDate: '', endDate: '' }), trip.id);
+
+    const stored = await db.trips.get(trip.id);
+    expect(stored).toBeDefined();
+    expect(stored).not.toHaveProperty('startDate');
+    expect(stored).not.toHaveProperty('endDate');
+  });
+
+  it('takes a first window for a trip that had none', async () => {
+    const trip = await createTrip({ name: 'Brittany' });
+
+    await syncDocToDexie(makeDoc({ startDate: '2024-08-02', endDate: '2024-08-09' }), trip.id);
+
+    expect(await db.trips.get(trip.id)).toMatchObject({
+      startDate: '2024-08-02',
+      endDate: '2024-08-09',
+    });
+  });
+
+  it('keeps a trip without dates without dates when the document says nothing', async () => {
+    const trip = await createTrip({ name: 'Brittany' });
+
+    await syncDocToDexie(makeDoc({}), trip.id);
+
+    expect(await db.trips.get(trip.id)).not.toHaveProperty('startDate');
+  });
+
+  it('reads the old "not set yet" empty string on the device as no dates', async () => {
+    const trip = await makeTrip();
+    await db.trips.update(trip.id, { startDate: '' as never, endDate: '' as never });
+
+    await syncDocToDexie(makeDoc({}), trip.id);
+
+    expect(await db.trips.get(trip.id)).not.toHaveProperty('startDate');
+  });
+
+  it('drops a window with only one usable end, or running backwards', async () => {
+    const lonely = await createTrip({ name: 'Lonely' });
+    await syncDocToDexie(makeDoc({ startDate: '2024-08-02', endDate: '' }), lonely.id);
+    expect(await db.trips.get(lonely.id)).not.toHaveProperty('startDate');
+
+    const inverted = await createTrip({ name: 'Inverted' });
+    await syncDocToDexie(makeDoc({ startDate: '2024-08-09', endDate: '2024-08-02' }), inverted.id);
+    expect(await db.trips.get(inverted.id)).not.toHaveProperty('startDate');
+  });
+
   it('takes the timestamps the document carries', async () => {
     const trip = await makeTrip();
 

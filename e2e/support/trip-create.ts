@@ -1,9 +1,12 @@
 /**
  * @fileoverview Creating a trip through the UI, wizard or form.
  *
- * `/trips/new` asks a device with no trip of its own for a name and the dates,
- * one per screen, then shows the trip's invite link (`TripCreateWizard`). A
- * device that already holds a trip gets the one-page form. Automation turns the sample trip off, so every spec starts on
+ * `/trips/new` asks a device with no trip of its own for a name, then shows
+ * the trip's invite link (`TripCreateWizard`). A device that already holds a
+ * trip gets the one-page form. Neither asks for the dates: a trip is created
+ * without them, and the calendar's setup checklist asks for them. The helpers
+ * here set them through that checklist ({@link setTripDatesFromChecklist}),
+ * unless a spec asks for a trip without dates. Automation turns the sample trip off, so every spec starts on
  * an empty device and its first trip goes through the wizard. A spec that
  * creates two trips meets both screens.
  *
@@ -32,6 +35,12 @@ export interface NewTripOptions {
    * the trip, so the wizard's path removes it from the Guests page.
    */
   readonly dropOrganiser?: boolean;
+  /**
+   * Leaves the trip without dates. By default the helpers set the 15th to the
+   * 22nd of the current month through the calendar's setup checklist, which
+   * is what most specs assume.
+   */
+  readonly withoutDates?: boolean;
 }
 
 // ============================================================================
@@ -58,15 +67,25 @@ export async function seedEarlierTrip(page: Page): Promise<string> {
 }
 
 /**
- * Fills the 15th and the 22nd of the current month into the wizard's two
- * native date inputs.
+ * Sets the open trip's dates the way a user does: the "Set dates" step of the
+ * calendar's setup checklist, then the date fields of the trip's settings.
+ * Lands back on the calendar.
  *
- * @param page - Playwright page on the wizard's dates step
+ * @param page - Playwright page on the calendar of a trip without dates
+ * @param startDate - First day, `YYYY-MM-DD` (default: the 15th of this month)
+ * @param endDate - Last day, `YYYY-MM-DD` (default: the 22nd of this month)
  */
-export async function pickWizardDates(page: Page): Promise<void> {
-  const dates = page.getByRole('group', { name: /trip dates/i });
-  await dates.getByLabel(/^from$/i).fill(fixtureDate(15, 0));
-  await dates.getByLabel(/^to$/i).fill(fixtureDate(22, 0));
+export async function setTripDatesFromChecklist(
+  page: Page,
+  startDate: string = fixtureDate(15, 0),
+  endDate: string = fixtureDate(22, 0),
+): Promise<void> {
+  await page.getByRole('button', { name: /^set dates$/i }).click();
+  await expect(page).toHaveURL(/\/trips\/[^/]+\/edit/, { timeout: 15_000 });
+  await page.locator('#trip-start-date').fill(startDate);
+  await page.locator('#trip-end-date').fill(endDate);
+  await page.getByRole('button', { name: /save/i }).click();
+  await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 15_000 });
 }
 
 /**
@@ -94,8 +113,8 @@ async function removeAllGuests(page: Page): Promise<void> {
 }
 
 /**
- * Creates a trip with a name and dates through the first-trip wizard, and
- * opens its calendar.
+ * Creates a trip with a name through the first-trip wizard, opens its
+ * calendar, and sets its dates there (unless `withoutDates`).
  *
  * Leaves the invite screen without sending the link: "Open the calendar" when
  * signed in, "Later" when the screen asks for an account.
@@ -111,11 +130,8 @@ export async function createTripThroughWizard(
 ): Promise<void> {
   await expect(page.locator('#wizard-trip-name')).toBeVisible({ timeout: 15_000 });
   await page.locator('#wizard-trip-name').fill(name);
+  // The name is the only question: Enter creates the trip.
   await page.keyboard.press('Enter');
-
-  // The dates, the last question: its button creates the trip.
-  await pickWizardDates(page);
-  await page.getByRole('button', { name: /create the trip/i }).click();
 
   // The invite screen. Left only once the link has settled: a link, a sign-in,
   // or a build with no server. Leaving while the invite is being minted would
@@ -131,17 +147,18 @@ export async function createTripThroughWizard(
     .click();
   await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 15_000 });
 
+  if (options.withoutDates !== true) {
+    await setTripDatesFromChecklist(page);
+  }
   if (options.dropOrganiser === true) {
     await removeAllGuests(page);
   }
 }
 
 /**
- * Creates a trip with a name and dates on whichever screen `/trips/new` shows,
- * and lands on its calendar.
- *
- * The form's dates are the 15th and the 22nd of the current month, the same
- * days the wizard gets.
+ * Creates a trip with a name on whichever screen `/trips/new` shows, lands on
+ * its calendar, and sets its dates there (unless `withoutDates`): the 15th to
+ * the 22nd of the current month.
  *
  * @param page - Playwright page sitting on `/trips/new`
  * @param name - The trip's name
@@ -162,11 +179,12 @@ export async function fillNewTrip(
   }
 
   await page.locator('#trip-name').fill(name);
-  await page.locator('#trip-start-date').fill(fixtureDate(15, 0));
-  await page.locator('#trip-end-date').fill(fixtureDate(22, 0));
   if (options.dropOrganiser === true) {
     await clearTripOrganiser(page);
   }
   await page.getByRole('button', { name: /save/i }).click();
   await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 15_000 });
+  if (options.withoutDates !== true) {
+    await setTripDatesFromChecklist(page);
+  }
 }

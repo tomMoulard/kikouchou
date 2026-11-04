@@ -923,6 +923,43 @@ describe('useTripActions — trip map pin', () => {
     expect(updated?.coordinates).toBeUndefined();
   });
 
+  it('clears the trip dates on clearDates, and leaves the rest alone', async () => {
+    const trip = await createTrip({
+      name: 'Dated Trip',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-30'),
+    });
+    const result = await renderWithTrip(trip.id);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'updateTrip', data: { clearDates: true } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const updated = await db.trips.get(trip.id);
+    expect(updated?.name).toBe('Dated Trip');
+    expect(updated).not.toHaveProperty('startDate');
+    expect(updated).not.toHaveProperty('endDate');
+  });
+
+  it('does nothing on a clearDates that is not true', async () => {
+    const trip = await createTrip({
+      name: 'Dated Trip',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-30'),
+    });
+    const result = await renderWithTrip(trip.id);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'updateTrip', data: { clearDates: false } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.trips.get(trip.id)).toMatchObject({ startDate: '2024-07-15' });
+  });
+
   it('keeps the map pin when the assistant edits another field', async () => {
     const trip = await createTrip({
       name: 'Pinned Trip',

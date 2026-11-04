@@ -80,14 +80,12 @@ test.describe('a trip template link opened with no account', () => {
     // No account is asked for anywhere on this screen.
     await expect(page.getByRole('button', { name: /^sign in$/i })).toHaveCount(0);
 
-    // The name and the dates, nothing else: the place and the rooms came with
-    // the link. The name starts as the template's and the dates as today, so a
-    // customer with nothing to change only presses Next and Create.
+    // The name, nothing else: the place and the rooms came with the link, and
+    // the dates are asked later, on the calendar. The name starts as the
+    // template's, so a customer with nothing to change only presses Create.
     await expect(page.getByText('What is the trip called?')).toBeVisible();
     await expect(page.getByLabel('Trip name')).toHaveValue('Chalet Marmotte');
-    await page.getByRole('button', { name: /^next$/i }).click();
-
-    await expect(page.getByText('When is it?')).toBeVisible();
+    await expect(page.getByText('When is it?')).toHaveCount(0);
     await page.getByRole('button', { name: /create the trip/i }).click();
 
     // The trip's own invite link. Sending it needs an account, and the

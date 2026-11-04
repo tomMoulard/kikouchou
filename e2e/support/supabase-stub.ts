@@ -87,8 +87,9 @@ interface TripRow {
   local_id: string;
   owner_id: string;
   name: string;
-  start_date: string;
-  end_date: string;
+  /** Null, with end_date, for a trip without dates. */
+  start_date: string | null;
+  end_date: string | null;
 }
 
 interface MemberRow {
@@ -531,8 +532,8 @@ export class SupabaseStub {
       local_id: localId ?? '',
       owner_id: ownerId ?? '',
       name: body.name ?? '',
-      start_date: body.start_date ?? '',
-      end_date: body.end_date ?? '',
+      start_date: body.start_date ?? null,
+      end_date: body.end_date ?? null,
     };
     this.nextTrip += 1;
     this.trips.push(row);
@@ -588,7 +589,11 @@ export class SupabaseStub {
   private async updateTripPreview(route: Route, url: URL): Promise<void> {
     const caller = this.callerId(route);
     const id = operand(url.searchParams.get('id'));
-    const body = this.body<Record<string, string>>(route);
+    const body = this.body<Record<string, string | null>>(route);
+    // A null date is a write (the dates were cleared), so only an absent key
+    // keeps the stored value.
+    const nextDate = (key: 'start_date' | 'end_date'): string | null =>
+      key in body ? (body[key] ?? null) : (row?.[key] ?? null);
 
     // USING. `?id=eq.<uuid>` is honoured as a filter rather than ignored, so a
     // client that forgot to narrow its UPDATE rewrites every row it owns here
@@ -609,8 +614,8 @@ export class SupabaseStub {
     if (
       !(await this.tripConstraintsHold(route, {
         name: body.name ?? row.name,
-        start_date: body.start_date ?? row.start_date,
-        end_date: body.end_date ?? row.end_date,
+        start_date: nextDate('start_date'),
+        end_date: nextDate('end_date'),
         local_id: row.local_id,
       }))
     ) {
@@ -618,8 +623,8 @@ export class SupabaseStub {
     }
 
     row.name = body.name ?? row.name;
-    row.start_date = body.start_date ?? row.start_date;
-    row.end_date = body.end_date ?? row.end_date;
+    row.start_date = nextDate('start_date');
+    row.end_date = nextDate('end_date');
     await this.representation(route, [{ id: row.id }]);
   }
 
@@ -1303,7 +1308,7 @@ export class SupabaseStub {
    */
   private async tripConstraintsHold(
     route: Route,
-    row: Partial<Record<'name' | 'start_date' | 'end_date' | 'local_id', string>>,
+    row: Partial<Record<'name' | 'start_date' | 'end_date' | 'local_id', string | null>>,
   ): Promise<boolean> {
     const name = row.name ?? '';
     if (name.length < 1 || name.length > TRIP_NAME_MAX_LENGTH) {
@@ -1315,9 +1320,17 @@ export class SupabaseStub {
       await this.checkViolation(route, 'trips', 'trips_local_id_check');
       return false;
     }
+    // `constraint trips_dates_paired`: both dates, or neither.
+    const startDate = row.start_date ?? null;
+    const endDate = row.end_date ?? null;
+    if ((startDate === null) !== (endDate === null)) {
+      await this.checkViolation(route, 'trips', 'trips_dates_paired');
+      return false;
+    }
     // `constraint trips_dates_ordered check (end_date >= start_date)`. String
     // comparison is correct for ISO dates and is what `date` ordering means.
-    if ((row.end_date ?? '') < (row.start_date ?? '')) {
+    // Null passes, as a check on a null operand does in Postgres.
+    if (startDate !== null && endDate !== null && endDate < startDate) {
       await this.checkViolation(route, 'trips', 'trips_dates_ordered');
       return false;
     }

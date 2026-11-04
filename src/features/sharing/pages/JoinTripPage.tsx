@@ -80,7 +80,7 @@ import {
 import { claimParticipant, fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { cn } from '@/lib/utils';
-import { formatDateRange, formatFullDate } from '@/lib/utils/date-format';
+import { formatFullDate, formatTripDateRange } from '@/lib/utils/date-format';
 import { useJoinTrip } from '../hooks/useJoinTrip';
 import { GuestArrivalQuestion, GuestArrivalSaved } from '../components/GuestArrivalQuestion';
 import { listArrivalDays } from '../utils/arrival-days';
@@ -706,8 +706,10 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
   const persons = useMemo(() => personsQuery ?? [], [personsQuery]);
 
   const dateRange = useMemo(
-    () => formatDateRange(trip.startDate, trip.endDate, getDateLocale(i18n.language)),
-    [i18n.language, trip.endDate, trip.startDate],
+    () =>
+      formatTripDateRange(trip.startDate, trip.endDate, getDateLocale(i18n.language)) ??
+      t('trips.datesNotSet', 'Dates not set'),
+    [i18n.language, t, trip.endDate, trip.startDate],
   );
 
   const showTagline = !isRunningStandalone();

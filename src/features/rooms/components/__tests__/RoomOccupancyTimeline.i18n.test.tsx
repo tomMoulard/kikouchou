@@ -141,7 +141,7 @@ function renderTimeline(rooms: readonly Room[]) {
       departures={[] as Transport[]}
       persons={[] as Person[]}
       dateLocale={enUS}
-      range={{ startDate: TRIP.startDate, endDate: TRIP.endDate }}
+      range={{ startDate: TRIP.startDate!, endDate: TRIP.endDate! }}
     />,
   );
 }

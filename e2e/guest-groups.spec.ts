@@ -59,17 +59,6 @@ async function createGroup(
   await expect(dialog).toBeHidden();
 }
 
-/**
- * Picks the 15th and 22nd in the trip form, as the sync spec does.
- *
- * Days of the month the picker opens on — always the current one — so there is
- * no fixture date here to go stale.
- */
-async function fillTripDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').fill(fixtureDate(15, 0));
-  await page.locator('#trip-end-date').fill(fixtureDate(22, 0));
-}
-
 /** A trip whose dates are derived from today, never a literal month. */
 async function seedThisYearsTrip(page: Page): Promise<string> {
   const { tripId } = await seedTrip(page, {
@@ -268,8 +257,8 @@ test.describe('Guest groups', () => {
     await page.goto('/trips/new');
     await waitForRoute(page);
 
+    // No dates: the create form does not ask for them.
     await page.getByLabel(/trip name/i).fill('Bretagne');
-    await fillTripDates(page);
 
     // Type one guest, import two — they end up in one list, and one trip.
     await page.getByRole('button', { name: /^add guest$/i }).click();

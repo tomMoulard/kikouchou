@@ -295,6 +295,19 @@ describe('populateDocFromDexie', () => {
     expect(meta.get('photoId')).toBe('coverPhoto0001');
   });
 
+  it('writes the explicit "no dates" marker for a trip without dates', async () => {
+    // Never `undefined`: Yjs would store it, and a missing key would leave
+    // every other device on its old dates.
+    const trip = await createTrip({ name: 'Undated' });
+    const doc = new Y.Doc();
+
+    await populateDocFromDexie(doc, trip.id);
+
+    const meta = doc.getMap('meta');
+    expect(meta.get('startDate')).toBe('');
+    expect(meta.get('endDate')).toBe('');
+  });
+
   it('claims nothing about a trip that is not archived', async () => {
     const tripId = await makeTrip();
     const doc = new Y.Doc();

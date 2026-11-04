@@ -72,7 +72,7 @@ import {
   hiddenNavPages,
   tripNavItemsInOrder,
 } from '@/components/shared/nav-items';
-import { formatDateRange } from '@/lib/utils/date-format';
+import { formatTripDateRange } from '@/lib/utils/date-format';
 import { MOBILE_NAV_BAR_SLOTS, type Trip } from '@/types';
 
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
@@ -639,14 +639,20 @@ const TripInfoSection = memo(function TripInfoSection({
 
   const { i18n } = useTranslation();
   const dateRange = useMemo(
-    () => formatDateRange(trip.startDate, trip.endDate, getDateLocale(i18n.language)),
-    [trip.startDate, trip.endDate, i18n.language],
+    () =>
+      formatTripDateRange(trip.startDate, trip.endDate, getDateLocale(i18n.language)) ??
+      t('trips.datesNotSet', 'Dates not set'),
+    [trip.startDate, trip.endDate, i18n.language, t],
   );
 
   const todayKey = useMemo(() => toLocalISODateString(today), [today]);
 
   const todayWithinTrip = useMemo(
-    () => trip.startDate <= todayKey && todayKey <= trip.endDate,
+    () =>
+      trip.startDate !== undefined &&
+      trip.endDate !== undefined &&
+      trip.startDate <= todayKey &&
+      todayKey <= trip.endDate,
     [todayKey, trip.endDate, trip.startDate],
   );
 

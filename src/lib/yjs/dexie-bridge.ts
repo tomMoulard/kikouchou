@@ -144,12 +144,27 @@ function readTripName(meta: Y.Map<unknown>, existingTrip?: Trip): string {
 }
 
 /**
+ * The value the document holds for a trip without dates.
+ *
+ * An explicit marker rather than a missing key. A missing key means "this
+ * peer said nothing about the dates" and keeps what the device had, so a
+ * member who cleared the dates could not spread that to anybody: each
+ * receiver kept its old window. `''` says "cleared", and every reader turns it
+ * into an absent date.
+ */
+export const TRIP_DATE_CLEARED = '';
+
+/**
  * One end of the trip's window, from the document if it is a usable day.
  *
  * Same shape as {@link readTripName}: the document is peer-controlled, so the
- * value arrives as `unknown` and has to be checked. It falls back to what this
- * device already had before it falls back to empty, so a peer on a build that
- * stopped writing the field cannot erase a window the owner set.
+ * value arrives as `unknown` and has to be checked.
+ *
+ * - A usable day is taken.
+ * - {@link TRIP_DATE_CLEARED} is a trip without dates: undefined.
+ * - Anything else (a missing key, a number, an unparseable string) falls back
+ *   to what this device already had, so a peer on a build that stopped
+ *   writing the field cannot erase a window the owner set.
  */
 function readTripDay(
   meta: Y.Map<unknown>,
@@ -160,7 +175,28 @@ function readTripDay(
   if (isCalendarDayString(fromDoc)) {
     return fromDoc as Trip['startDate'];
   }
-  return existing ?? ('' as Trip['startDate']);
+  if (fromDoc === TRIP_DATE_CLEARED) {
+    return undefined;
+  }
+  // `''` was the old "not set yet" value stored in Dexie: read it as absent.
+  return existing || undefined;
+}
+
+/**
+ * Keeps a trip's two dates together: both, or neither.
+ *
+ * @param startDate - The start read from the document
+ * @param endDate - The end read from the document
+ * @returns The two dates, or an empty object for a trip without dates
+ */
+function pairTripDays(
+  startDate: Trip['startDate'],
+  endDate: Trip['endDate'],
+): Pick<Trip, 'startDate' | 'endDate'> {
+  if (!startDate || !endDate || endDate < startDate) {
+    return {};
+  }
+  return { startDate, endDate };
 }
 
 function buildTripRecord(
@@ -196,8 +232,11 @@ function buildTripRecord(
     // `RangeError: Invalid time value` inside a render and takes the page down
     // with the error boundary. An unreadable value reads as "not set yet",
     // which every screen already handles.
-    startDate: readTripDay(meta, 'startDate', existingTrip?.startDate),
-    endDate: readTripDay(meta, 'endDate', existingTrip?.endDate),
+    // Both or neither: one date alone is not a window any screen can read.
+    ...pairTripDays(
+      readTripDay(meta, 'startDate', existingTrip?.startDate),
+      readTripDay(meta, 'endDate', existingTrip?.endDate),
+    ),
     // NEVER take shareId from a peer: it is a UNIQUE Dexie index, so a value
     // colliding with another local trip aborts the whole write transaction and
     // permanently kills sync for this trip.
@@ -1316,8 +1355,8 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     // one key for no reader's benefit — and pushed that contention to the
     // server as a real edit.
     meta.set('name', trip.name);
-    meta.set('startDate', trip.startDate);
-    meta.set('endDate', trip.endDate);
+    meta.set('startDate', trip.startDate ?? TRIP_DATE_CLEARED);
+    meta.set('endDate', trip.endDate ?? TRIP_DATE_CLEARED);
     meta.set('shareId', trip.shareId);
     meta.set('createdAt', trip.createdAt);
     meta.set('updatedAt', trip.updatedAt);

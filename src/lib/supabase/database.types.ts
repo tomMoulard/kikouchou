@@ -385,35 +385,35 @@ export type Database = {
       trips: {
         Row: {
           created_at: string
-          end_date: string
+          end_date: string | null
           id: string
           is_template: boolean
           local_id: string
           name: string
           owner_id: string
-          start_date: string
+          start_date: string | null
           template_token: string | null
         }
         Insert: {
           created_at?: string
-          end_date: string
+          end_date?: string | null
           id?: string
           is_template?: boolean
           local_id: string
           name: string
           owner_id: string
-          start_date: string
+          start_date?: string | null
           template_token?: string | null
         }
         Update: {
           created_at?: string
-          end_date?: string
+          end_date?: string | null
           id?: string
           is_template?: boolean
           local_id?: string
           name?: string
           owner_id?: string
-          start_date?: string
+          start_date?: string | null
           template_token?: string | null
         }
         Relationships: []

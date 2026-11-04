@@ -230,8 +230,9 @@ export function roomToProto(room: Room): ProtoRoom {
 export function tripSnapshotToProto(meta: TripSnapshotMeta): ProtoTripSnapshot {
   return create(TripSnapshotSchema, {
     name: meta.name,
-    startDate: meta.startDate,
-    endDate: meta.endDate,
+    // The proto fields are plain strings: '' stands for "no dates".
+    startDate: meta.startDate ?? '',
+    endDate: meta.endDate ?? '',
     location: meta.location,
     description: meta.description,
     coordLat: meta.coordinates?.lat,
@@ -379,10 +380,12 @@ export function protoToRoom(proto: ProtoRoom): Room {
  * Converts a protobuf TripSnapshot to app metadata.
  */
 export function protoToTripSnapshot(proto: ProtoTripSnapshot): TripSnapshotMeta {
+  // '' on the wire is a trip without dates (see `tripSnapshotToProto`).
+  const hasDates = proto.startDate !== '' && proto.endDate !== '';
   return {
     name: proto.name,
-    startDate: proto.startDate as ISODateString,
-    endDate: proto.endDate as ISODateString,
+    startDate: hasDates ? (proto.startDate as ISODateString) : undefined,
+    endDate: hasDates ? (proto.endDate as ISODateString) : undefined,
     location: proto.location,
     description: proto.description,
     coordinates:

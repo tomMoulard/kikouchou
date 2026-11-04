@@ -729,14 +729,15 @@ const TripForm = memo(function TripForm({
       newErrors.name = nameError;
     }
 
-    // Validate start date is required
-    if (!startDate) {
-      newErrors.startDate = t('common.required');
+    // The dates are optional: a trip is created without them and the
+    // organiser sets them later. They go together, though: one date alone is
+    // not a window any screen can read.
+    const datesTogether = t('trips.datesTogether', 'Set both dates, or leave both empty');
+    if (!startDate && endDate) {
+      newErrors.startDate = datesTogether;
     }
-
-    // Validate end date is required
-    if (!endDate) {
-      newErrors.endDate = t('common.required');
+    if (startDate && !endDate) {
+      newErrors.endDate = datesTogether;
     }
 
     // Validate end date >= start date
@@ -1045,6 +1046,15 @@ const TripForm = memo(function TripForm({
   );
 
   /**
+   * Empties both dates, which saves the trip as one without dates.
+   */
+  const handleClearDates = useCallback(() => {
+    setStartDate('');
+    setEndDate('');
+    setErrors((prev) => ({ ...prev, startDate: undefined, endDate: undefined }));
+  }, []);
+
+  /**
    * Submission handler via useFormSubmission hook.
    */
   const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<TripFormData>(
@@ -1065,8 +1075,13 @@ const TripForm = memo(function TripForm({
         await doSubmit({
           name: name.trim(),
           location: location.trim() || undefined,
-          startDate: toISODateStringFromString(startDate),
-          endDate: toISODateStringFromString(endDate),
+          // Absent when the dates are empty: a trip without dates.
+          ...(startDate && endDate
+            ? {
+                startDate: toISODateStringFromString(startDate),
+                endDate: toISODateStringFromString(endDate),
+              }
+            : {}),
           // Only a new trip carries one. In edit mode the description has its
           // own card and its own save, and sending the value this form loaded
           // would overwrite whatever that card saved since.
@@ -1201,13 +1216,19 @@ const TripForm = memo(function TripForm({
         <p className="text-xs text-muted-foreground">{t('trips.currencyHint')}</p>
       </div>
 
-      {/* Date Fields - Side by side on larger screens */}
+      {/* Date Fields. Edit mode only: a new trip is created without dates, and
+          the calendar's setup checklist asks for them later. Optional here
+          too, and "Clear dates" turns the trip back into one without dates. */}
+      {!isCreateMode && (
+      <div className="space-y-2">
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Start Date Field */}
         <div className="space-y-2">
           <Label htmlFor="trip-start-date">
             {t('trips.startDate')}
-            <span className="text-destructive ml-1" aria-hidden="true">*</span>
+            <span className="text-muted-foreground ml-1 text-xs font-normal">
+              ({t('common.optional', 'optional')})
+            </span>
           </Label>
           <Input
             id="trip-start-date"
@@ -1233,7 +1254,9 @@ const TripForm = memo(function TripForm({
         <div className="space-y-2">
           <Label htmlFor="trip-end-date">
             {t('trips.endDate')}
-            <span className="text-destructive ml-1" aria-hidden="true">*</span>
+            <span className="text-muted-foreground ml-1 text-xs font-normal">
+              ({t('common.optional', 'optional')})
+            </span>
           </Label>
           <Input
             id="trip-end-date"
@@ -1256,6 +1279,19 @@ const TripForm = memo(function TripForm({
           )}
         </div>
       </div>
+      {(startDate || endDate) && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleClearDates}
+          disabled={isSubmitting}
+        >
+          {t('trips.clearDates', 'Clear dates')}
+        </Button>
+      )}
+      </div>
+      )}
 
       {/* Guest List — create mode only (see `isCreateMode`) */}
       {isCreateMode && (

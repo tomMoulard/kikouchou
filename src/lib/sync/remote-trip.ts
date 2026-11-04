@@ -74,8 +74,10 @@ export type SyncPreviewResult =
 /** The server's preview columns for one trip. */
 interface RemotePreview {
   readonly name: string;
-  readonly startDate: string;
-  readonly endDate: string;
+  /** Null for a trip without dates. */
+  readonly startDate: string | null;
+  /** Null for a trip without dates. */
+  readonly endDate: string | null;
 }
 
 // ============================================================================
@@ -184,10 +186,11 @@ async function readRemoteTrip(
     const name = row?.name;
     const startDate = row?.start_date;
     const endDate = row?.end_date;
+    // A null date is a trip without dates, which is a full preview too.
+    const isDateColumn = (value: unknown): value is string | null =>
+      value === null || typeof value === 'string';
     const preview =
-      typeof name === 'string' &&
-      typeof startDate === 'string' &&
-      typeof endDate === 'string'
+      typeof name === 'string' && isDateColumn(startDate) && isDateColumn(endDate)
         ? { name, startDate, endDate }
         : null;
 
@@ -202,8 +205,8 @@ function previewMatches(preview: RemotePreview | null, trip: Trip): boolean {
   return (
     preview !== null &&
     preview.name === previewName(trip.name) &&
-    preview.startDate === trip.startDate &&
-    preview.endDate === trip.endDate
+    preview.startDate === (trip.startDate ?? null) &&
+    preview.endDate === (trip.endDate ?? null)
   );
 }
 
@@ -364,8 +367,9 @@ async function uploadTrip(
         local_id: trip.id,
         owner_id: userId,
         name: previewName(trip.name),
-        start_date: trip.startDate,
-        end_date: trip.endDate,
+        // Null for a trip without dates (both columns are nullable).
+        start_date: trip.startDate ?? null,
+        end_date: trip.endDate ?? null,
       })
       .select('id')
       .single();
@@ -433,8 +437,8 @@ export async function syncRemoteTripMetadata(
       .from('trips')
       .update({
         name: previewName(trip.name),
-        start_date: trip.startDate,
-        end_date: trip.endDate,
+        start_date: trip.startDate ?? null,
+        end_date: trip.endDate ?? null,
       })
       .eq('id', trip.remoteTripId)
       .select('id');

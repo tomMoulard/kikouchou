@@ -899,12 +899,73 @@ describe('trip-repository, in detail', () => {
 });
 
 describe('trip-repository, the remaining edges', () => {
-  it('does not compare a window that has no end yet', async () => {
+  it('refuses a window that has a start and no end', async () => {
+    // A trip has both dates or neither: one alone is not a window any screen
+    // can read.
+    await expect(
+      createTrip(
+        createValidTripData({ startDate: isoDate('2024-07-15'), endDate: '' as ISODateString }),
+      ),
+    ).rejects.toThrow(/set together/);
+  });
+
+  it('creates a trip without dates, and stores no date field for it', async () => {
+    const trip = await createTrip({ name: 'Undated trip' });
+
+    const stored = await db.trips.get(trip.id);
+    expect(stored).toBeDefined();
+    expect(stored).not.toHaveProperty('startDate');
+    expect(stored).not.toHaveProperty('endDate');
+    // Listed although IndexedDB leaves it out of the `startDate` index.
+    expect((await getAllTrips()).map((t) => t.id)).toContain(trip.id);
+  });
+
+  it('sets the dates of a trip without dates, and clears them again with null', async () => {
+    const trip = await createTrip({ name: 'Undated trip' });
+
+    await updateTrip(trip.id, { startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') });
+    expect(await db.trips.get(trip.id)).toMatchObject({
+      startDate: '2024-07-15',
+      endDate: '2024-07-22',
+    });
+
+    // A rename alone keeps them: only `null` clears.
+    await updateTrip(trip.id, { name: 'Renamed' });
+    expect(await db.trips.get(trip.id)).toMatchObject({ startDate: '2024-07-15' });
+
+    await updateTrip(trip.id, { startDate: null, endDate: null });
+    const cleared = await db.trips.get(trip.id);
+    expect(cleared).not.toHaveProperty('startDate');
+    expect(cleared).not.toHaveProperty('endDate');
+  });
+
+  it('keeps every booking where it was when the dates are cleared', async () => {
     const trip = await createTrip(
-      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: '' as ISODateString }),
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
+    const person = await createPerson(trip.id, { name: 'Tom', color: hexColor('#6366f1') });
+    const assignment = await createAssignment(trip.id, {
+      roomId: room.id,
+      personId: person.id,
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
+    });
+
+    await updateTrip(trip.id, { startDate: null, endDate: null });
+
+    expect(await db.roomAssignments.get(assignment.id)).toMatchObject({
+      startDate: '2024-07-15',
+      endDate: '2024-07-22',
+    });
+  });
+
+  it('refuses a patch that would leave one date alone', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
     );
 
-    expect(trip.endDate).toBe('');
+    await expect(updateTrip(trip.id, { endDate: null })).rejects.toThrow(/set together/);
   });
 
   it('carries a whole-trip booking across when only the end moves', async () => {

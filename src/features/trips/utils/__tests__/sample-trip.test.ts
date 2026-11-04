@@ -257,7 +257,7 @@ describe('buildSampleTrip', () => {
       expect(rows.trip.endDate).toBe(toLocalISODateString(end));
 
       const inTrip = (day: string) =>
-        day >= rows.trip.startDate && day <= rows.trip.endDate;
+        day >= rows.trip.startDate! && day <= rows.trip.endDate!;
       const localDay = (instant: string) => toLocalISODateString(new Date(instant));
 
       for (const assignment of rows.roomAssignments) {

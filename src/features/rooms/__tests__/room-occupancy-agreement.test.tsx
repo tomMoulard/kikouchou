@@ -386,7 +386,7 @@ describe('room occupancy agreement — one couple, part of the trip', () => {
         departures={[]}
         persons={[COUPLE]}
         dateLocale={enUS}
-        range={{ startDate: TRIP.startDate, endDate: TRIP.endDate }}
+        range={{ startDate: TRIP.startDate!, endDate: TRIP.endDate! }}
       />,
       { withProviders: false },
     );

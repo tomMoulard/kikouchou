@@ -450,7 +450,7 @@ describe('buildRoomTimelineModel', () => {
 
     const model = buildRoomTimelineModel({
       trip,
-      range: { startDate: trip.startDate, endDate: trip.endDate },
+      range: { startDate: trip.startDate!, endDate: trip.endDate! },
       rooms: [room],
       assignments: [assignment],
       personsById: new Map([[person.id, person]]),
@@ -987,7 +987,7 @@ describe('buildRoomTimelineModel edges', () => {
     const persons = options.persons ?? [guest('p1'), guest('p2'), guest('p3')];
     return buildRoomTimelineModel({
       trip,
-      range: { startDate: trip.startDate, endDate: trip.endDate },
+      range: { startDate: trip.startDate!, endDate: trip.endDate! },
       rooms: options.rooms ?? [R1, R2],
       assignments,
       personsById: new Map(persons.map((person) => [person.id, person])),
@@ -1245,7 +1245,7 @@ describe('buildRoomTimelineModel, lanes and the visible window', () => {
   function build(assignments: readonly RoomAssignment[], columns?: Parameters<typeof buildRoomTimelineModel>[0]['columns']) {
     return buildRoomTimelineModel({
       trip,
-      range: { startDate: trip.startDate, endDate: trip.endDate },
+      range: { startDate: trip.startDate!, endDate: trip.endDate! },
       rooms: [room, other],
       assignments,
       personsById: new Map(people.map((person) => [person.id, person])),
@@ -1348,7 +1348,7 @@ describe('buildRoomTimelineModel, one guest in two rooms at different times', ()
 
     const model = buildRoomTimelineModel({
       trip,
-      range: { startDate: trip.startDate, endDate: trip.endDate },
+      range: { startDate: trip.startDate!, endDate: trip.endDate! },
       rooms: [first, second],
       // Two nights in the first room, then four in the second: no night shared.
       assignments: [booking('early', first.id, 1, 3), booking('late', second.id, 6, 10)],
@@ -1377,7 +1377,7 @@ describe('buildRoomTimelineModel, records it cannot fully read', () => {
   const build = (assignments: readonly RoomAssignment[], person: Person) =>
     buildRoomTimelineModel({
       trip,
-      range: { startDate: trip.startDate, endDate: trip.endDate },
+      range: { startDate: trip.startDate!, endDate: trip.endDate! },
       rooms: [room],
       assignments,
       personsById: new Map([[person.id, person]]),

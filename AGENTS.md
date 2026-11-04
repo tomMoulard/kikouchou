@@ -486,6 +486,42 @@ dev-time mount → cleanup → mount cycle latches it `false` forever, turning e
 guarded `setState` into a silent no-op — dialogs that never close, prompts that
 never appear. Ten files had this.
 
+### A trip may have no dates
+
+Neither creation screen asks for the dates. `Trip.startDate` and
+`Trip.endDate` are optional, and they are a pair: both set, or both absent.
+The repository refuses one alone, and so does the `trips_dates_paired`
+constraint on the server. The first step of the calendar's setup checklist
+(`dates`) sends the organiser to the trip's settings to set them, and stays on
+screen until they are set, even after travel exists.
+
+- **Never read the trip's dates through the `startDate` index.** IndexedDB
+  leaves a record out of an index when the field is absent, so
+  `orderBy('startDate')` drops every trip without dates: it vanished from the
+  app. Read `db.trips.toArray()` and sort with `sortTripsForDisplay`.
+- **Ask `getTripDates(trip)`, not `trip.startDate`.** It answers null for a
+  trip without dates, one date alone, the old `''` placeholder and an inverted
+  window. Print dates with `formatTripDateRange`, which answers null rather
+  than "undefined - undefined", and show `trips.datesNotSet`.
+- **A screen that needs days uses `resolveTripWorkingWindow`**
+  (`features/trips/utils/trip-window`): the trip's dates, or the span of the
+  guests' own stays. The calendar timeline goes one step wider
+  (`buildCalendarTimelineDays`): the span of every known stay, travel day and
+  booking night, or one week from today, with no "outside the trip" shading.
+  A guest with no stay dates still falls back on the trip's dates only, never
+  on the inferred window.
+- **A cleared date travels as `''` in the document** (`TRIP_DATE_CLEARED`). A
+  missing key means "this peer said nothing", and `readTripDay` keeps the
+  device's own value for it, so deleting the key could never spread a clear.
+  In Dexie a trip without dates has no date field at all, and
+  `updateTrip(id, { startDate: null, endDate: null })` is how it gets there:
+  `undefined` in a patch keeps the stored date.
+- **A booking never gets the dates of a trip without dates.** A guest claiming
+  a room books the trip, or their own stay, or is told to add their dates.
+  Bookings stay where they were when the trip's dates are cleared.
+- **On the wire**, a trip without dates is null columns on `trips`, `''` in the
+  QR changeset's string fields, and empty strings in the Rust `TripRow`.
+
 ### An assignment's `endDate` is the check-out day, not the last night
 
 `listStayNights` and `isDateInStayRange` (`features/rooms/utils/capacity-utils`)
@@ -663,10 +699,11 @@ and the bottom bar through `useHideNavigation`, because no trip tab can open
 on a first visit. An e2e spec that tests the form seeds a trip first
 (`seedTrip`); one that only needs a trip uses `e2e/support/trip-create.ts`.
 
-**The invitation is part of the creation.** The wizard asks the name and the
-dates, creates the trip, and ends on its invite link (`ShareLinkPanel`, the
-same body as `ShareDialog`). The place, the guests and the rooms are not
-questions: the group fills them in once it has the link. A signed-out visitor
+**The invitation is part of the creation.** The wizard asks the name,
+creates the trip, and ends on its invite link (`ShareLinkPanel`, the same body
+as `ShareDialog`). The dates, the place, the guests and the rooms are not
+questions: the group fills them in once it has the link, and the calendar's
+setup checklist asks for the dates (see "A trip may have no dates"). A signed-out visitor
 signs in on that screen. Google and a magic link leave the page and return to
 `/`. So the wizard first writes the trip id to `kikouchou-pending-invite`.
 `PendingInviteDialog` in `App` reads that key once on load, for 30 minutes at

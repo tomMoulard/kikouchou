@@ -207,7 +207,7 @@ export function usePlanOwnTripPrompt(
    */
   const hasSeenATripRun = useMemo(() => {
     const todayKey = toLocalISODateString(today);
-    return trips.some((trip) => trip.startDate <= todayKey);
+    return trips.some((trip) => trip.startDate !== undefined && trip.startDate <= todayKey);
   }, [today, trips]);
 
   const dismiss = useCallback((): void => {

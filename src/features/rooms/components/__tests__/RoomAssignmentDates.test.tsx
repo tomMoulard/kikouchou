@@ -557,7 +557,7 @@ describe('display consistency', () => {
 
     const model = buildRoomTimelineModel({
       trip: TRIP,
-      range: { startDate: TRIP.startDate, endDate: TRIP.endDate },
+      range: { startDate: TRIP.startDate!, endDate: TRIP.endDate! },
       rooms: [ROOM],
       assignments: [assignment],
       personsById: new Map([[ALICE.id, ALICE]]),
@@ -589,7 +589,7 @@ describe('display consistency', () => {
 
     const model = buildRoomTimelineModel({
       trip: TRIP,
-      range: { startDate: TRIP.startDate, endDate: TRIP.endDate },
+      range: { startDate: TRIP.startDate!, endDate: TRIP.endDate! },
       rooms: [ROOM],
       assignments: [dayVisit],
       personsById: new Map([[ALICE.id, ALICE]]),

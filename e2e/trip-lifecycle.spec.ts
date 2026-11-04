@@ -87,9 +87,8 @@ async function createTrip(
     await page.locator('#trip-location').fill(tripData.location);
   }
 
-  // The dates are native date inputs, filled with their ISO value
-  await page.locator('#trip-start-date').fill(tripData.startDate);
-  await page.locator('#trip-end-date').fill(tripData.endDate);
+  // No dates: the create form does not ask for them. `tripData`'s dates are
+  // what a test later sets through the checklist, or seeds.
 
   // Both opt-in: the guest list is optional in full, so the tests that are not
   // about it leave it alone and create a trip with nobody on it.
@@ -154,10 +153,10 @@ function tripIdFromCalendarUrl(page: Page): string {
 async function readTripDates(
   page: Page,
   tripId: string,
-): Promise<{ startDate: string; endDate: string }> {
+): Promise<{ startDate?: string; endDate?: string }> {
   return await page.evaluate(
     async (id) =>
-      new Promise<{ startDate: string; endDate: string }>((resolve, reject) => {
+      new Promise<{ startDate?: string; endDate?: string }>((resolve, reject) => {
         const request = indexedDB.open('kikouchou');
         request.onerror = () => reject(new Error('Failed to open database'));
         request.onsuccess = () => {
@@ -165,7 +164,7 @@ async function readTripDates(
           const read = db.transaction('trips', 'readonly').objectStore('trips').get(id);
           read.onsuccess = () => {
             db.close();
-            const trip = read.result as { startDate: string; endDate: string } | undefined;
+            const trip = read.result as { startDate?: string; endDate?: string } | undefined;
             if (!trip) {
               reject(new Error(`No trip ${id} in IndexedDB`));
               return;
@@ -316,7 +315,8 @@ test.describe('Trip Lifecycle', () => {
       page.getByRole('heading', { name: /no trips/i }),
     ).not.toBeVisible();
 
-    // The wizard picks the 15th and the 22nd of the month its picker opens on.
+    // The wizard asks no dates; the helper sets the 15th and the 22nd of this
+    // month through the calendar's setup checklist, as a user does.
     expect(await readTripDates(page, tripId)).toEqual({
       startDate: fixtureDate(15, 0),
       endDate: fixtureDate(22, 0),
@@ -357,16 +357,12 @@ test.describe('Trip Lifecycle', () => {
     await page.waitForLoadState('load');
     await expect(getTripCard(page, TEST_TRIP.name)).toBeVisible();
 
-    // And verify the trip carries the dates the form was given.
-    //
-    // A URL and a name were the whole of this test's evidence, and neither says
-    // anything about the two fields the form spends most of its effort on. The
-    // date picker was selecting days of the wrong month for months on end —
-    // measured at two months wrong today, three next month — without a single
-    // test noticing.
+    // And verify the trip was stored without dates: the form asks for none,
+    // and a trip without dates must not come back with an empty string or
+    // today's date in their place.
     expect(await readTripDates(page, tripId)).toEqual({
-      startDate: TEST_TRIP.startDate,
-      endDate: TEST_TRIP.endDate,
+      startDate: undefined,
+      endDate: undefined,
     });
   });
 
@@ -663,19 +659,17 @@ test.describe('Trip Lifecycle', () => {
     // Verify validation error appears for name (should show "Required")
     await expect(page.getByRole('alert').first()).toBeVisible();
 
-    // Fill name but skip dates
-    await page.getByLabel(/trip name/i).fill('Test Trip');
-    await page.getByRole('button', { name: /save/i }).click();
-
-    // Verify date validation errors appear (at least one alert for dates)
-    await expect(page.getByRole('alert').first()).toBeVisible();
-
-    // Still on the create page, still holding what was typed. The URL alone
-    // was the last statement here, and a form that had unmounted itself into a
-    // blank page would have satisfied it.
+    // Still on the create page: the URL alone would not say so, and a form
+    // that had unmounted itself into a blank page would have satisfied it.
     await expect(page).toHaveURL('/trips/new');
     await expectTripFormPage(page, /new trip/i);
-    await expect(page.getByLabel(/trip name/i)).toHaveValue('Test Trip');
+
+    // The name is the only required field: the dates are asked later, on the
+    // calendar, so a name alone creates the trip.
+    await page.getByLabel(/trip name/i).fill('Test Trip');
+    await page.getByRole('button', { name: /save/i }).click();
+    await expectCalendarPage(page, 'Test Trip');
+    await expect(page.getByRole('button', { name: /^set dates$/i })).toBeVisible();
   });
 
   test('cancels deletion when clicking cancel in dialog', async ({ page }) => {
