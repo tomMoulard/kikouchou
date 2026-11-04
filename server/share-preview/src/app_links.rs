@@ -2,7 +2,9 @@
 //!
 //! - `/.well-known/apple-app-site-association` tells iOS that the Kikouchou
 //!   app may open links on this host (universal links).
-//! - `/.well-known/assetlinks.json` tells Android the same (verified app links).
+//! - `/.well-known/assetlinks.json` tells Android the same (verified app links),
+//!   and lets the Android app offer the passwords and passkeys saved for this
+//!   host (`get_login_creds`, the credential sharing Play Console asks for).
 //!
 //! Both are read by the operating system when the app is installed, and again
 //! from time to time, never by a person. Without them a tap opens the browser,
@@ -48,7 +50,10 @@ pub fn asset_links(config: &NativeAppsConfig) -> Option<Value> {
         return None;
     }
     Some(json!([{
-        "relation": ["delegate_permission/common.handle_all_urls"],
+        "relation": [
+            "delegate_permission/common.handle_all_urls",
+            "delegate_permission/common.get_login_creds",
+        ],
         "target": {
             "namespace": "android_app",
             "package_name": config.android_package,
@@ -87,6 +92,13 @@ mod tests {
     fn the_asset_links_carry_every_signing_key() {
         let document = asset_links(&configured()).unwrap();
         assert_eq!(document[0]["target"]["package_name"], "app.kikouchou");
+        assert_eq!(
+            document[0]["relation"],
+            json!([
+                "delegate_permission/common.handle_all_urls",
+                "delegate_permission/common.get_login_creds",
+            ])
+        );
         assert_eq!(
             document[0]["target"]["sha256_cert_fingerprints"],
             json!(["AA:BB", "CC:DD"])
