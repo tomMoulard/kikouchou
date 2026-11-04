@@ -37,6 +37,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { db } from '@/lib/db/database';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { isNetworkFailureMessage } from '@/lib/sync/guest-groups';
 import {
   buildTemplatePayload,
   refreshTemplatePayload,
@@ -171,7 +172,12 @@ export function useTemplateRefresh({
         const result = await refreshTemplatePayload(client, remoteTripId, payload);
         if (result.status === 'error') {
           // Left unsettled, so the next edit or the next reconnect sends it again.
-          console.error('Failed to refresh the trip template:', result.message);
+          // A lost connection is expected and retried, so it is not an exception.
+          if (isNetworkFailureMessage(result.message)) {
+            console.warn('Failed to refresh the trip template:', result.message);
+          } else {
+            console.error('Failed to refresh the trip template:', result.message);
+          }
           return;
         }
         let photosFailed = 0;
