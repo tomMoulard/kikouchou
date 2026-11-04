@@ -1,0 +1,4 @@
+Un invité peut séjourner plusieurs fois pendant le même voyage.
+Créez un voyage sans dates, et ajoutez-les plus tard sur le calendrier.
+L'app fonctionne maintenant sur les téléphones Android plus anciens.
+À partir de cette version, la plupart des mises à jour arrivent sans passer par le store.

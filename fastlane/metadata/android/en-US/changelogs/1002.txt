@@ -1,0 +1,4 @@
+A guest can stay several times in the same trip.
+Create a trip without dates, and add them later on the calendar.
+The app now works on older Android phones.
+From this version on, most updates arrive without a store update.
