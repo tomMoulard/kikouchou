@@ -95,6 +95,10 @@ import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-gues
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
+import {
+  resolveTripWorkingWindow,
+  resolveUndatedTimelineRange,
+} from '@/features/trips/utils/trip-window';
 import { notify } from '@/lib/notifications';
 import { reportFailure } from '@/lib/errors/report-failure';
 import { captureDeletion, captureUsage } from '@/lib/posthog';
@@ -292,15 +296,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         return { startDate, endDate };
       }
     }
-    // Default to full trip date range
-    if (currentTrip?.startDate && currentTrip?.endDate) {
-      return {
-        startDate: currentTrip.startDate,
-        endDate: currentTrip.endDate,
-      };
-    }
-    return null;
-  }, [currentView, selectedDateRange, currentTrip?.startDate, currentTrip?.endDate]),
+    // Default to the full trip, or, for a trip without dates, the span of the
+    // guests' own stays.
+    return resolveTripWorkingWindow(currentTrip, persons, arrivals, departures);
+  }, [currentView, selectedDateRange, currentTrip, persons, arrivals, departures]),
 
   // Combined loading state
    isLoading = isTripLoading || isRoomsLoading || isTransportsLoading,
@@ -358,6 +357,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // Today's date - auto-updates at midnight via useToday hook
    { today: todayDate } = useToday(),
    todayStr = useMemo(() => formatToISODate(todayDate), [todayDate]),
+
+  // The timeline's axis: the trip, else the guests' stays, else one week from
+  // today. Never empty, so a trip without dates still shows a calendar.
+   timelineRange = useMemo(
+    () =>
+      resolveTripWorkingWindow(currentTrip, persons, arrivals, departures) ??
+      resolveUndatedTimelineRange([], todayStr as ISODateString),
+    [currentTrip, persons, arrivals, departures, todayStr],
+  ),
 
   // Calculate rooms with occupancy data
    headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]),
@@ -476,11 +484,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
    timelineDayCount = useMemo(
-    () =>
-      currentTrip?.startDate && currentTrip?.endDate
-        ? buildDayColumns(currentTrip.startDate, currentTrip.endDate).length
-        : 0,
-    [currentTrip?.startDate, currentTrip?.endDate],
+    () => buildDayColumns(timelineRange.startDate, timelineRange.endDate).length,
+    [timelineRange],
   ),
 
   // Notify once when all guests become assigned
@@ -1226,10 +1231,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             persons={persons}
             unassignedGuests={unassignedGuests}
             dateLocale={dateLocale}
-            range={{
-              startDate: currentTrip.startDate,
-              endDate: currentTrip.endDate,
-            }}
+            range={timelineRange}
             todayKey={todayStr as ISODateString}
             today={todayDate}
             {...(canEdit

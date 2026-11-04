@@ -26,8 +26,10 @@ import type {
  */
 export interface TripSnapshotMeta {
   readonly name: string;
-  readonly startDate: ISODateString;
-  readonly endDate: ISODateString;
+  /** Absent for a trip without dates. */
+  readonly startDate?: ISODateString;
+  /** Absent for a trip without dates. */
+  readonly endDate?: ISODateString;
   readonly location?: string;
   readonly description?: string;
   readonly coordinates?: {

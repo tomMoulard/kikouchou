@@ -29,12 +29,6 @@ const ORIGINAL_TRIP = {
   endDate: fixtureDate(22),
 } as const;
 
-/** The return visit, a month after the original, at the same location. */
-const RETURN_TRIP_DATES = {
-  startDate: fixtureDate(15, 3),
-  endDate: fixtureDate(22, 3),
-} as const;
-
 const ROOMS = ['Living Room', 'Master Bedroom', 'Guest Room'] as const;
 
 // Note: the location field is addressed as `#trip-location` throughout, not
@@ -176,11 +170,8 @@ test.describe('Trip Import Feature', () => {
     await expect(importOption).toBeVisible({ timeout: 5000 });
     await importOption.click();
 
-    // Step 5: Fill in remaining required fields and save
+    // Step 5: Fill in the name and save. The form asks for no dates.
     await page.getByLabel(/trip name/i).fill('Return to Vacation Home');
-
-    await page.locator('#trip-start-date').fill(RETURN_TRIP_DATES.startDate);
-    await page.locator('#trip-end-date').fill(RETURN_TRIP_DATES.endDate);
 
     await page.getByRole('button', { name: /save/i }).click();
 

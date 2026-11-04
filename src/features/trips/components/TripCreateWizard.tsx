@@ -1,11 +1,15 @@
 /**
- * @fileoverview The first trip: a name, two dates, then the invite link.
+ * @fileoverview The first trip: a name, then the invite link.
  *
  * Shown on `/trips/new` for a device that holds no trip of its own yet. It won
  * the `first-trip-wizard` experiment against the one-page form, which is still
- * what a later trip gets. Two questions (name, dates), one per screen, then the
- * trip is created and the last screen hands over its invite link. Enter
- * advances and Back goes back.
+ * what a later trip gets. One question (the name), then the trip is created
+ * and the last screen hands over its invite link. Enter advances and Back
+ * goes back.
+ *
+ * The dates are not a question. A trip is created without them, and the
+ * calendar's setup checklist asks for them once the group is planning. Asking
+ * up front made people stop at a question they often could not answer yet.
  *
  * The invitation is part of the creation, not a button after it. The place,
  * the guests and the rooms used to be three more questions before the link,
@@ -19,9 +23,9 @@
  *
  * It is also the screen behind a trip template link. A `prefill` carries the
  * place, the map pin, the description, the currency and the rooms the
- * enterprise published, and the customer answers the same two questions. The
- * name starts as the template's and the dates as today, so a customer with
- * nothing to change reaches the link by pressing Next twice.
+ * enterprise published, and the customer answers the same question. The name
+ * starts as the template's, so a customer with nothing to change reaches the
+ * link with one press.
  *
  * @module features/trips/components/TripCreateWizard
  */
@@ -37,26 +41,23 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
 import { ArrowLeft, Check, PartyPopper } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { ShareLinkPanel } from '@/features/sharing/components/ShareLinkPanel';
 import type { ShareLinkState } from '@/features/sharing/hooks/useTripShareLink';
 import {
   forgetPendingInvite,
   rememberPendingInvite,
 } from '@/features/sharing/utils/pending-invite';
-import { useToday } from '@/hooks/useToday';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus } from '@/lib/notifications';
 import { pushDataLayerEvent } from '@/lib/google-tag';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
-import type { CurrencyCode, ISODateString, Trip, TripFormData } from '@/types';
+import type { CurrencyCode, Trip, TripFormData } from '@/types';
 import type { NewTripGuest, NewTripRoom } from './TripForm';
 import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-trip-with-details';
 
@@ -110,13 +111,13 @@ export interface TripCreateWizardProps {
 }
 
 /** The questions, in order; `invite` follows the last one. */
-type Step = 'name' | 'dates' | 'invite';
+type Step = 'name' | 'invite';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const QUESTIONS: readonly Step[] = ['name', 'dates'];
+const QUESTIONS: readonly Step[] = ['name'];
 
 /**
  * The screens the progress dots count: the questions, and the link after
@@ -124,16 +125,9 @@ const QUESTIONS: readonly Step[] = ['name', 'dates'];
  */
 const STEP_COUNT = QUESTIONS.length + 1;
 
-/** The date shape `Trip` stores. */
-const ISO_DATE_FORMAT = 'yyyy-MM-dd';
-
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function toIsoDate(date: Date): ISODateString {
-  return format(date, ISO_DATE_FORMAT) as ISODateString;
-}
 
 /** Whether the visitor asked for less motion; confetti is motion. */
 function prefersReducedMotion(): boolean {
@@ -152,7 +146,7 @@ function prefersReducedMotion(): boolean {
 // ============================================================================
 
 /**
- * Walks a first trip through two questions and hands over its invite link.
+ * Walks a first trip through its one question and hands over its invite link.
  *
  * @param props - See {@link TripCreateWizardProps}
  * @returns The wizard
@@ -167,16 +161,9 @@ export const TripCreateWizard = memo(function TripCreateWizard({
 }: TripCreateWizardProps): ReactElement {
   const { t } = useTranslation();
 
-  const { today } = useToday();
   const [step, setStep] = useState<Step>('name');
   const [name, setName] = useState(() =>
     (prefill?.name ?? '').slice(0, MAX_LENGTHS.tripName),
-  );
-  // A template trip starts and ends today until the customer says otherwise,
-  // so the dates question can be passed with Next alone. `today` is a local
-  // midnight, which is what `toIsoDate` reads.
-  const [range, setRange] = useState<DateRange | undefined>(() =>
-    prefill === undefined ? undefined : { from: today, to: today },
   );
   const [problem, setProblem] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -194,7 +181,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   }, []);
 
   // Anything typed is worth an unsaved-changes prompt; a finished trip is not.
-  const isDirty = created === null && (name !== '' || range !== undefined || step !== 'name');
+  const isDirty = created === null && (name !== '' || step !== 'name');
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
@@ -243,11 +230,6 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   }, [goTo, onCancel, report, step, stepIndex]);
 
   const create = useCallback(async (): Promise<void> => {
-    if (!range?.from || !range.to) {
-      goTo('dates');
-      setProblem(t('trips.wizard.datesRequired', 'Pick the first and the last day to continue.'));
-      return;
-    }
     setIsCreating(true);
     setProblem(null);
     onCreating?.();
@@ -257,9 +239,8 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     try {
       const outcome = await createTripWithDetails({
         form: {
+          // No dates: the calendar's setup checklist asks for them later.
           name: name.trim(),
-          startDate: toIsoDate(range.from),
-          endDate: toIsoDate(range.to),
           // A template's own fields. The wizard asks for none of them, so they
           // are here or they are nowhere.
           ...(prefill?.location?.trim() ? { location: prefill.location.trim() } : {}),
@@ -310,7 +291,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         setIsCreating(false);
       }
     }
-  }, [currentUserName, goTo, name, onCreating, prefill, range, t]);
+  }, [currentUserName, name, onCreating, prefill, t]);
 
   /** Enter, or the Next button: validate this question, move to the next. */
   const advance = useCallback((): void => {
@@ -321,24 +302,13 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           return;
         }
         report('next', step);
-        goTo('dates');
-        return;
-      }
-      case 'dates': {
-        if (!range?.from || !range.to) {
-          setProblem(
-            t('trips.wizard.datesRequired', 'Pick the first and the last day to continue.'),
-          );
-          return;
-        }
-        report('next', step);
         void create();
         return;
       }
       case 'invite':
         return;
     }
-  }, [create, goTo, name, range, report, step, t]);
+  }, [create, name, report, step, t]);
 
   const handleSubmit = useCallback(
     (event: SyntheticEvent<HTMLFormElement>): void => {
@@ -488,25 +458,6 @@ export const TripCreateWizard = memo(function TripCreateWizard({
             }}
             className="h-12 text-lg"
             autoComplete="off"
-          />
-        </div>
-      ) : null}
-
-      {step === 'dates' ? (
-        <div className="space-y-3">
-          <h2 className="text-2xl font-bold">{t('trips.wizard.datesQuestion', 'When is it?')}</h2>
-          <p className="text-muted-foreground">
-            {t(
-              'trips.wizard.datesHint',
-              'First and last day. Guests can arrive and leave in between.',
-            )}
-          </p>
-          <DateRangePicker
-            id="wizard-trip-dates"
-            value={range}
-            onChange={setRange}
-            aria-label={t('trips.wizard.datesLabel', 'Trip dates')}
-            className="h-12 w-full justify-start text-base"
           />
         </div>
       ) : null}

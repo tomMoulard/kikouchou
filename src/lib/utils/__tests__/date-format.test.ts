@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { enUS, fr } from 'date-fns/locale';
 
-import { formatDateRange, formatFullDate } from '../date-format';
+import { formatDateRange, formatFullDate, formatTripDateRange } from '../date-format';
 
 // ============================================================================
 // formatDateRange
@@ -84,5 +84,22 @@ describe('formatFullDate', () => {
 
   it('returns the raw key when it cannot be parsed', () => {
     expect(formatFullDate('nope', enUS)).toBe('nope');
+  });
+});
+
+describe('formatTripDateRange', () => {
+  it('formats a trip with dates as formatDateRange does', () => {
+    expect(formatTripDateRange('2024-07-15', '2024-07-22', enUS)).toBe(
+      formatDateRange('2024-07-15', '2024-07-22', enUS),
+    );
+  });
+
+  it.each([
+    ['no dates', undefined, undefined],
+    ['a start alone', '2024-07-15', undefined],
+    ['an end alone', undefined, '2024-07-22'],
+    ['the old empty strings', '', ''],
+  ])('answers null for %s, never "undefined - undefined"', (_label, start, end) => {
+    expect(formatTripDateRange(start, end, enUS)).toBeNull();
   });
 });

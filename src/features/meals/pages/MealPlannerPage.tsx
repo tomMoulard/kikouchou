@@ -40,6 +40,7 @@ import {
   type MealPresenceSource,
 } from '@/features/meals/utils/meal-headcount';
 import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { resolveTripWorkingWindow } from '@/features/trips/utils/trip-window';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useToday } from '@/hooks/useToday';
 import { useTripAccess } from '@/hooks/useTripAccess';
@@ -53,7 +54,12 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import { MEAL_PLANNER_FLAG } from '@/lib/flags';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
-import { buildDayColumnsCovering, parseLocalDayKey, toDayKeys } from '@/lib/utils/trip-days';
+import {
+  buildDayColumns,
+  buildDayColumnsCovering,
+  parseLocalDayKey,
+  toDayKeys,
+} from '@/lib/utils/trip-days';
 import { MEAL_SLOTS } from '@/types';
 import type { ISODateString, Meal, MealKind, MealSlot, Person, PersonId } from '@/types';
 
@@ -246,19 +252,32 @@ const MealPlannerPage = memo(function MealPlannerPage(): ReactElement {
   );
 
   // The trip's days, widened to reach a meal planned outside them: a meal the
-  // group wrote down must not vanish because the trip dates moved.
+  // group wrote down must not vanish because the trip dates moved. A trip
+  // without dates plans over its guests' stays, and with none of those either
+  // over the days its meals are on.
   const dayKeys = useMemo((): readonly ISODateString[] => {
-    if (!tripStartDate || !tripEndDate) {
+    const mealDates = meals.map((meal) => meal.date);
+    const window = resolveTripWorkingWindow(
+      { startDate: tripStartDate, endDate: tripEndDate },
+      persons,
+      arrivals,
+      departures,
+    );
+    if (window) {
+      return toDayKeys(
+        buildDayColumnsCovering({
+          startKey: window.startDate,
+          endKey: window.endDate,
+          mustInclude: mealDates,
+        }),
+      );
+    }
+    if (mealDates.length === 0) {
       return [];
     }
-    return toDayKeys(
-      buildDayColumnsCovering({
-        startKey: tripStartDate,
-        endKey: tripEndDate,
-        mustInclude: meals.map((meal) => meal.date),
-      }),
-    );
-  }, [tripEndDate, tripStartDate, meals]);
+    const sorted = [...mealDates].sort();
+    return toDayKeys(buildDayColumns(sorted[0], sorted[sorted.length - 1]));
+  }, [tripEndDate, tripStartDate, meals, persons, arrivals, departures]);
 
   const mealsBySlot = useMemo(() => {
     const map = new Map<string, Meal[]>();

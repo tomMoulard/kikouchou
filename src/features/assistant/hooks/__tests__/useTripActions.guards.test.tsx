@@ -253,6 +253,36 @@ describe('useTripActions — no trip selected', () => {
     expect(trips.map((trip) => trip.name)).toEqual(['Summer house']);
   });
 
+  it('creates a trip without dates when the model gives none', async () => {
+    const result = await renderWithoutTrip();
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'createTrip', data: { name: 'Summer house' } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [trip] = await db.trips.toArray();
+    expect(trip?.name).toBe('Summer house');
+    expect(trip).not.toHaveProperty('startDate');
+    expect(trip).not.toHaveProperty('endDate');
+  });
+
+  it.each([
+    ['one date alone', { startDate: '2024-07-15' }],
+    ['a date written in words', { startDate: 'next Friday', endDate: '2024-07-30' }],
+  ])('refuses a createTrip with %s', async (_label, dates) => {
+    const result = await renderWithoutTrip();
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'createTrip', data: { name: 'Summer house', ...dates } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    await expect(db.trips.count()).resolves.toBe(0);
+  });
+
   it('creates a trip and then writes to it in the same reply', async () => {
     const result = await renderWithoutTrip();
 

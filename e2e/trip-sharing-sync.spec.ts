@@ -364,7 +364,8 @@ test.describe('sharing a trip', () => {
 // ============================================================================
 
 /**
- * Answers the wizard's two questions and waits for its invite screen.
+ * Answers the wizard's one question, which creates a trip without dates, and
+ * waits for its invite screen.
  *
  * @param page - Playwright page with no trip of its own yet
  * @returns The invite screen
@@ -373,10 +374,6 @@ async function createFirstTripInWizard(page: Page): Promise<ReturnType<Page['get
   await page.goto('/trips/new');
   await page.locator('#wizard-trip-name').fill(TRIP.name);
   await page.keyboard.press('Enter');
-  const dates = page.getByRole('group', { name: /trip dates/i });
-  await dates.getByLabel(/^from$/i).fill(fixtureDate(15, 0));
-  await dates.getByLabel(/^to$/i).fill(fixtureDate(22, 0));
-  await page.getByRole('button', { name: /create the trip/i }).click();
   const invite = page.getByTestId('trip-wizard-invite');
   await expect(invite).toBeVisible({ timeout: 15_000 });
   return invite;
@@ -393,6 +390,8 @@ test.describe('inviting from the first-trip wizard', () => {
     await expect(invite.getByTestId('share-url')).toContainText('/join/', { timeout: 20_000 });
     expect(stub.counts.tripInserts).toBe(1);
     expect(stub.counts.inviteInserts).toBe(1);
+    // The wizard asks no dates, so the server row carries none: null, never ''.
+    expect(stub.trips[0]).toMatchObject({ start_date: null, end_date: null });
   });
 
   test('asks for an account in place, and opens the link after the sign-in round trip', async ({

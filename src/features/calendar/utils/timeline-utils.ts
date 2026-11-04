@@ -16,7 +16,9 @@ import {
   findColumnIndexAt,
   resolveColumnRange,
 } from '@/lib/utils/timeline-scale';
+import { getTripDates, resolveUndatedTimelineRange } from '@/features/trips/utils/trip-window';
 import {
+  buildDayColumns,
   buildDayColumnsCovering,
   localDayKeyOfInstant,
   parseLocalDayKey,
@@ -245,6 +247,54 @@ export function collectAssignmentDayKeys(
     keys.push(toLocalISODateString(start), toLocalISODateString(lastNight));
   }
   return keys;
+}
+
+/**
+ * The calendar timeline's day axis.
+ *
+ * With trip dates, the trip's own days widened to reach every event drawn on
+ * them: a guest who flies in the day before the trip starts has no column on
+ * a trip-only axis, and a pill with no column is a pill nobody can see.
+ *
+ * Without trip dates, the axis has no bounds of its own: it is the span of
+ * what is known (guest stays, travel days, booking nights), or one week from
+ * today when nothing is known yet. One function, so the page's width decision
+ * counts exactly the columns the timeline draws.
+ *
+ * @param args - The trip, its guests, travel and bookings, and today's key
+ * @returns One local-midnight Date per day of the axis
+ */
+export function buildCalendarTimelineDays(args: {
+  readonly trip: Pick<Trip, 'startDate' | 'endDate'>;
+  readonly persons: readonly Person[];
+  readonly arrivals: readonly Transport[];
+  readonly departures: readonly Transport[];
+  readonly assignments: readonly RoomAssignment[];
+  readonly todayKey: ISODateString;
+}): readonly Date[] {
+  const { trip, persons, arrivals, departures, assignments, todayKey } = args;
+  const eventDayKeys = [
+    ...collectTransportDayKeys([...arrivals, ...departures]),
+    ...collectAssignmentDayKeys(assignments),
+  ];
+
+  const tripDates = getTripDates(trip);
+  if (tripDates) {
+    return buildDayColumnsCovering({
+      startKey: tripDates.startDate,
+      endKey: tripDates.endDate,
+      mustInclude: eventDayKeys,
+    });
+  }
+
+  const range = resolveUndatedTimelineRange(
+    [
+      ...eventDayKeys,
+      ...persons.flatMap((person) => [person.stayStartDate, person.stayEndDate]),
+    ],
+    todayKey,
+  );
+  return buildDayColumns(range.startDate, range.endDate);
 }
 
 export function buildCalendarTimelineModel(args: {

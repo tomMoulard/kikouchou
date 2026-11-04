@@ -255,8 +255,10 @@ export const coordinatesSchema = z.object({
  * Validates:
  * - name: required, 1-100 characters
  * - location: optional, max 200 characters
- * - startDate: required, valid ISO date
- * - endDate: required, valid ISO date, must be >= startDate
+ * - startDate: optional, valid ISO date
+ * - endDate: optional, valid ISO date, must be >= startDate
+ * - the two dates are set together or not at all: a trip is created without
+ *   dates and the organiser sets them later
  * - description: optional, max 1000 characters
  * - coordinates: optional GPS coordinates
  */
@@ -270,8 +272,8 @@ export const TripFormDataSchema = z
       .string()
       .max(200, 'Location must be 200 characters or less')
       .optional(),
-    startDate: isoDateStringSchema,
-    endDate: isoDateStringSchema,
+    startDate: isoDateStringSchema.optional(),
+    endDate: isoDateStringSchema.optional(),
     description: z
       .string()
       .max(1000, 'Description must be 1000 characters or less')
@@ -279,10 +281,20 @@ export const TripFormDataSchema = z
     coordinates: coordinatesSchema.optional(),
     currency: currencyCodeSchema.optional(),
   })
-  .refine((data) => data.startDate <= data.endDate, {
-    message: 'End date must be on or after start date',
+  .refine((data) => (data.startDate === undefined) === (data.endDate === undefined), {
+    message: 'Start and end dates must be set together',
     path: ['endDate'],
-  });
+  })
+  .refine(
+    (data) =>
+      data.startDate === undefined ||
+      data.endDate === undefined ||
+      data.startDate <= data.endDate,
+    {
+      message: 'End date must be on or after start date',
+      path: ['endDate'],
+    },
+  );
 
 /**
  * Room form data schema.

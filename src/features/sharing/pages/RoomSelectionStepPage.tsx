@@ -36,6 +36,7 @@ import {
   createHeadcountResolver,
   summarizeRoomOccupancy,
 } from '@/features/rooms/utils/capacity-utils';
+import { getTripDates, resolveTripWorkingWindow } from '@/features/trips/utils/trip-window';
 import {
   checkAssignmentConflict,
   createAssignment,
@@ -285,14 +286,16 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
    * spots taken" here and "2 of 2" on the organiser's card.
    */
   const peakOccupancyByRoom = useMemo(() => {
-    if (!trip) {
+    // A trip without dates is counted over its guests' stays.
+    const window = resolveTripWorkingWindow(trip, persons);
+    if (!window) {
       return new Map<RoomId, number>();
     }
     const headcountOf = createHeadcountResolver(persons);
     return calculatePeakOccupancyByRoom(
       assignments,
-      trip.startDate,
-      trip.endDate,
+      window.startDate,
+      window.endDate,
       headcountOf,
     );
   }, [assignments, persons, trip]);
@@ -313,6 +316,22 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
       if (shareId) navigate(`/share/${shareId}/identity`, { replace: true });
       return;
     }
+    // The stay to book: the whole trip, or for a trip without dates the
+    // guest's own stay. With neither there is no night to book, and a booking
+    // without dates would be invisible to every query that reads it.
+    const guest = persons.find((person) => person.id === guestPersonId);
+    const stay =
+      getTripDates(trip) ??
+      getTripDates({ startDate: guest?.stayStartDate, endDate: guest?.stayEndDate });
+    if (!stay) {
+      setClaimError(
+        t(
+          'sharing.roomNeedsDates',
+          'The organiser has not set the trip dates yet. Add your own arrival and departure dates first.',
+        ),
+      );
+      return;
+    }
     isSubmittingRef.current = true;
     setIsClaimingRoomId(room.id);
     setClaimError(undefined);
@@ -322,8 +341,8 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
       const hasConflict = await checkAssignmentConflict(
         trip.id,
         guestPersonId,
-        trip.startDate,
-        trip.endDate,
+        stay.startDate,
+        stay.endDate,
       );
       if (!isMountedRef.current) return;
 
@@ -336,8 +355,8 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
       const newAssignment = await createAssignment(trip.id, {
         roomId: room.id,
         personId: guestPersonId,
-        startDate: trip.startDate,   // already ISODateString — do not re-wrap
-        endDate: trip.endDate,       // already ISODateString — do not re-wrap
+        startDate: stay.startDate,
+        endDate: stay.endDate,
       });
       if (!isMountedRef.current) return;
 
@@ -353,7 +372,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
       isSubmittingRef.current = false;
       if (isMountedRef.current) setIsClaimingRoomId(undefined);
     }
-  }, [trip, guestPersonId, shareId, navigate, t]);
+  }, [trip, guestPersonId, persons, shareId, navigate, t]);
 
   /**
    * Navigates to the transport step (for both "Next" and "Skip for now").

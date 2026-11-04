@@ -37,6 +37,10 @@ import {
   resolveRides,
   selectRideByLeg,
 } from '@/features/transports/utils/ride-model';
+import {
+  resolveTripWorkingWindow,
+  resolveUndatedTimelineRange,
+} from '@/features/trips/utils/trip-window';
 
 import { OPENED_FROM_ASSISTANT } from '@/hooks/useSampleTripViewReport';
 import { useToday } from '@/hooks/useToday';
@@ -49,6 +53,7 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 
+import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
@@ -164,9 +169,13 @@ const RoomsView = memo(function RoomsView({ trip }: TripViewBodyProps): ReactEle
   const { today } = useToday();
 
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+  // The trip, else the guests' stays, else one week from today: the same axis
+  // the rooms page draws.
   const range = useMemo(
-    () => ({ startDate: trip.startDate, endDate: trip.endDate }),
-    [trip.startDate, trip.endDate],
+    () =>
+      resolveTripWorkingWindow(trip, persons, arrivals, departures) ??
+      resolveUndatedTimelineRange([], toLocalISODateString(today)),
+    [trip, persons, arrivals, departures, today],
   );
 
   return (

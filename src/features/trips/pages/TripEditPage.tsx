@@ -251,7 +251,13 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
     async (data: TripFormData): Promise<void> => {
       if (!tripId) return;
 
-      await updateTrip(tripId as TripId, data);
+      // The form holds the trip's whole date state, so empty dates mean the
+      // organiser cleared them: `null` tells the repository to remove them.
+      await updateTrip(tripId as TripId, {
+        ...data,
+        startDate: data.startDate ?? null,
+        endDate: data.endDate ?? null,
+      });
 
       captureUsage('trip_updated');
 
@@ -561,11 +567,15 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
                 )}
                 <div>
                   <dt className="text-muted-foreground">{t('trips.startDate')}</dt>
-                  <dd className="font-medium">{trip.startDate}</dd>
+                  <dd className="font-medium">
+                    {trip.startDate ?? t('trips.datesNotSet', 'Dates not set')}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('trips.endDate')}</dt>
-                  <dd className="font-medium">{trip.endDate}</dd>
+                  <dd className="font-medium">
+                    {trip.endDate ?? t('trips.datesNotSet', 'Dates not set')}
+                  </dd>
                 </div>
                 <p className="flex items-start gap-2 text-muted-foreground sm:col-span-2">
                   <Eye className="mt-0.5 size-4 shrink-0" aria-hidden="true" />

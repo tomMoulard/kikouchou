@@ -49,7 +49,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
-import { formatDateRange } from '@/lib/utils/date-format';
+import { formatTripDateRange } from '@/lib/utils/date-format';
 import { markdownToPlainText } from '@/lib/utils/markdown';
 import type { Person, Trip } from '@/types';
 import { PersonBadge } from '@/components/shared/PersonBadge';
@@ -155,8 +155,10 @@ const TripCard = memo(function TripCard({
 
   // Format the date range
    dateRange = useMemo(
-    () => formatDateRange(trip.startDate, trip.endDate, locale),
-    [trip.startDate, trip.endDate, locale],
+    () =>
+      formatTripDateRange(trip.startDate, trip.endDate, locale) ??
+      t('trips.datesNotSet', 'Dates not set'),
+    [trip.startDate, trip.endDate, locale, t],
   ),
 
 

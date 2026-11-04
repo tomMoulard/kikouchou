@@ -116,9 +116,13 @@ export function localDayKeyOfInstant(datetime: string): ISODateString | null {
  * ```
  */
 export function buildDayColumns(
-  startKey: ISODateString,
-  endKey: ISODateString,
+  startKey: ISODateString | undefined,
+  endKey: ISODateString | undefined,
 ): readonly Date[] {
+  // A trip without dates has no days of its own.
+  if (startKey === undefined || endKey === undefined) {
+    return [];
+  }
   const start = parseLocalDayKey(startKey);
   const end = parseLocalDayKey(endKey);
   if (!start || !end) {
@@ -142,7 +146,7 @@ export function buildDayColumns(
  * date inclusive.
  *
  * @param trip - The trip whose span to enumerate
- * @returns One Date per trip day, or an empty array when the dates are invalid
+ * @returns One Date per trip day, or an empty array when the dates are invalid or absent
  *
  * @example
  * ```typescript
@@ -200,8 +204,8 @@ export const TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS = 31;
  * ```
  */
 export function buildDayColumnsCovering(args: {
-  readonly startKey: ISODateString;
-  readonly endKey: ISODateString;
+  readonly startKey: ISODateString | undefined;
+  readonly endKey: ISODateString | undefined;
   readonly mustInclude: readonly (string | null | undefined)[];
   readonly maxExtensionDays?: number;
 }): readonly Date[] {
@@ -212,8 +216,8 @@ export function buildDayColumnsCovering(args: {
     maxExtensionDays = TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS,
   } = args;
 
-  const start = parseLocalDayKey(startKey);
-  const end = parseLocalDayKey(endKey);
+  const start = startKey === undefined ? null : parseLocalDayKey(startKey);
+  const end = endKey === undefined ? null : parseLocalDayKey(endKey);
   if (!start || !end || start > end) {
     // An unusable trip range has no axis to widen — same answer as
     // `buildTripDayColumns` gives, so callers keep one empty-model branch.

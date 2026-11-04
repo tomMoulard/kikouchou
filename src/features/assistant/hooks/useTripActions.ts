@@ -628,10 +628,26 @@ async function executeActionBatch(
       switch (action.action) {
         case 'createTrip': {
           const d = action.data as Record<string, unknown>;
+          // The dates are optional, and go together. Checked like updateTrip's:
+          // the model writes them from words.
+          const hasStart = d.startDate !== undefined;
+          const hasEnd = d.endDate !== undefined;
+          if (
+            hasStart !== hasEnd ||
+            (hasStart && !isCalendarDayString(d.startDate)) ||
+            (hasEnd && !isCalendarDayString(d.endDate))
+          ) {
+            notify.error(t('assistant.invalidDate'));
+            break;
+          }
           const trip = await createTrip({
             name: d.name as string,
-            startDate: d.startDate as ISODateString,
-            endDate: d.endDate as ISODateString,
+            ...(hasStart && hasEnd
+              ? {
+                  startDate: d.startDate as ISODateString,
+                  endDate: d.endDate as ISODateString,
+                }
+              : {}),
             ...(d.location !== undefined && { location: d.location as string }),
             ...(d.description !== undefined && {
               description: d.description as string,
@@ -693,8 +709,9 @@ async function executeActionBatch(
               'startDate',
               'endDate',
               'description',
+              'clearDates',
             ] as const
-          ).filter((k) => d[k] !== undefined);
+          ).filter((k) => (k === 'clearDates' ? d[k] === true : d[k] !== undefined));
           if (keys.length === 0) {
             break;
           }
@@ -731,6 +748,9 @@ async function executeActionBatch(
             }),
             ...(d.startDate !== undefined && { startDate: d.startDate as ISODateString }),
             ...(d.endDate !== undefined && { endDate: d.endDate as ISODateString }),
+            // `null` is the repository's "remove": the trip goes back to having
+            // no dates. It wins over any date sent beside it.
+            ...(d.clearDates === true && { startDate: null, endDate: null }),
             ...(d.description !== undefined && { description: d.description as string }),
           });
           notifySuccess(t('trips.updated'));

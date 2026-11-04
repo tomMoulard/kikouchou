@@ -676,17 +676,19 @@ export interface Trip extends Identifiable, WithTimestamps {
 
   /**
    * Start date of the trip in ISO format (YYYY-MM-DD).
+   * Optional: a trip is created without dates and the organiser sets them
+   * later. Set together with endDate, or both are absent.
    * Must be on or before endDate.
    * @example "2024-07-15"
    */
-  startDate: ISODateString;
+  startDate?: ISODateString;
 
   /**
    * End date of the trip in ISO format (YYYY-MM-DD).
-   * Must be on or after startDate.
+   * Optional, like startDate. Must be on or after startDate.
    * @example "2024-07-22"
    */
-  endDate: ISODateString;
+  endDate?: ISODateString;
 
   /**
    * Unique identifier for sharing the trip via URL or QR code.
@@ -1996,10 +1998,10 @@ export interface TripFormData {
   name: string;
   /** Optional location description */
   location?: string;
-  /** Start date in ISO format (YYYY-MM-DD) */
-  startDate: ISODateString;
-  /** End date in ISO format (YYYY-MM-DD) */
-  endDate: ISODateString;
+  /** Start date in ISO format (YYYY-MM-DD); absent while the trip has no dates */
+  startDate?: ISODateString;
+  /** End date in ISO format (YYYY-MM-DD); absent while the trip has no dates */
+  endDate?: ISODateString;
   /** Optional description or notes for the trip */
   description?: string;
   /** Currency the accounts are kept in (ISO 4217); defaults to EUR */

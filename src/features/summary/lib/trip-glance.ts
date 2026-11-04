@@ -22,6 +22,10 @@ import {
 } from '@/features/rooms/utils/capacity-utils';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
 import {
+  type DatedWindow,
+  resolveTripWorkingWindow,
+} from '@/features/trips/utils/trip-window';
+import {
   isTransportUpcoming,
   sortTransportsByInstant,
 } from '@/features/transports/utils/pickup-utils';
@@ -139,15 +143,23 @@ export interface TripGlanceInput {
  * A trip's nights run from `startDate` to the night before `endDate` — the
  * check-in / check-out model the whole app books with — so a day key equal to
  * `endDate` is the morning everybody leaves, and there is no night to count.
+ *
+ * A trip without dates is read through the span of its guests' stays
+ * ({@link resolveTripWorkingWindow}).
  */
 function resolveNight(
-  trip: Pick<Trip, 'startDate' | 'endDate'>,
+  window: DatedWindow | null,
   todayKey: ISODateString,
 ): { readonly nightKey: ISODateString | null; readonly night: GlanceNight } {
-  if (todayKey < trip.startDate) {
-    return { nightKey: trip.startDate, night: 'firstNight' };
+  // A trip without dates whose guests have none either: nothing to count yet,
+  // so the panel asks about tonight.
+  if (!window) {
+    return { nightKey: todayKey, night: 'tonight' };
   }
-  if (todayKey >= trip.endDate) {
+  if (todayKey < window.startDate) {
+    return { nightKey: window.startDate, night: 'firstNight' };
+  }
+  if (todayKey >= window.endDate) {
     return { nightKey: null, night: 'over' };
   }
   return { nightKey: todayKey, night: 'tonight' };
@@ -171,7 +183,7 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
   const personsById = new Map(persons.map((person) => [person.id, person]));
 
   const { nightKey, night } = trip
-    ? resolveNight(trip, todayKey)
+    ? resolveNight(resolveTripWorkingWindow(trip, persons, arrivals, departures), todayKey)
     : { nightKey: null, night: 'over' as GlanceNight };
 
   /*

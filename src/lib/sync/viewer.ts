@@ -47,7 +47,6 @@ import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
-import { toISODateStringFromString } from '@/lib/db/utils';
 import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { loadPersistedUpdates, syncDocToDexie } from '@/lib/yjs/dexie-bridge';
@@ -56,7 +55,12 @@ import type { ShareId, Trip, TripId, UnixTimestamp } from '@/types';
 import { decodeUpdate } from './codec';
 import { advanceCursor, readCursor, recordServerState } from './cursors';
 import { mapInviteError, redeemInvite } from './invites';
-import { claimParticipant, sanitisePreview, type RemoteTripPreview } from './join-trip';
+import {
+  claimParticipant,
+  previewTripDates,
+  sanitisePreview,
+  type RemoteTripPreview,
+} from './join-trip';
 import { ORIGIN_REMOTE } from './SupabaseYjsProvider';
 
 // ============================================================================
@@ -464,8 +468,7 @@ async function createViewerTripRow(
     const trip: Trip = {
       id: nanoid() as TripId,
       name: preview.name,
-      startDate: toISODateStringFromString(preview.startDate),
-      endDate: toISODateStringFromString(preview.endDate),
+      ...previewTripDates(preview),
       // A local share id, never one adopted from the server: it is a unique
       // Dexie index, and a colliding value aborts the whole write transaction.
       shareId: nanoid(10) as ShareId,

@@ -22,7 +22,7 @@ import {
 } from '@/components/shared/MapView';
 import { hasValidCoordinates, type Coordinates } from '@/lib/geocoding';
 import { getDateLocale } from '@/lib/i18n/date-locale';
-import { formatDateRange } from '@/lib/utils/date-format';
+import { formatTripDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -122,7 +122,8 @@ export const TripsLocationMap = memo(function TripsLocationMap({
               </div>
             )}
             <div className="text-muted-foreground">
-              {formatDateRange(trip.startDate, trip.endDate, dateLocale)}
+              {formatTripDateRange(trip.startDate, trip.endDate, dateLocale) ??
+                t('trips.datesNotSet', 'Dates not set')}
             </div>
           </div>
         ),
@@ -136,7 +137,8 @@ export const TripsLocationMap = memo(function TripsLocationMap({
               </p>
             )}
             <p className="text-sm text-muted-foreground">
-              {formatDateRange(trip.startDate, trip.endDate, dateLocale)}
+              {formatTripDateRange(trip.startDate, trip.endDate, dateLocale) ??
+                t('trips.datesNotSet', 'Dates not set')}
             </p>
             <Link
               to={`/trips/${trip.id}/analytics`}

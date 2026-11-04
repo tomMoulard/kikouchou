@@ -635,7 +635,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
             '## All trips (use trip id with the selectTrip action)',
             ...trips.map(
               (trip) =>
-                `- "${toPromptText(trip.name)}" — id: \`${trip.id}\` — ${trip.startDate} to ${trip.endDate}${trip.location ? ` — ${toPromptText(trip.location)}` : ''}`,
+                `- "${toPromptText(trip.name)}" — id: \`${trip.id}\` — ${trip.startDate && trip.endDate ? `${trip.startDate} to ${trip.endDate}` : 'no dates'}${trip.location ? ` — ${toPromptText(trip.location)}` : ''}`,
             ),
           ]
         : [];
@@ -687,7 +687,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       // The pin is dropped by an updateTrip on the location, which the
       // updateTrip label in action-schema.ts spells out.
       `- Map pin: ${hasValidCoordinates(currentTrip.coordinates) ? formatCoordinates(currentTrip.coordinates) : 'Not pinned on the map'}`,
-      `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
+      `- Dates: ${currentTrip.startDate && currentTrip.endDate ? `${currentTrip.startDate} to ${currentTrip.endDate}` : 'Not set'}`,
       // The cards show the photos, so the model must know they exist. It cannot
       // make one: no action carries an image. Printed only when set, because
       // the trip-independent floor has no room for a "none" line.

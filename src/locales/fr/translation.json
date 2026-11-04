@@ -226,6 +226,9 @@
     "moreGuests_one": "{{count}} invité de plus",
     "moreGuests_other": "{{count}} invités de plus",
     "untitled": "Voyage sans titre",
+    "datesNotSet": "Dates non définies",
+    "datesTogether": "Indiquez les deux dates, ou aucune",
+    "clearDates": "Effacer les dates",
     "archive": "Archiver",
     "unarchive": "Désarchiver",
     "archived": {
@@ -257,10 +260,6 @@
       "nameLabel": "Nom du séjour",
       "namePlaceholder": "L'été au bord du lac",
       "nameRequired": "Donnez un nom au séjour pour continuer.",
-      "datesQuestion": "C'est quand ?",
-      "datesHint": "Premier et dernier jour. Les invités peuvent arriver et partir entre les deux.",
-      "datesLabel": "Dates du séjour",
-      "datesRequired": "Choisissez le premier et le dernier jour pour continuer.",
       "inviteTitle": "{{tripName}} est prêt : invitez le groupe",
       "inviteHint": "Envoyez ce lien. Chacun ajoute son prénom et son jour d'arrivée, et les chambres se remplissent à partir de là.",
       "later": "Plus tard, ouvrir le séjour",
@@ -827,6 +826,12 @@
       "progress": "{{done}} sur {{total}} terminées",
       "progressLabel": "Progression de la configuration du séjour",
       "stepDone": "terminé",
+      "dates": {
+        "title": "Fixer les dates du séjour",
+        "action": "Fixer les dates",
+        "countDone": "Dates fixées",
+        "countZero": "Pas encore de dates, le calendrier montre ce qui est prévu"
+      },
       "guests": {
         "title": "Ajouter des invités",
         "countZero": "Personne dans la liste pour le moment",
@@ -1152,6 +1157,7 @@
     "roomEmpty": "Aucune chambre disponible",
     "roomEmptyDescription": "L'organisateur n'a pas encore ajouté de chambres. Revenez plus tard !",
     "roomConflict": "Vous êtes déjà assigné(e) à une chambre pour ces dates",
+    "roomNeedsDates": "L'organisateur n'a pas encore fixé les dates du séjour. Indiquez d'abord vos propres dates d'arrivée et de départ.",
     "roomClaimError": "Impossible de réserver la chambre. Veuillez réessayer.",
     "roomLoading": "Chargement des chambres...",
     "roomClaimNamed": "Réserver {{name}}",
@@ -1454,7 +1460,8 @@
         "location": "lieu",
         "startDate": "date de début",
         "endDate": "date de fin",
-        "description": "description"
+        "description": "description",
+        "clearDates": "dates retirées"
       },
       "addGuest": "Invité ajouté : {{name}}",
       "importGuestGroup_one": "{{count}} participant ajouté depuis {{name}}",

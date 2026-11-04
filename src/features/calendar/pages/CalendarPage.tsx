@@ -115,10 +115,11 @@ import {
 import { computeBalances, type PersonBalance } from '@/features/money/lib/balances';
 import { loadTripMoney } from '@/features/money/lib/trip-money';
 import { buildGuestOverview } from '../utils/guest-overview';
+import { buildCalendarTimelineDays } from '../utils/timeline-utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
-import { buildDayColumns } from '@/lib/utils/trip-days';
+import { tripHasDates } from '@/features/trips/utils/trip-window';
 import { captureDeletion, captureEvent } from '@/lib/posthog';
 
 // Import types and utilities
@@ -201,6 +202,9 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   } = useActivityContext();
   const { rides, vehicles, isLoading: isRidesLoading } = useRideContext();
 
+  // Today's date: highlighting, and the axis of a trip without dates
+  const { today } = useToday();
+
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
   const [currentMonth, setCurrentMonth] = useState<Date>(() => startOfMonth(new Date()));
@@ -252,6 +256,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     navigate(`/trips/${tripIdFromUrl}/transports?new=1`);
   }, [navigate, tripIdFromUrl]);
 
+  // The trip's settings page holds the date fields.
+  const handleSetDates = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/edit`);
+  }, [navigate, tripIdFromUrl]);
+
   // How far the trip is from having anything to draw. A freshly saved trip
   // arrives here with its guest rows and nothing else, so "nothing scheduled
   // yet" was describing the trip rather than the month.
@@ -262,10 +271,19 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     currentTrip?.endDate,
   );
 
+  const tripHasDatesSet = tripHasDates(currentTrip);
+
   const setupChecklist = useMemo(
     () =>
-      buildTripSetupChecklist({ persons, rooms, assignments, arrivals, tripHasNoNights }),
-    [persons, rooms, assignments, arrivals, tripHasNoNights],
+      buildTripSetupChecklist({
+        persons,
+        rooms,
+        assignments,
+        arrivals,
+        tripHasNoNights,
+        tripHasDates: tripHasDatesSet,
+      }),
+    [persons, rooms, assignments, arrivals, tripHasNoNights, tripHasDatesSet],
   );
 
   /*
@@ -292,10 +310,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // columns the timeline will draw.
   const timelineDayCount = useMemo(
     () =>
-      currentTrip?.startDate && currentTrip?.endDate
-        ? buildDayColumns(currentTrip.startDate, currentTrip.endDate).length
+      currentTrip
+        ? buildCalendarTimelineDays({
+            trip: currentTrip,
+            persons,
+            arrivals,
+            departures,
+            assignments,
+            todayKey: toLocalISODateString(today),
+          }).length
         : 0,
-    [currentTrip?.startDate, currentTrip?.endDate],
+    [currentTrip, persons, arrivals, departures, assignments, today],
   );
 
   // Track if user has manually navigated to avoid overwriting their selection
@@ -375,7 +400,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // bed, but it is still a day of the trip: it holds the departure runs, and
   // greying it out as "Outside the trip dates" hid them.
   const tripBoundaries = useMemo(() => {
-    if (!currentTrip) {
+    // A trip without dates has no boundaries: no day reads as outside it.
+    if (!currentTrip?.startDate || !currentTrip.endDate) {
       return null;
     }
     const start = parseISO(currentTrip.startDate);
@@ -739,8 +765,6 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     return map;
   }, [arrivals, departures, getPersonById, calendarDays, rideByTransportId, unknownLabel]);
 
-  // Today's date for highlighting
-  const { today } = useToday();
   const dayRefs = useRef(new Map<ISODateString, HTMLDivElement>());
 
   const calendarWeeks = useMemo(() => {
@@ -1466,6 +1490,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           onAddRooms={handleAddRooms}
           onAssignRooms={handleAssignRooms}
           onAddArrivals={handleAddArrivals}
+          onSetDates={handleSetDates}
         />
       )}
 

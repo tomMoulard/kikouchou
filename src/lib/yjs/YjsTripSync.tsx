@@ -34,6 +34,7 @@ import {
   populateDocFromDexie,
   syncDexieToDoc,
   syncTripMetaToDoc,
+  TRIP_DATE_CLEARED,
 } from './dexie-bridge';
 import type { DocCollectionName } from './doc-model';
 
@@ -250,8 +251,10 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
 
     syncTripMetaToDoc(yjs.doc, {
       name: trip.name,
-      startDate: trip.startDate,
-      endDate: trip.endDate,
+      // An explicit marker for a trip without dates, never `undefined`: an
+      // absent key keeps every other device's old dates (see `readTripDay`).
+      startDate: trip.startDate ?? TRIP_DATE_CLEARED,
+      endDate: trip.endDate ?? TRIP_DATE_CLEARED,
       updatedAt: trip.updatedAt,
       location: trip.location,
       description: trip.description,

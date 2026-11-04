@@ -22,12 +22,16 @@ import type { ISODateString, Trip } from '@/types';
  *
  * @param trip - The trip's dates
  * @param stayEndDate - The day the guest leaves, when known
- * @returns ISO days in ascending order; empty when the trip has no usable dates
+ * @returns ISO days in ascending order; empty when the trip has no usable dates (or none)
  */
 export function listArrivalDays(
   trip: Pick<Trip, 'startDate' | 'endDate'>,
   stayEndDate: ISODateString | undefined,
 ): readonly ISODateString[] {
+  // A trip without dates offers no day list: the question is not asked.
+  if (!trip.startDate || !trip.endDate) {
+    return [];
+  }
   const lastDay = stayEndDate !== undefined && stayEndDate < trip.endDate ? stayEndDate : trip.endDate;
   const nights = listStayNights(trip.startDate, lastDay) as readonly ISODateString[];
   if (nights.length > 0) {

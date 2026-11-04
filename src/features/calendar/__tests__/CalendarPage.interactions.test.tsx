@@ -696,6 +696,42 @@ describe('CalendarPage — the setup checklist', () => {
 
     expect(await screen.findByTestId('landed-on')).toHaveTextContent(destination);
   });
+
+  it('asks a trip without dates for them, and sends the step to the trip settings', async () => {
+    setTrip({ ...mockTrip, startDate: undefined, endDate: undefined });
+    const { user } = renderCalendarPage();
+
+    await user.click(screen.getByRole('button', { name: 'calendar.setup.dates.action' }));
+
+    expect(await screen.findByTestId('landed-on')).toHaveTextContent('/trips/trip-1/edit');
+  });
+
+  it('draws a plain timeline for a trip without dates', () => {
+    setTrip({ ...mockTrip, startDate: undefined, endDate: undefined });
+    renderCalendarPage();
+
+    // A timeline with no trip bounds: days on screen, none of them outside the trip.
+    const timeline = screen.getByRole('region', { name: 'calendar.timeline.ariaLabel' });
+    expect(timeline.querySelectorAll('[data-weekend], [data-outside-trip]')).not.toHaveLength(0);
+    expect(timeline.querySelector('[data-outside-trip="true"]')).toBeNull();
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
+  });
+
+  it('keeps asking for the dates after travel is booked', () => {
+    setTrip({ ...mockTrip, startDate: undefined, endDate: undefined });
+    mockUseTransportContext.mockReturnValue({
+      arrivals: [mockArrival],
+      departures: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: mockDeleteTransport,
+    });
+    renderCalendarPage();
+
+    expect(
+      screen.getByRole('button', { name: 'calendar.setup.dates.action' }),
+    ).toBeInTheDocument();
+  });
 });
 
 // ============================================================================
@@ -1923,12 +1959,13 @@ describe('CalendarPage: data that changes while the page is open', () => {
     mockUseRoomContext.mockReturnValue({ rooms: [], isLoading: false, error: null });
     const { user } = renderCalendarPage();
     await showMonth(user);
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+    // The trip has its dates, the first step.
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1');
 
     mockUseRoomContext.mockReturnValue({ rooms: [mockRoom], isLoading: false, error: null });
     await rerenderThroughTimeline(user);
 
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2');
   });
 
   it('shows a car on a leg as soon as the ride is arranged', async () => {

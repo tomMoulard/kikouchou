@@ -226,6 +226,9 @@
     "moreGuests_one": "{{count}} more guest",
     "moreGuests_other": "{{count}} more guests",
     "untitled": "Untitled trip",
+    "datesNotSet": "Dates not set",
+    "datesTogether": "Set both dates, or leave both empty",
+    "clearDates": "Clear dates",
     "archive": "Archive",
     "unarchive": "Unarchive",
     "archived": {
@@ -257,10 +260,6 @@
       "nameLabel": "Trip name",
       "namePlaceholder": "Summer at the lake house",
       "nameRequired": "Give the trip a name to continue.",
-      "datesQuestion": "When is it?",
-      "datesHint": "First and last day. Guests can arrive and leave in between.",
-      "datesLabel": "Trip dates",
-      "datesRequired": "Pick the first and the last day to continue.",
       "inviteTitle": "{{tripName}} is ready: invite the group",
       "inviteHint": "Send this link. Each person adds their name and when they arrive, and the rooms fill in from there.",
       "later": "Later, open the trip",
@@ -827,6 +826,12 @@
       "progress": "{{done}} of {{total}} done",
       "progressLabel": "Trip setup progress",
       "stepDone": "done",
+      "dates": {
+        "title": "Set the trip dates",
+        "action": "Set dates",
+        "countDone": "Dates set",
+        "countZero": "No dates yet, the calendar shows what is planned"
+      },
       "guests": {
         "title": "Add guests",
         "countZero": "Nobody on the list yet",
@@ -1152,6 +1157,7 @@
     "roomEmpty": "No rooms available",
     "roomEmptyDescription": "The organizer hasn't added any rooms yet. Check back later!",
     "roomConflict": "You're already assigned to a room for these dates",
+    "roomNeedsDates": "The organiser has not set the trip dates yet. Add your own arrival and departure dates first.",
     "roomClaimError": "Failed to claim room. Please try again.",
     "roomLoading": "Loading rooms...",
     "roomClaimNamed": "Claim {{name}}",
@@ -1454,7 +1460,8 @@
         "location": "location",
         "startDate": "start date",
         "endDate": "end date",
-        "description": "description"
+        "description": "description",
+        "clearDates": "dates removed"
       },
       "addGuest": "Added guest: {{name}}",
       "importGuestGroup_one": "Added {{count}} guest from {{name}}",

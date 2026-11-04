@@ -140,6 +140,30 @@ export function formatDateRange(
 // ============================================================================
 
 /**
+ * Formats a trip's dates, or answers null for a trip without dates.
+ *
+ * A trip is created without dates and the organiser sets them later, so every
+ * place that prints a trip's dates has a "not set" case. Calling
+ * {@link formatDateRange} with absent dates would print "undefined - undefined";
+ * this returns null so the caller shows its own translated label instead.
+ *
+ * @param startDate - The trip's start date, or undefined
+ * @param endDate - The trip's end date, or undefined
+ * @param locale - date-fns locale, from `getDateLocale(i18n.language)`
+ * @returns The formatted range, or null when either date is absent
+ */
+export function formatTripDateRange(
+  startDate: string | undefined,
+  endDate: string | undefined,
+  locale: Locale,
+): string | null {
+  if (!startDate || !endDate) {
+    return null;
+  }
+  return formatDateRange(startDate, endDate, locale);
+}
+
+/**
  * Formats a day key as a full, localized date header.
  *
  * Used by the grouped list pages (transports, activities) above each day's

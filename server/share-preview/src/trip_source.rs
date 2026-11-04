@@ -114,8 +114,26 @@ struct InviteRow {
 #[derive(Debug, Deserialize)]
 struct TripJson {
     name: String,
-    start_date: String,
-    end_date: String,
+    /// Null for a trip without dates: it is created without them and the
+    /// organiser sets them later.
+    #[serde(default)]
+    start_date: Option<String>,
+    #[serde(default)]
+    end_date: Option<String>,
+}
+
+impl TripJson {
+    /// The row the card, the page and the sender read. A trip without dates
+    /// carries empty strings, which every reader already treats as "no dates":
+    /// `date_range` draws no column, `format_date_span` prints nothing and
+    /// `parse_iso_date` answers `None`, so no `trip_start` reminder is due.
+    fn into_row(self) -> TripRow {
+        TripRow {
+            name: self.name,
+            start_date: self.start_date.unwrap_or_default(),
+            end_date: self.end_date.unwrap_or_default(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -385,14 +403,7 @@ impl TripSource {
         };
 
         let doc = self.load_document(trip_id).await;
-        LoadResult::Ok(Box::new(build_trip_preview(
-            doc.as_ref(),
-            &TripRow {
-                name: trip.name,
-                start_date: trip.start_date,
-                end_date: trip.end_date,
-            },
-        )))
+        LoadResult::Ok(Box::new(build_trip_preview(doc.as_ref(), &trip.into_row())))
     }
 
     /// Resolves a template token to the card behind it.
@@ -464,11 +475,7 @@ impl TripSource {
         .await?
         .into_iter()
         .next()
-        .map(|trip| TripRow {
-            name: trip.name,
-            start_date: trip.start_date,
-            end_date: trip.end_date,
-        })
+        .map(TripJson::into_row)
     }
 
     /// Every push subscription still authorised, ordered by trip so the sender
@@ -650,6 +657,28 @@ mod tests {
 
     fn now() -> OffsetDateTime {
         OffsetDateTime::parse("2026-09-07T12:00:00Z", &Rfc3339).expect("a fixed instant")
+    }
+
+    #[test]
+    fn reads_a_trip_without_dates_as_empty_dates() {
+        // A trip is created without dates, so both columns can be null. A
+        // `String` field refused that row, which turned the invite page into
+        // an error and made the sender skip every reminder of the trip.
+        let row: TripJson =
+            serde_json::from_str(r#"{"name":"Lake house","start_date":null,"end_date":null}"#)
+                .expect("a null date is a valid row");
+        let row = row.into_row();
+        assert_eq!(row.name, "Lake house");
+        assert_eq!(row.start_date, "");
+        assert_eq!(row.end_date, "");
+
+        let dated: TripJson = serde_json::from_str(
+            r#"{"name":"Lake house","start_date":"2026-08-12","end_date":"2026-08-18"}"#,
+        )
+        .expect("a dated row");
+        let dated = dated.into_row();
+        assert_eq!(dated.start_date, "2026-08-12");
+        assert_eq!(dated.end_date, "2026-08-18");
     }
 
     #[test]

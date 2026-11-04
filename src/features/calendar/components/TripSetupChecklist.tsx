@@ -14,6 +14,7 @@ import { type ReactElement, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BedDouble,
+  CalendarDays,
   Car,
   Check,
   Home,
@@ -52,6 +53,8 @@ export interface TripSetupChecklistProps {
   readonly onAssignRooms: () => void;
   /** Opens the travel form on an arrival. */
   readonly onAddArrivals: () => void;
+  /** Goes to the trip's settings, where its dates are set. */
+  readonly onSetDates: () => void;
   /** Optional additional CSS classes for the container. */
   readonly className?: string;
 }
@@ -68,6 +71,7 @@ export interface TripSetupChecklistProps {
  * thing.
  */
 const STEP_ICONS: Readonly<Record<TripSetupStepKey, LucideIcon>> = {
+  dates: CalendarDays,
   guests: Users,
   rooms: Home,
   assignments: BedDouble,
@@ -99,6 +103,7 @@ const STEP_ICONS: Readonly<Record<TripSetupStepKey, LucideIcon>> = {
  *   onAddRooms={handleAddRooms}
  *   onAssignRooms={handleAssignRooms}
  *   onAddArrivals={handleAddArrivals}
+ *   onSetDates={handleSetDates}
  * />
  * ```
  */
@@ -108,11 +113,13 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
   onAddRooms,
   onAssignRooms,
   onAddArrivals,
+  onSetDates,
   className,
 }: TripSetupChecklistProps): ReactElement {
   const { t } = useTranslation();
 
   const handlers: Readonly<Record<TripSetupStepKey, () => void>> = {
+    dates: onSetDates,
     guests: onAddGuests,
     rooms: onAddRooms,
     assignments: onAssignRooms,
@@ -120,6 +127,7 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
   };
 
   const stepTitle: Readonly<Record<TripSetupStepKey, string>> = {
+    dates: t('calendar.setup.dates.title', 'Set the trip dates'),
     guests: t('calendar.setup.guests.title', 'Add guests'),
     rooms: t('calendar.setup.rooms.title', 'Add rooms'),
     assignments: t('calendar.setup.assignments.title', 'Put guests in rooms'),
@@ -132,6 +140,7 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
     query for it — a test's or a screen reader user's — ambiguous.
   */
   const stepAction: Readonly<Record<TripSetupStepKey, string>> = {
+    dates: t('calendar.setup.dates.action', 'Set dates'),
     guests: t('persons.new', 'New guest'),
     rooms: t('rooms.new', 'New room'),
     assignments: t('calendar.setup.assignments.action', 'Assign rooms'),
@@ -150,6 +159,10 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
   */
   const stepCountLabel = (step: TripSetupStep): string => {
     switch (step.key) {
+      case 'dates':
+        return step.isDone
+          ? t('calendar.setup.dates.countDone', 'Dates set')
+          : t('calendar.setup.dates.countZero', 'No dates yet, the calendar shows what is planned');
       case 'guests':
         return step.count === 0
           ? t('calendar.setup.guests.countZero', 'Nobody on the list yet')

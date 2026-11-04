@@ -44,15 +44,6 @@ async function seedFutureTrip(page: Page): Promise<string> {
 }
 
 /**
- * Picks a start and an end date on the create form, from whatever month the
- * pickers open on — never a literal month.
- */
-async function fillTripDates(page: Page): Promise<void> {
-  await page.locator('#trip-start-date').fill(fixtureDate(15, 0));
-  await page.locator('#trip-end-date').fill(fixtureDate(22, 0));
-}
-
-/**
  * Adds a room row on the create form and fills its name.
  *
  * Sequential by necessity: the input exists only once the click that adds its
@@ -85,8 +76,8 @@ test.describe('Rooms in bulk', () => {
     await page.goto('/trips/new');
     await waitForRoute(page);
 
+    // No dates: the create form does not ask for them.
     await page.getByLabel(/trip name/iu).fill('Gîte');
-    await fillTripDates(page);
 
     await addTripRoom(page, 1, 'Double bed 1');
     await addTripRoom(page, 2, 'Double bed 2');
@@ -113,8 +104,8 @@ test.describe('Rooms in bulk', () => {
     await page.goto('/trips/new');
     await waitForRoute(page);
 
+    // No dates: the create form does not ask for them.
     await page.getByLabel(/trip name/iu).fill('Gîte');
-    await fillTripDates(page);
 
     await addTripRoom(page, 1, 'Attic');
     // An abandoned "Add room" click, not a nameless room.

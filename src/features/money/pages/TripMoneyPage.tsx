@@ -175,6 +175,10 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
       return undefined;
     }
     const todayKey = toLocalISODateString(today);
+    // A trip without dates has no first day: today is the best guess.
+    if (!trip.startDate || !trip.endDate) {
+      return todayKey;
+    }
     return todayKey >= trip.startDate && todayKey <= trip.endDate
       ? todayKey
       : trip.startDate;

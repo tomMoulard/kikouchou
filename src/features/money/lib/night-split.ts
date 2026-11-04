@@ -29,6 +29,7 @@
 import { isGuestOnSiteOnDate } from '@/features/persons/utils/guest-presence';
 import type { TripStayWindow } from '@/features/persons/utils/guest-presence';
 import { listStayNights } from '@/features/rooms/utils/capacity-utils';
+import { resolveTripWorkingWindow } from '@/features/trips/utils/trip-window';
 import { db } from '@/lib/db/database';
 import { getPersonHeadcount } from '@/types';
 import type { ISODateString, Person, PersonId, TripId } from '@/types';
@@ -68,10 +69,13 @@ export interface TripNightSplit {
   readonly tripId: TripId;
   /** Trip name. */
   readonly name: string;
-  /** First day of the trip. */
-  readonly startDate: ISODateString;
-  /** Last day of the trip, the check-out morning. */
-  readonly endDate: ISODateString;
+  /**
+   * First day of the trip, or of the guests' stays for a trip without dates.
+   * Undefined when neither is known.
+   */
+  readonly startDate: ISODateString | undefined;
+  /** Last day of the trip (the check-out morning), on the same terms. */
+  readonly endDate: ISODateString | undefined;
   /** Nights the house was rented for. */
   readonly nights: number;
   /** Every guest's nights added up, weighted by headcount. */
@@ -138,8 +142,12 @@ export async function loadTripNightSplit(
 
   // The nights the house was rented for. Everything below is counted inside
   // this list, so a stay typed wider than the trip cannot charge its guest for
-  // a night nobody paid rent on.
-  const tripNights = listStayNights(trip.startDate, trip.endDate) as readonly ISODateString[];
+  // a night nobody paid rent on. A trip without dates counts the nights its
+  // guests' own stays span.
+  const window = resolveTripWorkingWindow(trip, persons, arrivals, departures);
+  const tripNights = (
+    window ? listStayNights(window.startDate, window.endDate) : []
+  ) as readonly ISODateString[];
 
   const counted = persons.map((person: Person) => {
     let nights = 0;
@@ -187,8 +195,8 @@ export async function loadTripNightSplit(
   return {
     tripId: trip.id,
     name: trip.name,
-    startDate: trip.startDate,
-    endDate: trip.endDate,
+    startDate: window?.startDate,
+    endDate: window?.endDate,
     nights: tripNights.length,
     personNights,
     guests,

@@ -586,7 +586,7 @@ test.describe('Trip Creation with New UI', () => {
     await expect(locationInput).toBeVisible();
   });
 
-  test('trip form has date range picker', async ({ page }) => {
+  test('trip create form asks for no dates', async ({ page }) => {
     // Navigate directly to trip creation page. A trip already on the device,
     // so it is the one-page form rather than the first-trip wizard.
     await seedEarlierTrip(page);
@@ -594,9 +594,12 @@ test.describe('Trip Creation with New UI', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Retrying assertions, for the same reason as the description field above.
-    await expect(page.locator('#trip-start-date')).toBeVisible();
-    await expect(page.locator('#trip-end-date')).toBeVisible();
+    // The dates are set later, from the calendar's setup checklist. Wait for
+    // the form itself first, so the absence below is not read off an empty
+    // page (see "An instant read races every lazy route").
+    await expect(page.locator('#trip-name')).toBeVisible();
+    await expect(page.locator('#trip-start-date')).toHaveCount(0);
+    await expect(page.locator('#trip-end-date')).toHaveCount(0);
   });
 
   test('trip card shows guests count after creation', async ({ page }) => {

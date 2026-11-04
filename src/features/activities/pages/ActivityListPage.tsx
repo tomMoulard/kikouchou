@@ -228,6 +228,10 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
     }
 
     const todayKey = toLocalISODateString(today);
+    // A trip without dates has no first day: today is the best guess.
+    if (!currentTrip.startDate || !currentTrip.endDate) {
+      return todayKey;
+    }
     return todayKey >= currentTrip.startDate && todayKey <= currentTrip.endDate
       ? todayKey
       : currentTrip.startDate;

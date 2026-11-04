@@ -20,7 +20,6 @@ import {
 import { syncDocToDexie } from '@/lib/yjs/dexie-bridge';
 import { DOC_SCHEMA_VERSION } from '@/lib/yjs/doc-model';
 import type { ShareId, TripId, UnixTimestamp } from '@/types';
-import { toLocalISODateString } from '@/lib/db/utils';
 import { isoDate } from '@/test/utils';
 import frTranslations from '@/locales/fr/translation.json';
 import { fakeSupabase } from './support/fake-supabase';
@@ -215,7 +214,7 @@ describe('materialiseJoinedTrip', () => {
     ['a malformed date', 'not-a-date'],
     ['an empty date', ''],
     ['a datetime where a date belongs', '2026-07-15T00:00:00Z'],
-  ])('falls back to today for %s', async (_label, value) => {
+  ])('joins a trip without dates for %s', async (_label, value) => {
     const client = clientWithTrip({
       name: 'Brittany',
       start_date: value,
@@ -225,40 +224,23 @@ describe('materialiseJoinedTrip', () => {
     const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
     const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-    // An unparseable date would poison every date-range query for this trip.
-    expect(trip?.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    // …and "today" is the viewer's day, since `Trip.startDate` is a local day key.
-    expect(trip?.startDate).toBe(toLocalISODateString(new Date()));
-    expect(trip?.endDate).toBe(toLocalISODateString(new Date()));
+    // An unparseable date would poison every date-range query for this trip,
+    // and today in its place showed a one-day trip nobody planned: the trip
+    // is stored without dates until its document says otherwise.
+    expect(trip).toBeDefined();
+    expect(trip).not.toHaveProperty('startDate');
+    expect(trip).not.toHaveProperty('endDate');
   });
 
-  // Regression: the fallback read `new Date().toISOString().slice(0, 10)`, the
-  // UTC day. Pinned to half past midnight and half past eleven local, that is
-  // the wrong day for every viewer ahead of UTC and behind it respectively —
-  // the placeholder trip opened on a day the user was not looking at.
-  it.each([
-    ['just after local midnight', 0, 30],
-    ['just before local midnight', 23, 30],
-  ])('derives today locally when the clock reads %s', async (_label, hour, minute) => {
-    // The clock only. Vitest's default set also fakes `queueMicrotask`, and
-    // `materialiseJoinedTrip` now does its look-up and its write inside one
-    // Dexie transaction — whose zone tracking assumes its continuation runs in
-    // the same microtask tick. Faking that queue defers the continuation to the
-    // fake clock, and Dexie aborts with "Transaction committed too early". This
-    // test is about which day it is, so `Date` is all it ever needed.
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      vi.setSystemTime(new Date(2026, 6, 15, hour, minute));
+  it('joins a trip whose owner never set dates (null columns) without dates', async () => {
+    const client = clientWithTrip({ name: 'Brittany', start_date: null, end_date: null });
 
-      const client = clientWithTrip({ name: 'Brittany', start_date: '', end_date: '' });
-      const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
-      const trip = await db.trips.get((result as { tripId: TripId }).tripId);
+    const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+    const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-      expect(trip?.startDate).toBe('2026-07-15');
-      expect(trip?.endDate).toBe('2026-07-15');
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(trip?.name).toBe('Brittany');
+    expect(trip).not.toHaveProperty('startDate');
+    expect(trip).not.toHaveProperty('endDate');
   });
 
   /**
@@ -507,8 +489,8 @@ describe('materialiseJoinedTrip, recorded', () => {
     expect(results.map((result) => result.status).sort()).toEqual(['already-local', 'joined']);
   });
 
-  it('falls back to today for a date with anything before it', async () => {
-    const today = toLocalISODateString(new Date());
+  it('drops both dates when one has anything before it', async () => {
+    // Both or neither: one usable date alone is not a window.
     const client = clientWithTrip({
       name: 'Brittany',
       start_date: 'x2026-07-15',
@@ -518,14 +500,14 @@ describe('materialiseJoinedTrip, recorded', () => {
     const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
     const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-    expect(trip?.startDate).toBe(today);
-    expect(trip?.endDate).toBe('2026-07-22');
+    expect(trip).not.toHaveProperty('startDate');
+    expect(trip).not.toHaveProperty('endDate');
   });
 
   it.each([
     ['a one-digit month', '2026-7-15'],
     ['letters for a month', '2026-ab-15'],
-  ])('falls back to today for a date with %s', async (_label, startDate) => {
+  ])('drops both dates for a date with %s', async (_label, startDate) => {
     const client = clientWithTrip({
       name: 'Brittany',
       start_date: startDate,
@@ -535,11 +517,10 @@ describe('materialiseJoinedTrip, recorded', () => {
     const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
     const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-    expect(trip?.startDate).toBe(toLocalISODateString(new Date()));
+    expect(trip).not.toHaveProperty('startDate');
   });
 
-  it('falls back to today for dates that are not text', async () => {
-    const today = toLocalISODateString(new Date());
+  it('reads dates that are not text as no dates', async () => {
     const client = clientWithTrip({
       name: 'Brittany',
       // Arrays stringify to a valid date, so only the type check stops them.
@@ -550,8 +531,8 @@ describe('materialiseJoinedTrip, recorded', () => {
     const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
     const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-    expect(trip?.startDate).toBe(today);
-    expect(trip?.endDate).toBe(today);
+    expect(trip).not.toHaveProperty('startDate');
+    expect(trip).not.toHaveProperty('endDate');
   });
 
   it.each([

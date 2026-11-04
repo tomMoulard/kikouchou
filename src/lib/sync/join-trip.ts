@@ -18,7 +18,8 @@ import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import { nanoid } from 'nanoid';
 
 import { db } from '@/lib/db/database';
-import { toISODateStringFromString, toLocalISODateString } from '@/lib/db/utils';
+import { isCalendarDayString } from '@/lib/db/sanitize';
+import { toISODateStringFromString } from '@/lib/db/utils';
 import i18n from '@/lib/i18n';
 import type { ShareId, Trip, TripId, UnixTimestamp } from '@/types';
 
@@ -34,7 +35,9 @@ export type JoinTripResult =
 
 export interface RemoteTripPreview {
   readonly name: string;
+  /** `''` for a trip without dates. */
   readonly startDate: string;
+  /** `''` for a trip without dates. */
   readonly endDate: string;
 }
 
@@ -73,8 +76,10 @@ async function fetchRemoteTripPreview(
  *
  * The server row is written by another user, which makes it remote-supplied
  * input by the same standard as a peer's document. A 200-character cap matches
- * the server's own check constraint; a malformed date falls back to today rather
- * than poisoning every date query with an unparseable value.
+ * the server's own check constraint. A missing or malformed date makes a trip
+ * without dates (`''` on both), rather than poisoning every date query with an
+ * unparseable value. It used to fall back to today, which showed a trip whose
+ * owner never set dates as a one-day trip starting on the day it was joined.
  *
  * The fallback name is translated at the point it is written, not left as a
  * sentinel for the UI to resolve. That is the deliberately worse-looking half of
@@ -98,23 +103,40 @@ async function fetchRemoteTripPreview(
  * framework-free i18next instance, not a React hook.
  */
 export function sanitisePreview(preview: RemoteTripPreview | null): RemoteTripPreview {
-  // The viewer's own calendar day, not UTC: these become `Trip.startDate` /
-  // `Trip.endDate`, which the whole app reads as local day keys. Deriving the
-  // fallback in UTC handed a Paris user yesterday's date for most of the
-  // evening, and the placeholder trip opened on the wrong day.
-  const today = toLocalISODateString(new Date());
   const untitled = i18n.t('trips.untitled');
 
   if (!preview) {
-    return { name: untitled, startDate: today, endDate: today };
+    return { name: untitled, startDate: '', endDate: '' };
   }
 
-  const isIsoDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
+  // Both or neither: one date alone is not a window any screen can read.
+  const hasDates =
+    isCalendarDayString(preview.startDate) &&
+    isCalendarDayString(preview.endDate) &&
+    preview.startDate <= preview.endDate;
 
   return {
     name: preview.name.trim().slice(0, 200) || untitled,
-    startDate: isIsoDate(preview.startDate) ? preview.startDate : today,
-    endDate: isIsoDate(preview.endDate) ? preview.endDate : today,
+    startDate: hasDates ? preview.startDate : '',
+    endDate: hasDates ? preview.endDate : '',
+  };
+}
+
+/**
+ * The dates of a sanitised preview, as `Trip` fields.
+ *
+ * @param preview - A preview that went through {@link sanitisePreview}
+ * @returns Both dates, or an empty object for a trip without dates
+ */
+export function previewTripDates(
+  preview: RemoteTripPreview,
+): Pick<Trip, 'startDate' | 'endDate'> {
+  if (preview.startDate === '' || preview.endDate === '') {
+    return {};
+  }
+  return {
+    startDate: toISODateStringFromString(preview.startDate),
+    endDate: toISODateStringFromString(preview.endDate),
   };
 }
 
@@ -179,8 +201,7 @@ export async function materialiseJoinedTrip(
       const trip: Trip = {
         id: nanoid() as TripId,
         name: preview.name,
-        startDate: toISODateStringFromString(preview.startDate),
-        endDate: toISODateStringFromString(preview.endDate),
+        ...previewTripDates(preview),
         // A local share id, never one adopted from the server: it is a unique
         // Dexie index, and a colliding value aborts the whole write transaction.
         shareId: nanoid(10) as ShareId,

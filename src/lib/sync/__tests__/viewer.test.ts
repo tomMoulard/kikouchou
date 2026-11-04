@@ -18,7 +18,6 @@ import { encodeUpdate } from '@/lib/sync/codec';
 import { readCursor } from '@/lib/sync/cursors';
 import { redeemInvite } from '@/lib/sync/invites';
 import { claimParticipant, sanitisePreview } from '@/lib/sync/join-trip';
-import { toLocalISODateString } from '@/lib/db/utils';
 import {
   materialiseViewerTrip,
   readSharedTrip,
@@ -230,7 +229,9 @@ describe('readSharedTrip', () => {
       return;
     }
     expect(result.payload.trip.name).toHaveLength(200);
-    expect(result.payload.trip.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Unreadable dates make a trip without dates ('' on the preview).
+    expect(result.payload.trip.startDate).toBe('');
+    expect(result.payload.trip.endDate).toBe('');
   });
 });
 
@@ -691,9 +692,7 @@ describe('readSharedTrip, more answers', () => {
     });
   });
 
-  it('reads dates that are not text as today, even when they stringify to a date', async () => {
-    const today = toLocalISODateString(new Date());
-
+  it('reads dates that are not text as no dates, even when they stringify to a date', async () => {
     const result = await readPayload({
       trip: wireTrip({ start_date: ['2026-07-15'], end_date: ['2026-07-22'] }),
       updates: [],
@@ -701,7 +700,7 @@ describe('readSharedTrip, more answers', () => {
 
     expect(result).toMatchObject({
       status: 'ok',
-      payload: { trip: { startDate: today, endDate: today } },
+      payload: { trip: { startDate: '', endDate: '' } },
     });
   });
 

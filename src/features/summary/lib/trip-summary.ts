@@ -139,10 +139,10 @@ export interface TripSummary {
   readonly name: string;
   /** Where the trip happens, when it was filled in. */
   readonly location: string | undefined;
-  /** First day of the trip. */
-  readonly startDate: ISODateString;
-  /** Last day of the trip. */
-  readonly endDate: ISODateString;
+  /** First day of the trip; undefined for a trip without dates. */
+  readonly startDate: ISODateString | undefined;
+  /** Last day of the trip; undefined for a trip without dates. */
+  readonly endDate: ISODateString | undefined;
   /** Real people expected, summing every guest row's headcount. */
   readonly headcount: number;
   /** Rooms in their configured order. */
