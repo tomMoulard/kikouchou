@@ -29,6 +29,8 @@ AutoName: Kikouchou
 # first-party and never shared with advertisers, but F-Droid asks for the flag
 # on any reporting of usage.
 AntiFeatures:
+  NonFreeNet:
+    en-US: The assistant sends questions through the project's server to OpenRouter, a non-free service.
   Tracking:
     en-US: Reports how the app is used to the project's own PostHog analytics.
 
