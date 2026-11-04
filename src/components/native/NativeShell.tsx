@@ -17,6 +17,8 @@
  *   (`capacitor.config.ts` turns its timer off).
  * - A tap on a reminder opens the page it names and is reported as
  *   `notification_opened`, the same event a web click sends.
+ * - After the first paint, the bundle tells the live update plugin it started,
+ *   and a newer one is staged for the next launch (`lib/native/live-update`).
  *
  * @module components/native/NativeShell
  */
@@ -27,6 +29,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 
+import { startLiveUpdate } from '@/lib/native/live-update';
 import { onNativeNotificationOpened } from '@/lib/notifications/native-push';
 import { reportNotificationOpened } from '@/lib/notifications/opened';
 import { isNativeApp } from '@/lib/platform';
@@ -161,12 +164,15 @@ export const NativeShell = memo(function NativeShell(): null {
   // First paint done: take the splash screen down, and ask the operating
   // system to keep this app's storage. IndexedDB holds the only copy of a trip
   // that was never synced, and a store app gets no warning before eviction.
+  // The paint is also the proof the live update plugin waits for: a bundle
+  // that never gets here is rolled back.
   useEffect(() => {
     if (!isNativeApp()) {
       return;
     }
     void SplashScreen.hide().catch(() => undefined);
     void navigator.storage?.persist?.().catch(() => false);
+    startLiveUpdate();
   }, []);
 
   return null;

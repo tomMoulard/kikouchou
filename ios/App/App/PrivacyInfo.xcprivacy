@@ -97,9 +97,19 @@
 			</array>
 		</dict>
 	</array>
-	<!-- No required-reason API is called by the app's own code; Capacitor and
-	     each plugin declare theirs in their own manifests. -->
+	<!-- The app's own code calls no required-reason API. The live update plugin
+	     keeps which web bundle to start with in UserDefaults, and its README
+	     asks the app to declare that here (CA92.1: data only this app reads). -->
 	<key>NSPrivacyAccessedAPITypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

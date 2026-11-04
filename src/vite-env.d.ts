@@ -137,6 +137,14 @@ interface ImportMetaEnv {
 
   /** Version string shown in Settings; set by CI from the ref and SHA. */
   readonly VITE_APP_VERSION?: string;
+
+  /**
+   * The fingerprint of the native layer this build was made against
+   * (`scripts/native-fingerprint.js`), set by `vite.config.ts` on every
+   * build. A store app takes a live update only when the bundle's fingerprint
+   * is its own. Empty or absent turns live updates off.
+   */
+  readonly VITE_NATIVE_FINGERPRINT?: string;
 }
 
 interface ImportMeta {
