@@ -581,8 +581,11 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       tripId,
       name: copy.persons.jules,
       color: COLORS.jules,
-      stayStartDate: key(2),
-      stayEndDate: key(lastDay),
+      // Two stays: the first night, then back from the third day. A guest
+      // who comes back is a feature the demo shows, gap included.
+      stayStartDate: key(0),
+      stayEndDate: key(1),
+      extraStays: [{ startDate: key(2), endDate: key(lastDay) }],
       phone: PHONES.jules,
     },
   ];
@@ -627,6 +630,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     // Nora moves from the sofa to the room the Martins leave: one room move.
     assign(roomIds.sofa, ids.nora, 0, lastDay - 1),
     assign(roomIds.bunk, ids.nora, lastDay - 1, lastDay),
+    // One booking per stay of Jules's, so the night between is empty.
+    assign(roomIds.tent, ids.jules, 0, 1),
     assign(roomIds.tent, ids.jules, 2, lastDay),
   ];
 

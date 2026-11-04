@@ -420,6 +420,26 @@ describe('useTripSystemPrompt', () => {
     expect(activityLines).toHaveLength(1);
   });
 
+  it('lists every stay of a guest who comes back', async () => {
+    const { tripId } = await seedTrip();
+    await createPerson(tripId, {
+      name: 'Ana',
+      color: hexColor('#22c55e'),
+      stayStartDate: isoDate('2026-04-01'),
+      stayEndDate: isoDate('2026-04-22'),
+      extraStays: [{ startDate: isoDate('2026-05-01'), endDate: isoDate('2026-05-08') }],
+    });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('"Ana"');
+    });
+    expect(result.current.prompt.systemPrompt).toContain(
+      '(stays: 2026-04-01 to 2026-04-22; 2026-05-01 to 2026-05-08)',
+    );
+  });
+
   it('includes guest headcount and notes', async () => {
     const { tripId } = await seedTrip();
     await createPerson(tripId, {

@@ -115,6 +115,9 @@ const comparePersons = (a: Person, b: Person): boolean =>
   a.color === b.color &&
   a.stayStartDate === b.stayStartDate &&
   a.stayEndDate === b.stayEndDate &&
+  // The further stays. Without it a stay added in August never reaches the
+  // timeline, the rooms or the headcounts until another field changes.
+  areExtraStaysEqual(a.extraStays, b.extraStays) &&
   a.notes === b.notes &&
   a.phone === b.phone &&
   // How many real people the entry stands for. Listed because the comparator
@@ -129,6 +132,22 @@ const comparePersons = (a: Person, b: Person): boolean =>
   // and every meal card keeps counting them as eating anything.
   a.dietaryNote === b.dietaryNote &&
   areDietaryTagsEqual(a.dietaryTags, b.dietaryTags);
+
+/**
+ * Order-sensitive comparison of two further-stay lists; absent and empty are
+ * equal.
+ */
+function areExtraStaysEqual(a: Person['extraStays'], b: Person['extraStays']): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  return (
+    left.length === right.length &&
+    left.every(
+      (stay, index) =>
+        stay.startDate === right[index]?.startDate && stay.endDate === right[index]?.endDate,
+    )
+  );
+}
 
 /**
  * Order-sensitive comparison of two diet tag lists; absent and empty are equal.

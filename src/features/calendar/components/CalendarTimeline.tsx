@@ -167,7 +167,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
     props.arrivals.length === 0 &&
     props.departures.length === 0 &&
     props.activities.length === 0 &&
-    model.rows.every((r) => r.staySpan === undefined);
+    model.rows.every((r) => r.staySpans.length === 0);
 
   const handleActivityClick = props.onActivityClick;
 

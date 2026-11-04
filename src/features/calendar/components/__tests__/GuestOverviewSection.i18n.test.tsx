@@ -50,6 +50,7 @@ function makeOverview(overrides: Partial<GuestOverview> = {}): GuestOverview {
     person,
     checkIn: null,
     checkOut: null,
+    stayPeriods: [],
     stays: [],
     transports: [],
     activities: [],

@@ -436,6 +436,10 @@
     "color": "Color",
     "stayDates": "Stay dates",
     "stayDatesHint": "When will this guest be at the trip?",
+    "addStay": "Add another stay",
+    "extraStayLabel": "Stay {{number}}",
+    "removeStay": "Remove stay {{number}}",
+    "stayIncomplete": "Pick the arrival and the departure day of every stay",
     "notes": "Notes",
     "notesPlaceholder": "e.g. allergic to cats, vegan…",
     "notesHint": "Diet, allergies, or anything hosts should know.",
@@ -859,6 +863,8 @@
       }
     },
     "guestOverview": {
+      "stays_one": "{{count}} stay",
+      "stays_other": "{{count}} stays",
       "title": "About {{name}}",
       "checkIn": "Check-in",
       "checkOut": "Check-out",
@@ -1464,6 +1470,7 @@
         "clearDates": "dates removed"
       },
       "addGuest": "Added guest: {{name}}",
+      "addStay": "Added a stay for {{name}}: {{start}} to {{end}}",
       "importGuestGroup_one": "Added {{count}} guest from {{name}}",
       "importGuestGroup_other": "Added {{count}} guests from {{name}}",
       "removeGuest": "Removed guest: {{name}}",

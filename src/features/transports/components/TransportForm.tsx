@@ -39,6 +39,7 @@ import {
   formatDatetimeLocal,
   toISODatetime,
 } from '@/features/transports/utils/datetime-input';
+import { listStatedStayPeriods } from '@/features/persons/utils/guest-presence';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import type {
@@ -429,12 +430,17 @@ const TransportForm = memo(function TransportForm({
 
   /**
    * The day a new transport starts out on: the chosen person's own stay dates
-   * when they have them, the trip's own dates otherwise, picked by type.
+   * when they have them, the trip's own dates otherwise, picked by type. A
+   * guest who stays several times starts on their first stay; the form does
+   * not know which legs are already booked.
    */
   const suggestedDatetime = useMemo((): string => {
     const person = persons.find((p) => p.id === formState.personId);
+    const firstStay = person ? listStatedStayPeriods(person)[0] : undefined;
     const personDate =
-      formState.type === 'arrival' ? person?.stayStartDate : person?.stayEndDate;
+      formState.type === 'arrival'
+        ? (person?.stayStartDate ?? firstStay?.startDate)
+        : (person?.stayEndDate ?? firstStay?.endDate);
     const tripDate = formState.type === 'arrival' ? tripStartDate : tripEndDate;
     return toLocalDatetimeMidday(personDate ?? tripDate);
   }, [formState.personId, formState.type, persons, tripStartDate, tripEndDate]);

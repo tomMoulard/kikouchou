@@ -334,6 +334,8 @@ export const RoomFormDataSchema = z.object({
  * - stayStartDate: optional, valid ISO date
  * - stayEndDate: optional, valid ISO date
  * - If both stay dates provided, stayEndDate must be >= stayStartDate
+ * - extraStays: optional further stays, each with both dates in order, at
+ *   most 20 of them
  * - notes: optional, max 2000 characters
  * - phone: optional, max 32 characters
  * - headcount: optional, whole number between 1 and 99
@@ -347,6 +349,17 @@ export const PersonFormDataSchema = z
     color: hexColorSchema,
     stayStartDate: isoDateStringSchema.optional(),
     stayEndDate: isoDateStringSchema.optional(),
+    extraStays: z
+      .array(
+        z
+          .object({ startDate: isoDateStringSchema, endDate: isoDateStringSchema })
+          .refine((stay) => stay.startDate <= stay.endDate, {
+            message: 'Stay end date must be on or after stay start date',
+            path: ['endDate'],
+          }),
+      )
+      .max(20, 'A guest can have 20 further stays at most')
+      .optional(),
     // Missing from this schema until now, and `PersonFormData` has always had
     // it. Zod strips an unknown key rather than complaining, so every parse at
     // a write boundary silently dropped the guest's allergies and diet — the

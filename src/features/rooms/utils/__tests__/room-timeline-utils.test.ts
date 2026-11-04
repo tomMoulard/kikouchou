@@ -1404,3 +1404,65 @@ describe('buildRoomTimelineModel, records it cannot fully read', () => {
     expect(model.rows[0]!.items.map((item) => item.id)).toEqual(['known']);
   });
 });
+
+describe('buildRoomTimelineModel, a guest who comes back', () => {
+  const trip = createTrip();
+  const room: Room = { id: 'r1' as Room['id'], tripId: trip.id, name: 'Room 1', capacity: 2, order: 0 };
+  // Stays: the night of the 1st, then the 3rd and the 4th.
+  const person: Person = {
+    id: 'p1' as Person['id'],
+    tripId: trip.id,
+    name: 'Alex',
+    color: '#3b82f6' as HexColor,
+    stayStartDate: iso('2026-04-01'),
+    stayEndDate: iso('2026-04-02'),
+    extraStays: [{ startDate: iso('2026-04-03'), endDate: iso('2026-04-05') }],
+  };
+  const booking = (id: string, startDate: string, endDate: string): RoomAssignment => ({
+    id: id as RoomAssignment['id'],
+    tripId: trip.id,
+    roomId: room.id,
+    personId: person.id,
+    startDate: iso(startDate),
+    endDate: iso(endDate),
+  });
+  const model = (assignments: RoomAssignment[]) =>
+    buildRoomTimelineModel({
+      trip,
+      range: { startDate: iso('2026-04-01'), endDate: iso('2026-04-05') },
+      rooms: [room],
+      assignments,
+      personsById: new Map([[person.id, person]]),
+      unknownLabel: 'Unknown',
+      arrivals: [],
+      departures: [],
+    });
+
+  it('keeps a booking of the second stay, which is after the first one ends', () => {
+    const items = model([booking('a2', '2026-04-03', '2026-04-05')]).rows[0]!.items;
+
+    expect(items.map((item) => [item.startIndex, item.endIndex])).toEqual([[2, 3]]);
+  });
+
+  it('clips a booking to the stay it overlaps most, not across the gap', () => {
+    const items = model([booking('a1', '2026-04-02', '2026-04-05')]).rows[0]!.items;
+
+    expect(items.map((item) => [item.startIndex, item.endIndex])).toEqual([[2, 3]]);
+  });
+
+  it('hides a booking entirely after the last stay', () => {
+    const late: Person = { ...person, extraStays: [] , stayEndDate: iso('2026-04-02') };
+    const items = buildRoomTimelineModel({
+      trip,
+      range: { startDate: iso('2026-04-01'), endDate: iso('2026-04-05') },
+      rooms: [room],
+      assignments: [booking('a3', '2026-04-03', '2026-04-05')],
+      personsById: new Map([[late.id, late]]),
+      unknownLabel: 'Unknown',
+      arrivals: [],
+      departures: [],
+    }).rows[0]!.items;
+
+    expect(items).toEqual([]);
+  });
+});

@@ -522,6 +522,35 @@ screen until they are set, even after travel exists.
 - **On the wire**, a trip without dates is null columns on `trips`, `''` in the
   QR changeset's string fields, and empty strings in the Rust `TripRow`.
 
+### A guest can stay several times
+
+`Person.stayStartDate`/`stayEndDate` is the first stay, and `Person.extraStays`
+holds the further ones (each with both days, `endDate` the check-out). A guest
+with no stated stay is read from their travel: each arrival paired with the
+next departure (`pairTransportStays`). A guest with neither is there for the
+whole trip.
+
+- **Ask `resolveGuestStayPeriods` (or the presence helpers), never one span.**
+  `isGuestOnSiteOnDate` and `isGuestOnSiteDuringDay` ask whether *any* stay
+  covers the night or the day, so a guest between two stays is not there.
+  `resolveGuestStayWindow` is the span of every stay, gaps included: use it for
+  sorting or for a window to draw, never for presence.
+- **One chip, one booking, per stay.** `calculateUnassignedDates` counts only
+  nights inside a stay, so the needs-room row shows one chip per stay without
+  a bed, and dropping one books that stay alone. A booking is clipped to the
+  stay it overlaps most (calendar and room timelines), never stretched across
+  a gap.
+- **The field is remote input.** `normalizeExtraStays` (`lib/db/sanitize`)
+  checks each period on its own, sorts them and keeps at most
+  `MAX_EXTRA_STAYS`. The sync bridge, the person repository and the QR
+  mappers all go through it. An older build spreads the unknown field through
+  sync untouched, and reads only the first stay.
+- **A QR changeset with no further stays is silence**, like a missing phone:
+  `upsertPerson` keeps the ones the device holds, because an older sender has
+  no such field.
+- Editing: the guest form ("Add another stay"), and the assistant's `addStay`
+  action. The invite page's arrival question writes the first stay only.
+
 ### An assignment's `endDate` is the check-out day, not the last night
 
 `listStayNights` and `isDateInStayRange` (`features/rooms/utils/capacity-utils`)

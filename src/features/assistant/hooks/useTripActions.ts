@@ -20,6 +20,7 @@ import {
 import { useOfflineAwareNotify } from '@/hooks';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
+import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
@@ -39,6 +40,7 @@ import {
   deleteAssignmentWithOwnershipCheck,
   deleteExpenseWithOwnershipCheck,
   deletePersonWithOwnershipCheck,
+  updatePersonWithOwnershipCheck,
   deleteRideWithOwnershipCheck,
   deleteRoomWithOwnershipCheck,
   deleteTransportWithOwnershipCheck,
@@ -865,6 +867,51 @@ async function executeActionBatch(
         // assistant would be a hole in the netting: one confirmation here
         // can execute a batch of deletes, so a trip tidied up by chat
         // would read as a trip nothing was ever removed from.
+        case 'addStay': {
+          const tid = activeTripId;
+          if (!tid) {
+            notify.error(t('assistant.noTripForAction'));
+            break;
+          }
+          const d = action.data as Record<string, unknown>;
+          // Written from words by the model, so checked like updateTrip's.
+          if (
+            !isCalendarDayString(d.from) ||
+            !isCalendarDayString(d.to) ||
+            d.from > d.to
+          ) {
+            notify.error(t('assistant.invalidDate'));
+            break;
+          }
+          const stay = {
+            startDate: d.from as ISODateString,
+            endDate: d.to as ISODateString,
+          };
+          const pid = d.personId as PersonId;
+          const guest = await getPersonById(pid);
+          // A guest with no stay yet gets this one as their first; anyone
+          // else gets it after the stays they have.
+          const hasFirstStay = Boolean(guest?.stayStartDate || guest?.stayEndDate);
+          await updatePersonWithOwnershipCheck(
+            pid,
+            tid,
+            guest && !hasFirstStay
+              ? { stayStartDate: stay.startDate, stayEndDate: stay.endDate }
+              : { extraStays: [...(guest ? listExtraStayPeriods(guest) : []), stay] },
+          );
+          notifySuccess(t('persons.updateSuccess'));
+          executedCount++;
+          summaries.push(
+            t('assistant.actionDetails.addStay', {
+              name: guest?.name ?? String(pid),
+              start: stay.startDate,
+              end: stay.endDate,
+              defaultValue: 'Added a stay for {{name}}: {{start}} to {{end}}',
+            }),
+          );
+          break;
+        }
+
         case 'removeGuest': {
           const tid = activeTripId;
           if (!tid) {

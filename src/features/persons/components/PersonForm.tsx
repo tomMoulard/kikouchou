@@ -14,10 +14,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Plus, X } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 
@@ -39,7 +40,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
 import type { ContactSuggestion } from '@/lib/contacts';
-import { MAX_LENGTHS } from '@/lib/db/sanitize';
+import { MAX_EXTRA_STAYS, MAX_LENGTHS, normalizeExtraStays } from '@/lib/db/sanitize';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
@@ -76,6 +77,14 @@ interface PersonFormProps {
  */
 interface FormErrors {
   name?: string;
+  /** A further stay with only one of its two days picked */
+  extraStays?: string;
+}
+
+/** One further stay being edited: a stable key for React, and its range. */
+interface ExtraStayRow {
+  readonly key: string;
+  readonly range: DateRange | undefined;
 }
 
 // ============================================================================
@@ -103,6 +112,38 @@ function hasDiet(person: Person | undefined): boolean {
 function parseHeadcountInput(value: string): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isNaN(parsed) ? MIN_PERSON_HEADCOUNT : normalizePersonHeadcount(parsed);
+}
+
+// ============================================================================
+// Further stays
+// ============================================================================
+
+let extraStayRowSequence = 0;
+
+/** A fresh key for a further-stay row, unique for the page's lifetime. */
+function nextExtraStayKey(): string {
+  extraStayRowSequence += 1;
+  return `stay-${extraStayRowSequence}`;
+}
+
+/** The editable rows for a guest's stored further stays. */
+function buildExtraStayRows(person: Person | undefined): ExtraStayRow[] {
+  return normalizeExtraStays(person?.extraStays).map((stay) => ({
+    key: nextExtraStayKey(),
+    range: { from: parseISO(stay.startDate), to: parseISO(stay.endDate) },
+  }));
+}
+
+/** A row as the `start|end` text the dirty check compares. */
+function extraStayRowsSignature(rows: readonly ExtraStayRow[]): string {
+  return rows
+    .map(
+      (row) =>
+        `${row.range?.from ? format(row.range.from, 'yyyy-MM-dd') : ''}|${
+          row.range?.to ? format(row.range.to, 'yyyy-MM-dd') : ''
+        }`,
+    )
+    .join(',');
 }
 
 // ============================================================================
@@ -178,6 +219,12 @@ const PersonForm = memo(function PersonForm({
     }
     return undefined;
   });
+  // Further stays after the first one: a guest who comes back in August.
+  const [extraStayRows, setExtraStayRows] = useState<ExtraStayRow[]>(() =>
+    buildExtraStayRows(person),
+  );
+  // The guest the rows were last built for; `undefined` until the first sync.
+  const syncedPersonIdRef = useRef<string | null | undefined>(undefined);
   const [notes, setNotes] = useState(person?.notes ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
   // Headcount is kept as a string so the field can be cleared while typing;
@@ -213,6 +260,7 @@ const PersonForm = memo(function PersonForm({
     readonly color: string;
     readonly stayStartDate: string;
     readonly stayEndDate: string;
+    readonly extraStays: string;
     readonly notes: string;
     readonly phone: string;
     readonly headcount: number;
@@ -224,6 +272,7 @@ const PersonForm = memo(function PersonForm({
   const currentStayStart = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '';
   const currentStayEnd = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : '';
   const currentHeadcount = parseHeadcountInput(headcount);
+  const currentExtraStays = extraStayRowsSignature(extraStayRows);
 
   // Compute dirty state: compare current values against initial (person prop)
   const isDirty = useMemo(
@@ -235,6 +284,7 @@ const PersonForm = memo(function PersonForm({
         color !== initialSnapshot.color ||
         currentStayStart !== initialSnapshot.stayStartDate ||
         currentStayEnd !== initialSnapshot.stayEndDate ||
+        currentExtraStays !== initialSnapshot.extraStays ||
         notes !== initialSnapshot.notes ||
         phone !== initialSnapshot.phone ||
         currentHeadcount !== initialSnapshot.headcount ||
@@ -249,6 +299,7 @@ const PersonForm = memo(function PersonForm({
       dietaryTags,
       color,
       currentHeadcount,
+      currentExtraStays,
       currentStayEnd,
       currentStayStart,
       name,
@@ -289,6 +340,15 @@ const PersonForm = memo(function PersonForm({
     } else {
       setStayDates(undefined);
     }
+    // Rebuilt only for another guest. This effect also runs when the used
+    // colours change, and fresh rows (new keys) on every run would wipe a stay
+    // being typed and re-render for ever.
+    const isOtherGuest = syncedPersonIdRef.current !== (person?.id ?? null);
+    syncedPersonIdRef.current = person?.id ?? null;
+    const nextExtraStayRows = isOtherGuest ? buildExtraStayRows(person) : null;
+    if (nextExtraStayRows) {
+      setExtraStayRows(nextExtraStayRows);
+    }
 
     const nextNotes = person?.notes ?? '';
     setNotes(nextNotes);
@@ -311,18 +371,21 @@ const PersonForm = memo(function PersonForm({
         (mealPlanner && hasDiet(person)),
     );
 
-    setInitialSnapshot({
+    setInitialSnapshot((previous) => ({
       name: nextName,
       color: nextColor,
       stayStartDate: person?.stayStartDate ?? '',
       stayEndDate: person?.stayEndDate ?? '',
+      extraStays: nextExtraStayRows
+        ? extraStayRowsSignature(nextExtraStayRows)
+        : (previous?.extraStays ?? ''),
       notes: nextNotes,
       phone: nextPhone,
       headcount: nextHeadcount,
       childSeat: nextChildSeat,
       dietaryTags: nextDietaryTags.join(','),
       dietaryNote: nextDietaryNote,
-    });
+    }));
 
     // Use callback to avoid creating new object if already empty
     setErrors((prev) => (Object.keys(prev).length === 0 ? prev : {}));
@@ -359,9 +422,18 @@ const PersonForm = memo(function PersonForm({
       newErrors.name = nameError;
     }
 
+    // A further stay needs both days: half a stay is not a period anyone can
+    // read, and dropping it silently would lose what was typed.
+    if (extraStayRows.some((row) => Boolean(row.range?.from) !== Boolean(row.range?.to))) {
+      newErrors.extraStays = t(
+        'persons.stayIncomplete',
+        'Pick the arrival and the departure day of every stay',
+      );
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, validateName]);
+  }, [extraStayRows, name, t, validateName]);
 
   // ============================================================================
   // Event Handlers
@@ -399,6 +471,22 @@ const PersonForm = memo(function PersonForm({
    */
   const handleStayDatesChange = useCallback((range: DateRange | undefined) => {
     setStayDates(range);
+  }, []);
+
+  const handleAddExtraStay = useCallback(() => {
+    setExtraStayRows((prev) =>
+      prev.length >= MAX_EXTRA_STAYS ? prev : [...prev, { key: nextExtraStayKey(), range: undefined }],
+    );
+  }, []);
+
+  const handleExtraStayChange = useCallback((key: string, range: DateRange | undefined) => {
+    setExtraStayRows((prev) => prev.map((row) => (row.key === key ? { ...row, range } : row)));
+    setErrors((prev) => (prev.extraStays ? { ...prev, extraStays: undefined } : prev));
+  }, []);
+
+  const handleRemoveExtraStay = useCallback((key: string) => {
+    setExtraStayRows((prev) => prev.filter((row) => row.key !== key));
+    setErrors((prev) => (prev.extraStays ? { ...prev, extraStays: undefined } : prev));
   }, []);
 
   const handleNotesChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -489,6 +577,14 @@ const PersonForm = memo(function PersonForm({
       const formattedStartDate = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : undefined;
       const formattedEndDate = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined;
 
+      // Complete rows only (validation refused a half one), in date order.
+      const extraStays = normalizeExtraStays(
+        extraStayRows.map((row) => ({
+          startDate: row.range?.from ? format(row.range.from, 'yyyy-MM-dd') : undefined,
+          endDate: row.range?.to ? format(row.range.to, 'yyyy-MM-dd') : undefined,
+        })),
+      );
+
       try {
         const trimmedNotes = notes.trim();
         const trimmedPhone = phone.trim();
@@ -497,6 +593,9 @@ const PersonForm = memo(function PersonForm({
           color: toHexColor(color),
           stayStartDate: formattedStartDate ? toISODateStringFromString(formattedStartDate) : undefined,
           stayEndDate: formattedEndDate ? toISODateStringFromString(formattedEndDate) : undefined,
+          // Always sent, `undefined` when empty, so removing the last further
+          // stay clears it rather than keeping the stored list.
+          extraStays: extraStays.length > 0 ? extraStays : undefined,
           notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
           phone: trimmedPhone.length > 0 ? trimmedPhone : undefined,
           headcount: parseHeadcountInput(headcount),
@@ -516,6 +615,7 @@ const PersonForm = memo(function PersonForm({
       name,
       color,
       stayDates,
+      extraStayRows,
       notes,
       phone,
       headcount,
@@ -614,6 +714,51 @@ const PersonForm = memo(function PersonForm({
           <p className="text-xs text-muted-foreground">
             {t('persons.stayDatesHint', 'When will this guest be at the trip?')}
           </p>
+
+          {/* Further stays: a guest who comes back later in the trip. */}
+          {extraStayRows.map((row, index) => (
+            <div key={row.key} className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <DateRangePicker
+                  value={row.range}
+                  onChange={(range) => {
+                    handleExtraStayChange(row.key, range);
+                  }}
+                  aria-label={t('persons.extraStayLabel', 'Stay {{number}}', { number: index + 2 })}
+                  disabled={isSubmitting}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  handleRemoveExtraStay(row.key);
+                }}
+                disabled={isSubmitting}
+                aria-label={t('persons.removeStay', 'Remove stay {{number}}', { number: index + 2 })}
+              >
+                <X className="size-4" aria-hidden="true" />
+              </Button>
+            </div>
+          ))}
+          {errors.extraStays && (
+            <p id="person-extra-stays-error" className="text-sm text-destructive" role="alert">
+              {errors.extraStays}
+            </p>
+          )}
+          {extraStayRows.length < MAX_EXTRA_STAYS && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddExtraStay}
+              disabled={isSubmitting}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              {t('persons.addStay', 'Add another stay')}
+            </Button>
+          )}
         </div>
       )}
 

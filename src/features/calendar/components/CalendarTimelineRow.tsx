@@ -211,10 +211,9 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
 
       const shouldHatchCheckoutDay =
         isAssignment &&
-        model.checkoutDayIndex !== undefined &&
-        model.checkoutDayIndex === item.endIndex + 1 &&
-        model.checkoutDayIndex >= 0 &&
-        model.checkoutDayIndex < dayCount;
+        model.checkoutDayIndices.some(
+          (index) => index === item.endIndex + 1 && index >= 0 && index < dayCount,
+        );
 
       const pillLeft = left;
       const rawBarWidth = shouldHatchCheckoutDay ? baseWidth + cellW : baseWidth;
@@ -446,7 +445,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
     handleItemClick,
     legMarkerTitle,
     model.items,
-    model.checkoutDayIndex,
+    model.checkoutDayIndices,
     rideLabelFor,
     t,
     viewport.laneHeightPx,
@@ -568,18 +567,22 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           </div>
         </div>
 
-        {model.staySpan && (
+        {/* One outline per stay with no bed yet: a guest who stays several
+            times shows the gaps between the stays blank. */}
+        {model.staySpans.map((span) => (
           <div
+            key={`${span.startIndex}-${span.endIndex}`}
+            data-testid="timeline-stay-outline"
             className="absolute z-[1] rounded-md border border-dashed border-muted-foreground/40 bg-muted/20"
             style={{
-              left: model.staySpan.startIndex * cellWidthPx + 2,
+              left: span.startIndex * cellWidthPx + 2,
               top: 2,
-              width: (model.staySpan.endIndex - model.staySpan.startIndex + 1) * cellWidthPx - 4,
+              width: (span.endIndex - span.startIndex + 1) * cellWidthPx - 4,
               height: rowHeight - 4,
             }}
             aria-hidden="true"
           />
-        )}
+        ))}
 
         {renderedItems}
 

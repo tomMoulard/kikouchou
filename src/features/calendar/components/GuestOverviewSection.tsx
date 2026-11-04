@@ -107,6 +107,27 @@ const GuestOverviewSection = memo(function GuestOverviewSection({
         </div>
       </div>
 
+      {/* A guest who comes back: each stay on its own line, so the gap
+          between them is visible here too. */}
+      {overview.stayPeriods.length > 1 && (
+        <div className="space-y-1 text-sm" data-testid="guest-overview-stay-periods">
+          <p className="text-muted-foreground">
+            {t('calendar.guestOverview.stays', '{{count}} stays', {
+              count: overview.stayPeriods.length,
+            })}
+          </p>
+          <ul className="space-y-0.5">
+            {overview.stayPeriods.map((period) => (
+              <li key={`${period.arrival ?? ''}-${period.departure ?? ''}`} className="font-medium">
+                {formatDayKey(period.arrival, dateLocale) ?? t('common.unknown')}
+                {' · '}
+                {formatDayKey(period.departure, dateLocale) ?? t('common.unknown')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Every room, not only the one that was clicked: a guest who moves
           between rooms mid-trip is exactly the case this answers. */}
       {overview.stays.length > 0 && (

@@ -114,6 +114,7 @@ function makeOverview(overrides: Partial<GuestOverview> = {}): GuestOverview {
     person,
     checkIn: '2026-01-10' as ISODateString,
     checkOut: '2026-01-13' as ISODateString,
+    stayPeriods: [],
     stays: [],
     transports: [],
     activities: [],
@@ -154,6 +155,30 @@ describe('GuestOverviewSection', () => {
     expect(screen.getByRole('heading', { name: 'About Alice' })).toBeInTheDocument();
     expect(lineOf('Check-in')).toHaveTextContent('January 10th, 2026');
     expect(lineOf('Check-out')).toHaveTextContent('January 13th, 2026');
+  });
+
+  it('lists each stay of a guest who comes back, and nothing for one stay', () => {
+    const { unmount } = renderOverview(
+      makeOverview({
+        stayPeriods: [
+          { arrival: '2026-01-10' as ISODateString, departure: '2026-01-13' as ISODateString },
+          { arrival: '2026-02-01' as ISODateString, departure: '2026-02-05' as ISODateString },
+        ],
+      }),
+    );
+    const list = screen.getByTestId('guest-overview-stay-periods');
+    expect(list).toHaveTextContent('2 stays');
+    expect(list.querySelectorAll('li')).toHaveLength(2);
+    unmount();
+
+    renderOverview(
+      makeOverview({
+        stayPeriods: [
+          { arrival: '2026-01-10' as ISODateString, departure: '2026-01-13' as ISODateString },
+        ],
+      }),
+    );
+    expect(screen.queryByTestId('guest-overview-stay-periods')).not.toBeInTheDocument();
   });
 
   it('says a day is unknown when it is missing or cannot be read', () => {

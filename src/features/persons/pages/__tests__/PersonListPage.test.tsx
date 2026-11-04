@@ -370,7 +370,7 @@ describe('PersonListPage', () => {
 
   it('renders person card with stay range label when person has stay dates', () => {
     render(<PersonListPage />, { withProviders: false });
-    // Stay range is formatted as "d MMM – d MMM"
+    // Stay range is formatted as "d MMM - d MMM"
     // mockPerson has stayStartDate 2026-07-02, stayEndDate 2026-07-08
     expect(screen.getByText(/2 Jul.*8 Jul/)).toBeInTheDocument();
   });

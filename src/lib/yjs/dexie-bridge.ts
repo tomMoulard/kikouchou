@@ -22,6 +22,7 @@ import {
   isInstantString,
   normalizeChildSeats,
   normalizeDietaryTags,
+  normalizeExtraStays,
   normalizeExpenseAmount,
   normalizeExpenseSplitValue,
   normalizeLeadTimeMinutes,
@@ -396,6 +397,18 @@ function buildGuestRecord(
     delete person.dietaryNote;
   } else {
     person.dietaryNote = dietaryNote;
+  }
+
+  // Further stays arrive from other members, so each is checked on its own
+  // (two calendar days, in order) and the list is bounded: an unbounded list
+  // reaches every presence question for every night of the trip.
+  if (person.extraStays !== undefined) {
+    const extraStays = normalizeExtraStays(person.extraStays);
+    if (extraStays.length === 0) {
+      delete person.extraStays;
+    } else {
+      person.extraStays = extraStays;
+    }
   }
 
   if (person.phone !== undefined) {

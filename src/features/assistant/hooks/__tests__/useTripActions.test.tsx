@@ -1802,3 +1802,59 @@ describe('useTripActions — rooms', () => {
     expect(await roomNamesOf(tripId)).toEqual(['Attic 1', 'Attic 2']);
   });
 });
+
+// ============================================================================
+// A guest who comes back
+// ============================================================================
+
+describe('useTripActions — addStay', () => {
+  it('gives a guest with no stay this one as their first', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'addStay', data: { personId, from: '2024-07-16', to: '2024-07-20' } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await db.persons.get(personId)).toMatchObject({
+      stayStartDate: '2024-07-16',
+      stayEndDate: '2024-07-20',
+    });
+  });
+
+  it('adds a further stay after the ones a guest has', async () => {
+    const { tripId, personId } = await seedTrip();
+    await db.persons.update(personId, {
+      stayStartDate: isoDate('2024-07-15'),
+      stayEndDate: isoDate('2024-07-18'),
+    });
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'addStay', data: { personId, from: '2024-07-25', to: '2024-07-28' } }),
+    );
+
+    const stored = await db.persons.get(personId);
+    expect(stored?.stayStartDate).toBe('2024-07-15');
+    expect(stored?.extraStays).toEqual([{ startDate: '2024-07-25', endDate: '2024-07-28' }]);
+  });
+
+  it.each([
+    ['a date in words', { from: 'next Monday', to: '2024-07-28' }],
+    ['a stay that ends before it starts', { from: '2024-07-28', to: '2024-07-25' }],
+  ])('refuses %s', async (_label, dates) => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'addStay', data: { personId, ...dates } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.persons.get(personId)).not.toHaveProperty('extraStays');
+  });
+});

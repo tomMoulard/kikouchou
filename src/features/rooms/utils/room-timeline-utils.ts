@@ -6,7 +6,12 @@
 
 import { addDays, subDays } from 'date-fns';
 
-import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
+import {
+  deriveGuestStayDateBounds,
+  listExtraStayPeriods,
+  listStatedStayPeriods,
+  pairTransportStays,
+} from '@/features/persons/utils/guest-presence';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { dedupeContainedTimelineSpansByGroup } from '@/lib/utils/dedupe-timeline-spans';
 import {
@@ -110,6 +115,47 @@ function allocateLanes<TItem extends RoomTimelineItemBase>(
  * Clips an assignment’s nights to the guest’s effective stay (stay dates + transports),
  * then to visible trip day columns. Returns null if nothing should be drawn.
  */
+
+/**
+ * The windows a guest *stated*: their stays when they typed several, their
+ * travel pairs when they travel several times and typed none, otherwise the
+ * one window of `deriveGuestStayDateBounds`. Only windows with both days known
+ * and at least one night.
+ */
+function listStatedStayWindows(
+  person: Person,
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+): { readonly arrival: ISODateString; readonly departure: ISODateString }[] {
+  const usable = (
+    windows: readonly { readonly arrival: ISODateString | null; readonly departure: ISODateString | null }[],
+  ) =>
+    windows.filter(
+      (window): window is { arrival: ISODateString; departure: ISODateString } =>
+        window.arrival !== null && window.departure !== null && window.arrival < window.departure,
+    );
+
+  if (listExtraStayPeriods(person).length > 0) {
+    return usable(
+      listStatedStayPeriods(person).map((stay) => ({
+        arrival: stay.startDate,
+        departure: stay.endDate,
+      })),
+    );
+  }
+  const hasStatedStay = Boolean(person.stayStartDate || person.stayEndDate);
+  const pairs = hasStatedStay ? [] : pairTransportStays(person, arrivals, departures);
+  if (pairs.length > 1) {
+    return usable(pairs);
+  }
+  return usable([deriveGuestStayDateBounds(person, arrivals, departures)]);
+}
+
+/** How many nights a clipped `[clipFn, clipLn]` run holds, for ranking. */
+function nightCount({ clipFn, clipLn }: { readonly clipFn: string; readonly clipLn: string }): number {
+  return (new Date(clipLn).getTime() - new Date(clipFn).getTime()) / 86_400_000;
+}
+
 function clipAssignmentToPersonStayAndTripGrid(
   assignment: RoomAssignment,
   person: Person | undefined,
@@ -141,24 +187,42 @@ function clipAssignmentToPersonStayAndTripGrid(
     // gets elsewhere is a guess, and a guess must not trim a booking the host
     // typed in — it used to pull an assignment reaching past the trip's end
     // back to the last trip night.
-    const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
-    if (arrival && departure && arrival < departure) {
-      const depParsed = parseLocalDayKey(departure);
-      if (depParsed) {
-        const stayLastNight = toLocalISODateString(subDays(depParsed, 1));
-        const clipFn = fn > arrival ? fn : arrival;
-        const clipLn = ln < stayLastNight ? ln : stayLastNight;
-        if (clipFn <= clipLn) {
-          fn = clipFn;
-          ln = clipLn;
-        } else {
-          // No calendar overlap between assignment nights and guest stay window.
-          // Hide only when the assignment is entirely *after* the guest left (stale row).
-          // If nights end before guest arrival or dates are inconsistent, keep the assignment
-          // so the room booking still shows on the timeline.
-          if (fn > stayLastNight) {
-            return null;
-          }
+    //
+    // A guest who stays several times is clipped to the stay the booking
+    // overlaps most, never to the span of all of them.
+    const windows = listStatedStayWindows(person, arrivals, departures)
+      .map(({ arrival, departure }) => {
+        const depParsed = parseLocalDayKey(departure);
+        return depParsed
+          ? { arrival, lastNight: toLocalISODateString(subDays(depParsed, 1)) }
+          : null;
+      })
+      .filter((window): window is { arrival: ISODateString; lastNight: ISODateString } =>
+        window !== null,
+      );
+
+    if (windows.length > 0) {
+      const overlapping = windows
+        .map((window) => ({
+          clipFn: fn > window.arrival ? fn : window.arrival,
+          clipLn: ln < window.lastNight ? ln : window.lastNight,
+        }))
+        .filter(({ clipFn, clipLn }) => clipFn <= clipLn)
+        .sort((left, right) => nightCount(right) - nightCount(left))[0];
+      if (overlapping) {
+        fn = overlapping.clipFn;
+        ln = overlapping.clipLn;
+      } else {
+        // No calendar overlap between assignment nights and any stay. Hide
+        // only when the assignment is entirely *after* the guest's last stay
+        // (stale row). If nights end before an arrival or dates are
+        // inconsistent, keep the assignment so the room booking still shows.
+        const lastStayNight = windows.reduce(
+          (max, window) => (window.lastNight > max ? window.lastNight : max),
+          windows[0]!.lastNight,
+        );
+        if (fn > lastStayNight) {
+          return null;
         }
       }
     }

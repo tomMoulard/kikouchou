@@ -19,7 +19,7 @@ import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
-import { MAX_LENGTHS } from '@/lib/db/sanitize';
+import { MAX_EXTRA_STAYS, MAX_LENGTHS } from '@/lib/db/sanitize';
 import { isDexieTrustedMirror, syncDocToDexie } from '@/lib/yjs/dexie-bridge';
 import { DOC_SCHEMA_VERSION, upsertDocEntity } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
@@ -869,5 +869,62 @@ describe('buildGuestRecord: a phone from both sides', () => {
     await syncDocToDexie(doc, trip.id);
 
     expect((await db.persons.get('p1'))?.phone).toBe('+33 6 12 34 56 78');
+  });
+});
+
+describe('buildGuestRecord: further stays from a peer', () => {
+  it('keeps the usable further stays, sorted, and drops the rest one by one', async () => {
+    const trip = await createTrip({ name: 'Shared trip' });
+    const doc = makeDoc({ name: 'Brittany' });
+    upsertDocEntity(doc, 'guests', {
+      id: 'p1',
+      name: 'Marie',
+      color: '#ef4444',
+      extraStays: [
+        { startDate: '2026-09-01', endDate: '2026-09-04' },
+        { startDate: 'soon', endDate: '2026-09-04' },
+        { startDate: '2026-08-01', endDate: '2026-08-03' },
+      ],
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect((await db.persons.get('p1'))?.extraStays).toEqual([
+      { startDate: '2026-08-01', endDate: '2026-08-03' },
+      { startDate: '2026-09-01', endDate: '2026-09-04' },
+    ]);
+  });
+
+  it('stores no field at all when no further stay is usable', async () => {
+    const trip = await createTrip({ name: 'Shared trip' });
+    const doc = makeDoc({ name: 'Brittany' });
+    upsertDocEntity(doc, 'guests', {
+      id: 'p1',
+      name: 'Marie',
+      color: '#ef4444',
+      extraStays: 'not a list',
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect(await db.persons.get('p1')).not.toHaveProperty('extraStays');
+  });
+
+  it('cuts a peer list longer than the bound', async () => {
+    const trip = await createTrip({ name: 'Shared trip' });
+    const doc = makeDoc({ name: 'Brittany' });
+    upsertDocEntity(doc, 'guests', {
+      id: 'p1',
+      name: 'Marie',
+      color: '#ef4444',
+      extraStays: Array.from({ length: 50 }, (_unused, index) => ({
+        startDate: `2026-01-${String((index % 28) + 1).padStart(2, '0')}`,
+        endDate: '2026-02-01',
+      })),
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect((await db.persons.get('p1'))?.extraStays).toHaveLength(MAX_EXTRA_STAYS);
   });
 });

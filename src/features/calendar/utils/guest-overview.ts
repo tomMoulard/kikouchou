@@ -11,7 +11,11 @@
  * @module features/calendar/utils/guest-overview
  */
 
-import { resolveGuestStayWindow } from '@/features/persons/utils/guest-presence';
+import {
+  type ResolvedStayPeriod,
+  resolveGuestStayPeriods,
+  resolveGuestStayWindow,
+} from '@/features/persons/utils/guest-presence';
 import type { PersonBalance } from '@/features/money/lib/balances';
 import {
   getActivityEndDayKey,
@@ -53,6 +57,12 @@ export interface GuestOverview {
    */
   readonly checkIn: ISODateString | null;
   readonly checkOut: ISODateString | null;
+  /**
+   * Each stay of the guest, earliest first. One entry for a guest who comes
+   * once; several for one who comes back, and then `checkIn`/`checkOut` span
+   * them all, gaps included.
+   */
+  readonly stayPeriods: readonly ResolvedStayPeriod[];
   /** Every room this guest is booked into, earliest first. */
   readonly stays: readonly GuestOverviewStay[];
   /** Every leg this guest travels on, earliest first. */
@@ -128,17 +138,20 @@ export function buildGuestOverview(args: {
       );
     });
 
+  const tripWindow = { startDate: trip.startDate, endDate: trip.endDate };
   const { arrival: checkIn, departure: checkOut } = resolveGuestStayWindow(
     person,
     arrivals,
     departures,
-    { startDate: trip.startDate, endDate: trip.endDate },
+    tripWindow,
   );
+  const stayPeriods = resolveGuestStayPeriods(person, arrivals, departures, tripWindow);
 
   return {
     person,
     checkIn,
     checkOut,
+    stayPeriods,
     stays,
     transports,
     activities: guestActivities,

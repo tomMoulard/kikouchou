@@ -15,7 +15,7 @@
 
 import { addDays } from 'date-fns';
 
-import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
+import { resolveGuestStayPeriods } from '@/features/persons/utils/guest-presence';
 import { isCalendarDayString } from '@/lib/db/sanitize';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { parseLocalDayKey } from '@/lib/utils/trip-days';
@@ -94,9 +94,9 @@ export function tripHasDates(
  * The span of the guests' own stays: the earliest day any guest is known to
  * arrive, to the latest day any guest is known to leave.
  *
- * A guest's bounds come from {@link deriveGuestStayDateBounds}: stated stay
- * dates first, then their transports. A guest with only one known bound still
- * counts, so one arrival alone gives a one-day window.
+ * A guest's stays come from `resolveGuestStayPeriods`: stated stays first,
+ * then their travel, every stay counted. A guest with only one known bound
+ * still counts, so one arrival alone gives a one-day window.
  *
  * @param persons - The trip's guests
  * @param arrivals - Arrival transports of the trip
@@ -112,8 +112,13 @@ export function inferGuestStayWindow(
   let last: ISODateString | null = null;
 
   for (const person of persons) {
-    const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
-    for (const key of [arrival, departure]) {
+    // Every stay counts, so a guest back in September widens the window to
+    // September. No trip window is passed: this is what stands in for it.
+    const periods = resolveGuestStayPeriods(person, arrivals, departures, {
+      startDate: undefined,
+      endDate: undefined,
+    });
+    for (const key of periods.flatMap((period) => [period.arrival, period.departure])) {
       if (!key || !isCalendarDayString(key)) {
         continue;
       }

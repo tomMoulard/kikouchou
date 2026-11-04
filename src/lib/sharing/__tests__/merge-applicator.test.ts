@@ -260,5 +260,28 @@ describe('applyMerge: rooms and phones', () => {
 
     expect((await db.persons.get('person-1'))?.phone).toBe('+33 6 12 34 56 78');
   });
+
+  it('keeps the further stays this device holds when the changeset carries none', async () => {
+    // A sender on an older build has no such field: its silence is not a removal.
+    const extraStays = [
+      { startDate: '2026-08-01' as ISODateString, endDate: '2026-08-08' as ISODateString },
+    ];
+    await db.persons.put({ ...makePerson('person-1'), extraStays });
+
+    await applyMerge(
+      buildMergeResult({
+        autoApply: {
+          persons: [{ ...makePerson('person-1'), name: 'Renamed' }],
+          assignments: [],
+          transports: [],
+          rooms: [],
+        },
+      }),
+    );
+
+    const stored = await db.persons.get('person-1');
+    expect(stored?.name).toBe('Renamed');
+    expect(stored?.extraStays).toEqual(extraStays);
+  });
 });
 

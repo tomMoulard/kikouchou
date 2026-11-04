@@ -18,6 +18,7 @@
 
 import {
   deriveGuestStayDateBounds,
+  resolveGuestStayPeriods,
   type TripStayWindow,
 } from '@/features/persons/utils/guest-presence';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
@@ -127,6 +128,14 @@ export interface SummaryGuest {
   readonly arrivalDate: ISODateString | null;
   /** Stated or derived departure day, when anything states one. */
   readonly departureDate: ISODateString | null;
+  /**
+   * Every stay with both days known, from the guest's own records (stated
+   * stays, then travel), earliest first. Several for a guest who comes back.
+   */
+  readonly stayPeriods: readonly {
+    readonly arrival: ISODateString;
+    readonly departure: ISODateString;
+  }[];
 }
 
 /**
@@ -337,6 +346,14 @@ export async function loadTripSummary(
       notes: person.notes,
       arrivalDate: bounds.arrival,
       departureDate: bounds.departure,
+      // No trip window: a guess about the stay is not printed as a fact.
+      stayPeriods: resolveGuestStayPeriods(person, arrivals, departures, {
+        startDate: undefined,
+        endDate: undefined,
+      }).filter(
+        (period): period is { arrival: ISODateString; departure: ISODateString } =>
+          period.arrival !== null && period.departure !== null,
+      ),
     };
   });
 

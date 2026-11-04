@@ -7,7 +7,10 @@
 import { isValid, parseISO, subDays } from 'date-fns';
 
 import { toLocalISODateString } from '@/lib/db/utils';
-import { resolveGuestStayWindow } from '@/features/persons/utils/guest-presence';
+import {
+  listExtraStayPeriods,
+  resolveGuestStayPeriods,
+} from '@/features/persons/utils/guest-presence';
 import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
 import {
@@ -290,11 +293,41 @@ export function buildCalendarTimelineDays(args: {
   const range = resolveUndatedTimelineRange(
     [
       ...eventDayKeys,
-      ...persons.flatMap((person) => [person.stayStartDate, person.stayEndDate]),
+      ...persons.flatMap((person) => [
+        person.stayStartDate,
+        person.stayEndDate,
+        ...listExtraStayPeriods(person).flatMap((stay) => [stay.startDate, stay.endDate]),
+      ]),
     ],
     todayKey,
   );
   return buildDayColumns(range.startDate, range.endDate);
+}
+
+/**
+ * True when the ranges, merged, cover every index of `span`.
+ *
+ * @param span - The stay
+ * @param ranges - Booking ranges, sorted by start
+ */
+function isSpanCovered(
+  span: { readonly startIndex: number; readonly endIndex: number },
+  ranges: readonly { readonly startIndex: number; readonly endIndex: number }[],
+): boolean {
+  let coveredStart = span.startIndex;
+  for (const range of ranges) {
+    if (range.endIndex < coveredStart) {
+      continue;
+    }
+    if (range.startIndex > coveredStart) {
+      return false;
+    }
+    coveredStart = Math.max(coveredStart, range.endIndex + 1);
+    if (coveredStart > span.endIndex) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function buildCalendarTimelineModel(args: {
@@ -362,30 +395,40 @@ export function buildCalendarTimelineModel(args: {
   const rows: CalendarTimelineRowModel[] = persons.map((person) => {
     const baseItems: TimelineItem[] = [];
 
-    // Presence range: explicit stay dates take precedence over transports,
-    // falling back to earliest arrival / latest departure. Shared with the rest
-    // of the app so the timeline never disagrees about when a guest is here.
-    const { arrival: stayStartKey, departure: stayEndKey } = resolveGuestStayWindow(
-      person,
-      arrivals,
-      departures,
-      { startDate: trip.startDate, endDate: trip.endDate },
-    );
+    // Presence: one range per stay. Stated stays win, then the guest's travel
+    // (each arrival paired with the next departure), then the trip. Shared with
+    // the rest of the app so the timeline never disagrees about when a guest
+    // is here, and so a guest who stays twice shows the gap between.
+    const periods = resolveGuestStayPeriods(person, arrivals, departures, {
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+    });
+    const hasStatedStay = Boolean(person.stayStartDate && person.stayEndDate);
 
-    const staySpan =
-      stayStartKey && stayEndKey ? resolveDayRange(columns, stayStartKey, stayEndKey) : undefined;
+    const stays = periods
+      .map((period) => ({
+        period,
+        span:
+          period.arrival && period.departure
+            ? resolveDayRange(columns, period.arrival, period.departure)
+            : undefined,
+      }))
+      .filter(
+        (stay): stay is { period: (typeof periods)[number]; span: { startIndex: number; endIndex: number } } =>
+          stay.span !== undefined,
+      );
 
-    const checkoutDayIndex = (() => {
-      if (!stayEndKey || lastColumnIndex < 0) return undefined;
-      const checkout = parseLocalDayKey(stayEndKey);
-      if (!checkout) return undefined;
+    const checkoutDayIndices = periods.flatMap((period) => {
+      if (!period.departure || lastColumnIndex < 0) return [];
+      const checkout = parseLocalDayKey(period.departure);
+      if (!checkout) return [];
       const index = findColumnIndexAt(columns, checkout);
-      if (index !== undefined) return index;
+      if (index !== undefined) return [index];
       // A checkout past the end of the axis still hatches its last column: the
       // reader is being told the stay runs out beyond the edge, not that it
       // stops there.
-      return checkout > columns[lastColumnIndex]!.start ? lastColumnIndex : undefined;
-    })();
+      return checkout > columns[lastColumnIndex]!.start ? [lastColumnIndex] : [];
+    });
 
     // Room assignment spans (nights model like month view: endDate is checkout -> subtract 1 day)
     const assignmentItems: TimelineItemAssignment[] = [];
@@ -400,12 +443,24 @@ export function buildCalendarTimelineModel(args: {
 
       const { startIndex, endIndex } = range;
 
-      const clippedStartIndex = staySpan
-        ? Math.max(startIndex, staySpan.startIndex)
-        : startIndex;
-      const clippedEndIndex = staySpan
-        ? Math.min(endIndex, staySpan.endIndex)
-        : endIndex;
+      // Clipped to the stay it overlaps most, never to the span of every stay:
+      // a booking in August must not be cut by the July stay, nor painted
+      // across the gap between them. A booking that overlaps no stay is left
+      // out, as a booking outside the one stay always was.
+      const host = stays
+        .map((stay) => ({
+          span: stay.span,
+          overlap:
+            Math.min(endIndex, stay.span.endIndex) - Math.max(startIndex, stay.span.startIndex) + 1,
+        }))
+        .filter((candidate) => candidate.overlap > 0)
+        .sort((left, right) => right.overlap - left.overlap)[0]?.span;
+
+      if (stays.length > 0 && host === undefined) {
+        continue;
+      }
+      const clippedStartIndex = host ? Math.max(startIndex, host.startIndex) : startIndex;
+      const clippedEndIndex = host ? Math.min(endIndex, host.endIndex) : endIndex;
       if (clippedStartIndex > clippedEndIndex) {
         continue;
       }
@@ -429,74 +484,28 @@ export function buildCalendarTimelineModel(args: {
       });
     }
 
-    if (staySpan && assignmentItems.length === 1 && person.stayStartDate && person.stayEndDate) {
-      const [singleAssignment] = assignmentItems;
-      if (singleAssignment) {
-        assignmentItems[0] = {
-          ...singleAssignment,
-          startIndex: staySpan.startIndex,
-          endIndex: staySpan.endIndex,
-        };
-      }
-    }
+    const mergedAssignments = mergeAdjacentSameRoomAssignmentSpans(
+      dedupeContainedTimelineSpans(assignmentItems),
+    );
 
-    const dedupedAssignments = dedupeContainedTimelineSpans(assignmentItems);
-    const mergedAssignments = mergeAdjacentSameRoomAssignmentSpans(dedupedAssignments);
-
-    // After merging consecutive same-room rows, we may have one pill but multiple DB
-    // assignments skipped the pre-merge "expand to stay" branch — align bar with stay.
-    let finalAssignments: TimelineItemAssignment[];
-    if (
-      staySpan &&
-      mergedAssignments.length === 1 &&
-      person.stayStartDate &&
-      person.stayEndDate
-    ) {
-      const [only] = mergedAssignments;
-      finalAssignments = only
-        ? [
-            {
-              ...only,
-              startIndex: staySpan.startIndex,
-              endIndex: staySpan.endIndex,
-            },
-          ]
-        : [];
-    } else {
-      finalAssignments = mergedAssignments;
-    }
+    // A guest with one stated stay and one (merged) booking: the bar is the
+    // stay, so a booking typed a night short does not leave a stray outline.
+    // Only for a single stay: with several, stretching would paint the gaps.
+    const onlyStay = stays.length === 1 ? stays[0]?.span : undefined;
+    const finalAssignments: TimelineItemAssignment[] =
+      onlyStay && hasStatedStay && mergedAssignments.length === 1 && mergedAssignments[0]
+        ? [{ ...mergedAssignments[0], startIndex: onlyStay.startIndex, endIndex: onlyStay.endIndex }]
+        : mergedAssignments;
 
     baseItems.push(...finalAssignments);
 
-    const effectiveStaySpan = (() => {
-      if (!staySpan) return undefined;
-
-      const assignmentRanges = baseItems
-        .filter((i): i is Extract<TimelineItem, { kind: 'assignment' }> => i.kind === 'assignment')
-        .map((i) => ({ startIndex: i.startIndex, endIndex: i.endIndex }))
-        .sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex);
-
-      if (assignmentRanges.length === 0) return staySpan;
-
-      // Merge intervals and verify coverage over the full stay span.
-      let coveredStart = staySpan.startIndex;
-      for (const r of assignmentRanges) {
-        if (r.endIndex < coveredStart) {
-          continue;
-        }
-        if (r.startIndex > coveredStart) {
-          // Gap found
-          return staySpan;
-        }
-        coveredStart = Math.max(coveredStart, r.endIndex + 1);
-        if (coveredStart > staySpan.endIndex) {
-          // Fully covered
-          return undefined;
-        }
-      }
-
-      return staySpan;
-    })();
+    // The outline of every stay not fully covered by a booking.
+    const assignmentRanges = finalAssignments
+      .map((item) => ({ startIndex: item.startIndex, endIndex: item.endIndex }))
+      .sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex);
+    const staySpans = stays
+      .map((stay) => stay.span)
+      .filter((span) => !isSpanCovered(span, assignmentRanges));
 
     // Transport points (arrivals + departures)
     const allTransports = [...arrivals, ...departures];
@@ -537,8 +546,8 @@ export function buildCalendarTimelineModel(args: {
       person,
       items: lanes,
       laneCount: maxLaneCount,
-      staySpan: effectiveStaySpan,
-      checkoutDayIndex,
+      staySpans,
+      checkoutDayIndices,
     };
   });
 

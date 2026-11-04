@@ -112,6 +112,17 @@ describe('inferGuestStayWindow', () => {
     expect(window).toEqual({ startDate: '2026-07-12', endDate: '2026-07-16' });
   });
 
+  it("reaches a guest's further stays", () => {
+    const window = inferGuestStayWindow([
+      {
+        ...person('a', { stayStartDate: isoDate('2026-07-01'), stayEndDate: isoDate('2026-07-22') }),
+        extraStays: [{ startDate: isoDate('2026-09-24'), endDate: isoDate('2026-09-30') }],
+      },
+    ]);
+
+    expect(window).toEqual({ startDate: '2026-07-01', endDate: '2026-09-30' });
+  });
+
   it('answers null when no guest has a known date', () => {
     expect(inferGuestStayWindow([])).toBeNull();
     expect(inferGuestStayWindow([person('a'), person('b')])).toBeNull();

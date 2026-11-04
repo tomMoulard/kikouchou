@@ -436,6 +436,10 @@
     "color": "Couleur",
     "stayDates": "Dates de séjour",
     "stayDatesHint": "Quand ce participant sera-t-il présent ?",
+    "addStay": "Ajouter un autre séjour",
+    "extraStayLabel": "Séjour {{number}}",
+    "removeStay": "Retirer le séjour {{number}}",
+    "stayIncomplete": "Choisissez le jour d'arrivée et le jour de départ de chaque séjour",
     "notes": "Notes",
     "notesPlaceholder": "ex. : allergique aux chats, végétalien…",
     "notesHint": "Régime, allergies ou informations utiles pour les hôtes.",
@@ -859,6 +863,8 @@
       }
     },
     "guestOverview": {
+      "stays_one": "{{count}} séjour",
+      "stays_other": "{{count}} séjours",
       "title": "À propos de {{name}}",
       "checkIn": "Arrivée",
       "checkOut": "Départ",
@@ -1464,6 +1470,7 @@
         "clearDates": "dates retirées"
       },
       "addGuest": "Invité ajouté : {{name}}",
+      "addStay": "Séjour ajouté pour {{name}} : du {{start}} au {{end}}",
       "importGuestGroup_one": "{{count}} participant ajouté depuis {{name}}",
       "importGuestGroup_other": "{{count}} participants ajoutés depuis {{name}}",
       "removeGuest": "Invité retiré : {{name}}",

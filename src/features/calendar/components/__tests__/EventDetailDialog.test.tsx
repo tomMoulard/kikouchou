@@ -128,6 +128,7 @@ function makeGuestOverview(overrides: Partial<GuestOverview> = {}): GuestOvervie
     person,
     checkIn: '2026-01-10' as ISODateString,
     checkOut: '2026-01-13' as ISODateString,
+    stayPeriods: [],
     stays: [{ assignment: makeAssignment(), room: makeRoom() }],
     transports: [],
     activities: [],

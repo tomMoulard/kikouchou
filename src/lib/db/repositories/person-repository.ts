@@ -12,6 +12,7 @@ import {
   MAX_LENGTHS,
   normalizeChildSeat,
   normalizeDietaryTags,
+  normalizeExtraStays,
   sanitizeOptionalText,
   sanitizePersonData,
 } from '@/lib/db/sanitize';
@@ -175,6 +176,10 @@ export async function updatePerson(
       sanitizedData.dietaryNote,
       MAX_LENGTHS.personDietaryNote,
     );
+  }
+  if (sanitizedData.extraStays !== undefined) {
+    const extraStays = normalizeExtraStays(sanitizedData.extraStays);
+    sanitizedData.extraStays = extraStays.length > 0 ? extraStays : undefined;
   }
   // Note: color field is not sanitized (it's a hex color, not free text)
 
@@ -363,6 +368,10 @@ export async function updatePersonWithOwnershipCheck(
     }
     if (patch.dietaryNote !== undefined) {
       patch.dietaryNote = sanitizeOptionalText(patch.dietaryNote, MAX_LENGTHS.personDietaryNote);
+    }
+    if (patch.extraStays !== undefined) {
+      const extraStays = normalizeExtraStays(patch.extraStays);
+      patch.extraStays = extraStays.length > 0 ? extraStays : undefined;
     }
 
     await db.persons.update(id, patch);
