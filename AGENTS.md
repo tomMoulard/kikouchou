@@ -1367,6 +1367,24 @@ what the website did before.
   plugin needs both, which is why it is not used.
 - **A plugin can be missing.** The F-Droid build leaves the push plugin, and
   with it Firebase, out. Ask `hasNativePlugin(name)`, never assume.
+- **A web change reaches the apps without a store release; a native change
+  does not.** Every website deploy publishes the apps' web build at
+  `app.kikouchou.app/live/<fingerprint>.json`, signed with the
+  `LIVE_UPDATE_PRIVATE_KEY` secret (`scripts/build-live-update.sh`), and
+  `lib/native/live-update` stages it for the next launch. The fingerprint
+  (`scripts/native-fingerprint.js`) covers what is committed under `android/`
+  and `ios/`, `capacitor.config.ts`, and the `@capacitor/*` and `@capawesome/*`
+  versions. Change any of those and the installed apps stop receiving bundles
+  until a store release carries the new native layer: that is the point, since
+  a bundle can only call the plugins the app shipped with. Three rules hold it
+  together. `NativeShell` calls `startLiveUpdate()` after the first paint, which
+  calls the plugin's `ready()`. A bundle that never gets there is rolled back
+  after 15 seconds and blocked. A store update does not bring back the store
+  build's bundle by itself, so a downloaded bundle on a version code that never
+  recorded its own fingerprint resets for the next launch. And nothing reloads
+  the page: Dexie keeps IndexedDB open across the plugin's `reload()`. The
+  F-Droid build has no live updates, because f-droid.org builds every release
+  from source.
 - **No ad tracker in an app.** The Meta pixel and the Google tags return before
   loading in a store app: that would be cross-app tracking, which needs Apple's
   tracking prompt. PostHog runs, with a `platform` super property.

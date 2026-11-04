@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
@@ -17,6 +18,26 @@ import { HERE_MANIFEST_FILENAME, withoutStartUrl } from './src/lib/pwa/manifest-
 // Everything that builds a URL reads `import.meta.env.BASE_URL` rather than
 // assuming '/', so a subpath deploy still works if this ever changes back.
 const base = '/'
+
+/**
+ * The fingerprint of the store apps' native layer, read once per build
+ * (`scripts/native-fingerprint.js`). A live update is published under it, and
+ * an app takes only the bundles that carry its own (`lib/native/live-update`).
+ * Empty outside a git checkout, which turns live updates off for that build.
+ */
+function nativeFingerprint(): string {
+  if (process.env.VITE_NATIVE_FINGERPRINT !== undefined) {
+    return process.env.VITE_NATIVE_FINGERPRINT
+  }
+  try {
+    return execFileSync('node', [resolve(import.meta.dirname, 'scripts/native-fingerprint.js')], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return ''
+  }
+}
 
 /**
  * Manual chunk splitting strategy to keep bundles under 500KB
@@ -511,6 +532,9 @@ export default defineConfig({
     githubPagesSpaFallback(),
     minifyHtml(),
   ],
+  define: {
+    'import.meta.env.VITE_NATIVE_FINGERPRINT': JSON.stringify(nativeFingerprint()),
+  },
   resolve: {
     alias: {
       '@': resolve(import.meta.dirname, './src'),

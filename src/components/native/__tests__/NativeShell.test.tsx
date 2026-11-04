@@ -29,6 +29,7 @@ const doubles = vi.hoisted(() => {
     notificationListener: undefined as ((open: { kind: string; url: string }) => void) | undefined,
     reportOpened: vi.fn(),
     deliver: vi.fn(() => true),
+    startLiveUpdate: vi.fn(),
   };
 });
 
@@ -61,6 +62,7 @@ vi.mock('@/lib/notifications/native-push', () => ({
   },
 }));
 vi.mock('@/lib/notifications/opened', () => ({ reportNotificationOpened: doubles.reportOpened }));
+vi.mock('@/lib/native/live-update', () => ({ startLiveUpdate: doubles.startLiveUpdate }));
 vi.mock('@/lib/supabase/auth-callback', () => ({ deliverAuthCallbackUrl: doubles.deliver }));
 
 import { render } from '@testing-library/react';
@@ -122,6 +124,7 @@ describe('NativeShell', () => {
     expect(doubles.getLaunchUrl).not.toHaveBeenCalled();
     expect(doubles.hideSplash).not.toHaveBeenCalled();
     expect(doubles.setStyle).not.toHaveBeenCalled();
+    expect(doubles.startLiveUpdate).not.toHaveBeenCalled();
   });
 
   it('opens the link the app was launched with', async () => {
@@ -180,6 +183,12 @@ describe('NativeShell', () => {
     render(<NativeShell />);
 
     expect(doubles.hideSplash).toHaveBeenCalled();
+  });
+
+  it('tells the live update plugin the bundle started, once painted', () => {
+    render(<NativeShell />);
+
+    expect(doubles.startLiveUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('reports a reminder tap and opens what it names', () => {
