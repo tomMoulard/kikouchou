@@ -510,8 +510,10 @@ fingerprint, or wait for Apple's CDN (step 1.12).
 
 ## Part 3: every release after the first
 
-1. Change `version` in `package.json`. The Android `versionCode` comes from it
-   (`android/app/build.gradle`), and Play refuses a code it has seen.
+1. Change `version` in `package.json`, and set `versionCode` beside it to
+   major * 1000000 + minor * 1000 + patch, for example 1003 for 0.1.3. The
+   Android build stops when the two disagree (`android/app/build.gradle`),
+   and Play refuses a code it has seen.
    Write the release notes in
    `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt`, for
    `en-US` and `fr-FR`, 500 characters at most. Google Play shows them, and so

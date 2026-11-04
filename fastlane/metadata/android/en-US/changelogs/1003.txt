@@ -1,0 +1,2 @@
+The F-Droid build of the app is ready for f-droid.org.
+No change in the app itself.
