@@ -79,15 +79,20 @@ android {
         }
     }
 
-    // R8 shrinks and renames the release code. Google Play rates an app whose
+    // R8 can shrink and rename the release code (off for now, see below). Google Play rates an app whose
     // DEX code is not obfuscated, and it flagged ours at 1%. Capacitor and each
     // plugin ship the keep rules for the classes the bridge finds by
     // reflection; proguard-rules.pro holds the app's own. The bundle carries
     // the mapping file, so Play shows crash stack traces with the real names.
     buildTypes {
         release {
-            minifyEnabled true
-            shrinkResources true
+            // Off again since 0.1.7. With R8 on (0.1.5 and 0.1.6), a phone
+            // whose Android System WebView is Chrome 90 drew a stale, squashed
+            // copy of the header in a band above the page; 0.1.4, built
+            // without R8, did not. Turn it back on only after a release build
+            // is checked on a WebView older than 140.
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (keystorePath) {
                 signingConfig signingConfigs.upload
