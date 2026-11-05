@@ -166,7 +166,7 @@ async function main() {
   await rm(join(ICONS, 'icon-dark.svg'), { force: true });
   console.log('website: light, transparent and monochrome icons');
 
-  // The store listing's icon, read by F-Droid, IzzyOnDroid and Play's `supply`.
+  // The store listing's icon, read by F-Droid and Play's `supply`.
   for (const locale of ['en-US', 'fr-FR']) {
     const folder = join(ROOT, 'fastlane', 'metadata', 'android', locale, 'images');
     await mkdir(folder, { recursive: true });

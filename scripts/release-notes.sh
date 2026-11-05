@@ -6,7 +6,7 @@
 #
 # The changelog of a store release is written once, in
 # fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt. Google Play
-# shows it (native.yml, the Google Play job), F-Droid and IzzyOnDroid read it,
+# shows it (native.yml, the Google Play job), F-Droid reads it,
 # and the GitHub release starts with it: native.yml passes this output to
 # `gh release create --notes-file`, which puts it above the list of changes
 # GitHub generates. One line of a changelog is one item here.

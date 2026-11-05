@@ -438,7 +438,9 @@ A personal account needs this step before production.
 
 ### 2.7 F-Droid
 
-There are three routes. Do all three: they reach different people.
+There are two routes. Do both: they reach different people. IzzyOnDroid
+declined the app on 2026-11-04, because its policy refuses apps written
+largely with an LLM.
 
 1. The self-hosted repository:
    1. Run the website deploy again, now that a release with an F-Droid APK
@@ -456,11 +458,7 @@ There are three routes. Do all three: they reach different people.
 
    3. Tell people to add `https://app.kikouchou.app/fdroid/repo` in the F-Droid
       app.
-2. IzzyOnDroid, which picks the APK from each GitHub release: open an App
-   Inclusion Request at <https://codeberg.org/IzzyOnDroid/repodata/issues>.
-   IzzyOnDroid moved its requests there from GitLab. Give the repository URL
-   and the file pattern `kikouchou-*-fdroid.apk`.
-3. The f-droid.org catalogue. Wait for the first release that contains
+2. The f-droid.org catalogue. Wait for the first release that contains
    `gradleprops` in `metadata/app.kikouchou.yml`. The source of `v0.1.0` reads
    the flavor from an environment variable only, which f-droid.org cannot
    set, so that build would put Google's plugin on the classpath.
@@ -517,7 +515,7 @@ fingerprint, or wait for Apple's CDN (step 1.12).
    Write the release notes in
    `fastlane/metadata/android/<locale>/changelogs/<versionCode>.txt`, for
    `en-US` and `fr-FR`, 500 characters at most. Google Play shows them, and so
-   do F-Droid and IzzyOnDroid. The GitHub release starts with them too
+   does F-Droid. The GitHub release starts with them too
    (`scripts/release-notes.sh`). Commit and merge the change.
 2. Tag and push:
 
@@ -532,8 +530,8 @@ fingerprint, or wait for Apple's CDN (step 1.12).
 5. In App Store Connect, create the new version, pick the build, and submit
    it.
 6. Run `gh workflow run deploy.yml`, so that the self-hosted F-Droid
-   repository carries the new APK. IzzyOnDroid and f-droid.org read the new
-   tag on their own.
+   repository carries the new APK. f-droid.org reads the new tag on its
+   own.
 
 When the app is published on Play, set `PLAY_RELEASE_STATUS` to `completed`.
 The internal release then goes out without a click:

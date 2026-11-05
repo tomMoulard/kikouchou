@@ -1668,7 +1668,7 @@ e2e/
 ios/, android/       # The Capacitor shells; `public/` inside each is a copy of dist
 app-links.ts         # The website paths the store apps claim
 metadata/            # The F-Droid build recipe
-fastlane/metadata/   # Store listing text and icon, for F-Droid, IzzyOnDroid and Play
+fastlane/metadata/   # Store listing text, icon and screenshots, for F-Droid and Play
 ```
 
 For detailed convention rationale, see `CONVENTIONS.md`. For why the sync

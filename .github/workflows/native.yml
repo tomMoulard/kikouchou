@@ -13,7 +13,7 @@ name: Native apps
 #   for F-Droid and sideloading, and an IPA for the App Store. It uploads the
 #   AAB to the Play internal track and the IPA to TestFlight, and attaches all
 #   four files to a GitHub release, which is where the F-Droid repository in
-#   deploy.yml and IzzyOnDroid read the APK from. The Play upload is a job of
+#   deploy.yml reads the APK from. The Play upload is a job of
 #   its own, so a refused upload never holds the release back.
 # - A manual run does what a tag does, and publishes only when asked to.
 #
@@ -219,7 +219,7 @@ jobs:
   # Play refuses the API upload of a new app's first AAB, and can refuse later
   # ones for reasons of its own. As a step of the Android job, that refusal
   # failed the job, so the release job, which needs it, was skipped: v0.1.0
-  # shipped no APK on GitHub, and F-Droid and IzzyOnDroid had nothing to read.
+  # shipped no APK on GitHub, and the F-Droid repository had nothing to read.
   # Here a refusal fails this job alone.
   play:
     name: Google Play
