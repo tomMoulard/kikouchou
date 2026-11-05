@@ -48,9 +48,24 @@ describe('measureLayout', () => {
       header_top: 0,
       inset_top: 0,
     });
+    expect(layout).toMatchObject({ native: null });
     expect(JSON.stringify(layout)).not.toContain('Kikouchou');
     // The probe element is gone again.
     expect(document.body.children).toHaveLength(2);
+  });
+
+  it('reports what the Android shell handed the page', async () => {
+    useUserAgent(OLD_WEBVIEW);
+    document.body.innerHTML = '<header></header>';
+    document.documentElement.style.setProperty('--app-inset-top', '37.0px');
+    const native = { status_top: 37, cutout_top: 93, webview_top: 0, density: 2.225 };
+    (window as Window & { __kikouchouInsets?: unknown }).__kikouchouInsets = native;
+    const { measureLayout } = await import('../layout-probe');
+
+    expect(measureLayout(window)).toMatchObject({ app_inset_top: '37.0px', native });
+
+    document.documentElement.style.removeProperty('--app-inset-top');
+    delete (window as Window & { __kikouchouInsets?: unknown }).__kikouchouInsets;
   });
 
   it('answers null for the header when there is none', async () => {

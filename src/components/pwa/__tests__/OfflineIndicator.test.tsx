@@ -302,7 +302,7 @@ describe('OfflineIndicator', () => {
       render(<OfflineIndicator />);
 
       const statusRegion = screen.getByRole('status');
-      expect(statusRegion.className).toContain('top-[calc(3.5rem+env(safe-area-inset-top,0px))]');
+      expect(statusRegion.className).toContain('top-[calc(3.5rem+var(--app-inset-top))]');
     });
 
     /**

@@ -701,6 +701,20 @@
  * container whose last row must stay tappable, and `bottom`, for a fixed
  * overlay that has to start above the stack instead of reaching down into it.
  */
+/**
+ * What the sticky header pads its top with, and what everything placed under
+ * the header adds to its 3.5rem.
+ *
+ * `env(safe-area-inset-top)` on the website and in the iPhone app, where it is
+ * the status bar or the notch. The Android app replaces it with the status
+ * bar's own height (`MainActivity`, inline on `<html>`): there the WebView's
+ * inset is the larger of the status bar and the display cutout, and on a
+ * Fairphone 4 that came to 93px under a 37px status bar.
+ */
+:root {
+  --app-inset-top: env(safe-area-inset-top, 0px);
+}
+
 :root {
   --nav-bar-height: 4rem;
   --bottom-stack: calc(var(--nav-bar-height) + 5.5rem + env(safe-area-inset-bottom, 0px));

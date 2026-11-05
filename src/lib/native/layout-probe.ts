@@ -95,6 +95,10 @@ export function measureLayout(win: Window): Record<string, unknown> {
     html_padding_top: px(parseFloat(getComputedStyle(doc.documentElement).paddingTop) || 0),
     // A tag name and an id at most, never text.
     above_header: above ? `${above.tagName.toLowerCase()}${above.id ? `#${above.id}` : ''}` : null,
+    // What MainActivity handed the page: the status bar alone, and the raw
+    // native insets beside it.
+    app_inset_top: getComputedStyle(doc.documentElement).getPropertyValue('--app-inset-top').trim() || null,
+    native: (win as Window & { __kikouchouInsets?: unknown }).__kikouchouInsets ?? null,
     ...safeAreaInsets(doc),
   };
 }

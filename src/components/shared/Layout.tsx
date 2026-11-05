@@ -318,9 +318,9 @@ const Header = memo(function Header({
     palette = useActivePalette();
 
   return (
-    // The top inset is the status bar in a store app that draws under it
-    // (`MainActivity`); it is 0 on the website.
-    <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center gap-4 border-b bg-background px-4 pt-[env(safe-area-inset-top,0px)] md:px-6 print:hidden">
+    // `--app-inset-top` is the status bar in a store app that draws under it
+    // (`src/index.css`, `MainActivity`); it is 0 on the website.
+    <header className="sticky top-0 z-40 flex h-[calc(3.5rem+var(--app-inset-top))] items-center gap-4 border-b bg-background px-4 pt-[var(--app-inset-top)] md:px-6 print:hidden">
       <SeasonalHeaderDecor />
       {/*
         Mobile menu button: only when the bottom bar is off (see the
@@ -993,7 +993,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
         // `dvh`, not `vh`: `100vh` is the *largest* viewport height, so with
         // browser chrome showing the sidebar overflowed by exactly the chrome's
         // height and its bottom links scrolled out of reach.
-        'fixed left-0 top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-30 hidden h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px))] flex-col border-r bg-background transition-all duration-300 md:flex',
+        'fixed left-0 top-[calc(3.5rem+var(--app-inset-top))] z-30 hidden h-[calc(100dvh-3.5rem-var(--app-inset-top))] flex-col border-r bg-background transition-all duration-300 md:flex',
         // Paper gets the page, not the navigation.
         'print:hidden',
         isCollapsed ? 'w-16' : 'w-60',

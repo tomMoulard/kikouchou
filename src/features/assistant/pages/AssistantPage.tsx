@@ -841,7 +841,7 @@ function AssistantPageComponent(): ReactElement {
       className={cn(
         'container mx-auto flex min-h-0 max-w-3xl flex-col',
         /* Fits in Layout main: sticky header (h-14) + main pt-4 + main pb (pb-20 mobile, pb-4 md) */
-        'h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-1rem-5rem)] md:h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px)-1rem-1rem)]',
+        'h-[calc(100dvh-3.5rem-var(--app-inset-top)-1rem-5rem)] md:h-[calc(100dvh-3.5rem-var(--app-inset-top)-1rem-1rem)]',
       )}
     >
       <PageHeader
