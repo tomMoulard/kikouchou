@@ -452,9 +452,12 @@ describe('useTemplateRefresh, edges', () => {
     expect(updates[1]?.row).toMatchObject({ description: 'Second.' });
   });
 
-  it('logs a failed refresh with its reason', async () => {
+  it('logs a refused refresh as an error, with its reason', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { client } = stubClient(() => ({ data: null, error: { message: 'Failed to fetch' } }));
+    const { client } = stubClient(() => ({
+      data: null,
+      error: { message: 'new row violates row-level security policy' },
+    }));
     vi.mocked(getSupabaseClient).mockResolvedValue(client);
 
     mountWith({ tripId, online: true });
@@ -462,8 +465,33 @@ describe('useTemplateRefresh, edges', () => {
     await updateTrip(tripId, { description: 'Bring slippers.' });
 
     await waitFor(() =>
-      expect(error).toHaveBeenCalledWith('Failed to refresh the trip template:', 'Failed to fetch'),
+      expect(error).toHaveBeenCalledWith(
+        'Failed to refresh the trip template:',
+        'new row violates row-level security policy',
+      ),
     );
+  });
+
+  it('logs a refresh that lost the connection as a warning, not an error', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client } = stubClient(() => ({
+      data: null,
+      error: { message: 'TypeError: Failed to fetch' },
+    }));
+    vi.mocked(getSupabaseClient).mockResolvedValue(client);
+
+    mountWith({ tripId, online: true });
+    await settle();
+    await updateTrip(tripId, { description: 'Bring slippers.' });
+
+    await waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        'Failed to refresh the trip template:',
+        'TypeError: Failed to fetch',
+      ),
+    );
+    expect(error).not.toHaveBeenCalledWith('Failed to refresh the trip template:', expect.anything());
   });
 
   it('does nothing, and logs nothing, with no backend', async () => {
