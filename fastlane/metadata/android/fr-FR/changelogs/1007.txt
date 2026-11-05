@@ -1,0 +1,1 @@
+Corrige une copie écrasée de la barre du haut au-dessus de la page, sur les téléphones dont l'Android System WebView est ancien.

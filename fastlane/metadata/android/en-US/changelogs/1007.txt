@@ -1,0 +1,1 @@
+Fixed a squashed copy of the top bar above the page, on phones with an older Android System WebView.
