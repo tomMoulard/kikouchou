@@ -38,9 +38,9 @@ RepoType: git
 Repo: https://github.com/tomMoulard/kikouchou.git
 
 Builds:
-  - versionName: 0.1.5
-    versionCode: 1005
-    commit: v0.1.5
+  - versionName: 0.1.6
+    versionCode: 1006
+    commit: v0.1.6
     subdir: android/app
     sudo:
       - apt-get update
@@ -70,5 +70,5 @@ UpdateCheckMode: Tags ^v[0-9.]+$
 # The version code is computed in Gradle, which a regex cannot read, so
 # package.json states it too (android/app/build.gradle checks they agree).
 UpdateCheckData: package.json|"versionCode":\s*(\d+)|.|"version":\s*"([^"]+)"
-CurrentVersion: 0.1.5
-CurrentVersionCode: 1005
+CurrentVersion: 0.1.6
+CurrentVersionCode: 1006

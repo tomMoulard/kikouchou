@@ -1,0 +1,2 @@
+Fixed the top bar, which looked squashed on phones with an older Android System WebView.
+The top bar now stays clear of the status bar.

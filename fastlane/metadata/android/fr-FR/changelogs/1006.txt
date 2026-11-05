@@ -1,0 +1,2 @@
+La barre du haut n'est plus écrasée sur les téléphones dont l'Android System WebView est ancien.
+La barre du haut ne passe plus sous la barre d'état.
