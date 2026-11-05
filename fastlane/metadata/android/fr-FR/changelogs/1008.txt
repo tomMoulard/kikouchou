@@ -1,0 +1,1 @@
+La barre du haut est maintenant juste sous la barre d'état, sans la copie écrasée au-dessus.
