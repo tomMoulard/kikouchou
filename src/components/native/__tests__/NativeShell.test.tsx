@@ -30,6 +30,7 @@ const doubles = vi.hoisted(() => {
     reportOpened: vi.fn(),
     deliver: vi.fn(() => true),
     startLiveUpdate: vi.fn(),
+    probeLayout: vi.fn(),
   };
 });
 
@@ -63,6 +64,7 @@ vi.mock('@/lib/notifications/native-push', () => ({
 }));
 vi.mock('@/lib/notifications/opened', () => ({ reportNotificationOpened: doubles.reportOpened }));
 vi.mock('@/lib/native/live-update', () => ({ startLiveUpdate: doubles.startLiveUpdate }));
+vi.mock('@/lib/native/layout-probe', () => ({ probeLayout: doubles.probeLayout }));
 vi.mock('@/lib/supabase/auth-callback', () => ({ deliverAuthCallbackUrl: doubles.deliver }));
 
 import { render } from '@testing-library/react';

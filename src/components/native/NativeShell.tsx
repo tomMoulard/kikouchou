@@ -29,6 +29,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 
+import { probeLayout } from '@/lib/native/layout-probe';
 import { startLiveUpdate } from '@/lib/native/live-update';
 import { onNativeNotificationOpened } from '@/lib/notifications/native-push';
 import { reportNotificationOpened } from '@/lib/notifications/opened';
@@ -173,6 +174,7 @@ export const NativeShell = memo(function NativeShell(): null {
     void SplashScreen.hide().catch(() => undefined);
     void navigator.storage?.persist?.().catch(() => false);
     startLiveUpdate();
+    probeLayout();
   }, []);
 
   return null;
