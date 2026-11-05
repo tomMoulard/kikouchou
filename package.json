@@ -1,8 +1,8 @@
 {
   "name": "kikouchou",
   "private": true,
-  "version": "0.1.4",
-  "versionCode": 1004,
+  "version": "0.1.5",
+  "versionCode": 1005,
   "type": "module",
   "scripts": {
     "dev": "vite",

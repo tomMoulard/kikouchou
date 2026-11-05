@@ -1,0 +1,2 @@
+L'app s'affiche maintenant derrière les barres d'état et de navigation sur toutes les versions d'Android.
+L'app Android est plus légère à télécharger.

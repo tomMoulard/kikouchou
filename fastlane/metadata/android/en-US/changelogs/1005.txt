@@ -1,0 +1,2 @@
+The app now draws behind the status and navigation bars on every Android version.
+The Android app is smaller to download.
