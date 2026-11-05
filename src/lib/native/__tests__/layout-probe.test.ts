@@ -76,8 +76,11 @@ describe('probeLayout', () => {
     vi.restoreAllMocks();
   });
 
-  it('reports once, two seconds after the first paint, on an old Android WebView', async () => {
-    useUserAgent(OLD_WEBVIEW);
+  it.each([
+    ['an old WebView', 90],
+    ['a current WebView', 157],
+  ] as const)('reports once, two seconds after the first paint, on %s', async (_label, chrome) => {
+    useUserAgent(chrome === 90 ? OLD_WEBVIEW : NEW_WEBVIEW);
     const { probeLayout } = await import('../layout-probe');
 
     probeLayout();
@@ -89,14 +92,13 @@ describe('probeLayout', () => {
     expect(capture).toHaveBeenCalledWith(
       'layout_probed',
       expect.objectContaining({
-        first: expect.objectContaining({ chrome: 90 }),
-        settled: expect.objectContaining({ chrome: 90 }),
+        first: expect.objectContaining({ chrome }),
+        settled: expect.objectContaining({ chrome }),
       }),
     );
   });
 
   it.each([
-    ['a current WebView', NEW_WEBVIEW, 'android'],
     ['the website', OLD_WEBVIEW, 'web'],
     ['the iPhone app', 'Mozilla/5.0 (iPhone) Safari/605.1.15', 'ios'],
   ] as const)('stays silent on %s', async (_label, userAgent, target) => {

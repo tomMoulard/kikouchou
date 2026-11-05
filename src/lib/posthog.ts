@@ -1054,7 +1054,7 @@ export type AnalyticsEvent =
   | 'live_update_downloaded'
   | 'live_update_failed'
   | 'live_update_reset'
-  // TEMPORARY: the page's geometry on an old Android WebView (lib/native/layout-probe)
+  // TEMPORARY: the page's geometry in the Android app (lib/native/layout-probe)
   | 'layout_probed'
   // Preferences
   | 'language_changed'

@@ -1,17 +1,16 @@
 /**
- * @fileoverview A one-off measurement of the page's geometry in an Android
- * store app that runs on an old WebView. TEMPORARY: remove it once the stale
- * band above the header is understood.
+ * @fileoverview A one-off measurement of the page's geometry in the Android
+ * store app. TEMPORARY: remove it once the stale band above the header is
+ * understood.
  *
- * On a OnePlus 8 Pro with its factory Android System WebView (Chrome 90),
- * 0.1.5 to 0.1.7 draw a squashed, stale copy of the header in a band between
- * the status bar and the page. Neither edge-to-edge nor R8 caused it, and the
- * page renders correctly in Chrome on the same phone. This sends what the page
- * sees of its own geometry, once per launch, as `layout_probed`, so the next
- * fix is made from measurements instead of guesses.
+ * Since 0.1.5, the Android app draws a squashed, stale copy of the header in
+ * a band between the status bar and the page, on a phone whose WebView is
+ * Chrome 157. The page renders correctly in Chrome on the same phone. This
+ * sends what the page sees of its own geometry, once per launch, as
+ * `layout_probed`, so the next fix is made from measurements instead of
+ * guesses.
  *
- * Numbers only: no text, no trip data. Only for an Android store app on Chrome
- * older than 100, so no other device reports anything.
+ * Numbers only: no text, no trip data. Only in the Android store app.
  *
  * @module lib/native/layout-probe
  */
@@ -22,9 +21,6 @@ import { getAppPlatform } from '@/lib/platform';
 // ============================================================================
 // Constants
 // ============================================================================
-
-/** Below this Chrome major version, the probe runs. */
-const PROBED_BELOW_CHROME = 100;
 
 /** Sent once per launch. */
 let probed = false;
@@ -108,8 +104,8 @@ export function measureLayout(win: Window): Record<string, unknown> {
 // ============================================================================
 
 /**
- * Sends `layout_probed` once per launch, in an Android store app on an old
- * WebView, and does nothing anywhere else. Called by `NativeShell` after the
+ * Sends `layout_probed` once per launch, in the Android store app, and does
+ * nothing anywhere else. Called by `NativeShell` after the
  * first paint; it measures again two seconds later, once the window has
  * settled, and sends both.
  *
@@ -117,10 +113,6 @@ export function measureLayout(win: Window): Record<string, unknown> {
  */
 export function probeLayout(win: Window = window): void {
   if (probed || getAppPlatform() !== 'android') {
-    return;
-  }
-  const chrome = chromeMajorVersion(win.navigator.userAgent);
-  if (chrome === null || chrome >= PROBED_BELOW_CHROME) {
     return;
   }
   probed = true;
