@@ -293,7 +293,7 @@ describe('OfflineIndicator', () => {
       expect(innerBanner?.className).toContain('bg-warning-surface');
     });
 
-    it('positions below the header at top-14', () => {
+    it('positions below the header and the status bar inset', () => {
       mockUseOnlineStatus.mockReturnValue({
         isOnline: false,
         hasRecentlyChanged: false,
@@ -302,7 +302,7 @@ describe('OfflineIndicator', () => {
       render(<OfflineIndicator />);
 
       const statusRegion = screen.getByRole('status');
-      expect(statusRegion.className).toContain('top-14');
+      expect(statusRegion.className).toContain('top-[calc(3.5rem+env(safe-area-inset-top,0px))]');
     });
 
     /**

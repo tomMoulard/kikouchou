@@ -38,7 +38,7 @@ export interface OfflineIndicatorProps {
  * Features:
  * - Displays a warm amber banner below the header when offline
  * - Shows reassuring "back online" message briefly when connectivity is restored
- * - Positioned at top-14 to clear the 56px sticky header
+ * - Positioned under the 56px sticky header and the status bar inset above it
  * - Non-intrusive — does NOT block any interactive elements
  * - Smooth enter/exit animations with motion-safe prefix (NFR12)
  * - Fully accessible with ARIA live region for screen readers
@@ -111,7 +111,7 @@ export const OfflineIndicator = memo(function OfflineIndicator({
     <div
       className={cn(
         // Position below the sticky header (h-14 = 56px) to avoid overlap
-        'fixed top-14 inset-x-0 z-50 flex justify-center px-4 py-2',
+        'fixed top-[calc(3.5rem+env(safe-area-inset-top,0px))] inset-x-0 z-50 flex justify-center px-4 py-2',
         // The wrapper is full-bleed but only the centred pill is visible, so
         // without this it swallows every click along a full-width strip of the
         // page at z-50. While offline that strip sits directly over the trip

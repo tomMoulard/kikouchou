@@ -1954,7 +1954,7 @@ describe('Layout drawing', () => {
     renderLayout();
 
     const sidebar = getSidebar() as HTMLElement;
-    expect(sidebar).toHaveClass('fixed', 'left-0', 'top-14', 'z-30', 'hidden', 'h-[calc(100dvh-3.5rem)]', 'flex-col', 'border-r', 'bg-background', 'md:flex', 'print:hidden', 'w-60');
+    expect(sidebar).toHaveClass('fixed', 'left-0', 'top-[calc(3.5rem+env(safe-area-inset-top,0px))]', 'z-30', 'hidden', 'h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px))]', 'flex-col', 'border-r', 'bg-background', 'md:flex', 'print:hidden', 'w-60');
     expect(within(sidebar).getByRole('navigation', { name: 'nav.tripsNavigation' })).toHaveClass('py-2');
     expect(within(sidebar).getByRole('navigation', { name: 'nav.tripSections' })).toHaveClass('flex-1', 'overflow-y-auto', 'py-2');
     expect(within(sidebar).getByRole('navigation', { name: 'nav.settingsNavigation' })).toHaveClass('border-t', 'py-2');
@@ -1993,7 +1993,7 @@ describe('Layout drawing', () => {
     withTrip(mockTrip);
     renderLayout();
 
-    expect(screen.getByRole('banner')).toHaveClass('sticky', 'top-0', 'z-40', 'flex', 'h-14', 'items-center', 'gap-4', 'border-b', 'bg-background', 'px-4', 'md:px-6', 'print:hidden');
+    expect(screen.getByRole('banner')).toHaveClass('sticky', 'top-0', 'z-40', 'flex', 'h-[calc(3.5rem+env(safe-area-inset-top,0px))]', 'items-center', 'gap-4', 'border-b', 'bg-background', 'px-4', 'pt-[env(safe-area-inset-top,0px)]', 'md:px-6', 'print:hidden');
     const home = screen.getByRole('link', { name: /app\.name/ });
     expect(home).toHaveAttribute('href', '/trips');
     expect(home).toHaveClass('inline-flex', 'items-center', 'gap-2', 'text-lg', 'font-semibold');
