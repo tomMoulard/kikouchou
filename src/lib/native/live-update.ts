@@ -146,6 +146,9 @@ function failureReason(error: unknown): string {
   if (/network|timeout|connect|offline|host/i.test(message)) {
     return 'network';
   }
+  if (/could not be downloaded/i.test(message)) {
+    return 'download';
+  }
   return 'error';
 }
 
@@ -222,7 +225,8 @@ export async function runLiveUpdate(deps: LiveUpdateDeps): Promise<LiveUpdateOut
     await api.setNextBundle({ bundleId: manifest.bundleId });
     return 'staged';
   } catch (error) {
-    console.error('Live update failed:', error);
+    // A warning: the event below reports it, and the next launch tries again.
+    console.warn('Live update failed:', error);
     captureEvent('live_update_failed', { reason: failureReason(error) });
     return 'failed';
   }
