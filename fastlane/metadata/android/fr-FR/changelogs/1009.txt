@@ -1,0 +1,2 @@
+La page commence maintenant juste sous la barre d'état, et la copie écrasée de la barre du haut a disparu.
+L'app Android est de nouveau plus légère à télécharger.

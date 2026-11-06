@@ -1,0 +1,2 @@
+The page now starts right under the status bar, and the squashed copy of the top bar is gone.
+The Android app is smaller to download again.
