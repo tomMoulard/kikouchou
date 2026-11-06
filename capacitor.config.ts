@@ -93,12 +93,13 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SystemBars: {
-      // `index.html` asks for `viewport-fit=cover` and `src/index.css` pads the
-      // chrome with `env(safe-area-inset-*)`, which is what the website does on
-      // an iPhone. `native` makes an Android web view honour the same meta tag,
-      // and pads the view itself on a Chromium too old to report the insets.
+      // SystemBars pads the window by the status bar and the gesture bar, and
+      // the page starts below the status bar, because the Android app drops
+      // `viewport-fit=cover` from the viewport tag (`lib/native/viewport`).
+      // With it, a Fairphone 4 (Android 15, WebView 157) reported a top inset
+      // of 93px under a 36px status bar and painted stale pixels over the
+      // header. The iPhone app keeps `viewport-fit=cover` for the notch.
       insetsHandling: 'native',
-      initialViewportFitValueHint: 'cover',
     },
     SplashScreen: {
       // Hidden by the app once React has painted (`src/components/native/NativeShell.tsx`),

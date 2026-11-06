@@ -29,6 +29,7 @@ import {
 
 import { ensureSettings } from '@/lib/db';
 import { retryAfterReopen } from '@/lib/db/reopen';
+import { fitAndroidViewport } from '@/lib/native/viewport';
 import '@/lib/posthog';
 // Beside lib/posthog, and for the same reason it is imported here rather than
 // pasted into index.html: the module decides whether to load at all, so a dev
@@ -45,6 +46,11 @@ import { registerServiceWorker } from '@/lib/pwa/register';
 import { logCaughtError } from '@/lib/pwa/stale-chunk';
 import App from './App.tsx';
 import './index.css';
+
+// In the Android app, before the load event: SystemBars reads the viewport tag
+// then, and without `viewport-fit=cover` the page starts below the status bar.
+// See lib/native/viewport.
+fitAndroidViewport();
 
 /**
  * Get and validate the application root element.

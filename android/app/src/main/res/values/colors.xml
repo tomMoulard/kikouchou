@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The page's own background, `--background` in src/index.css, so the
+         strip behind the status bar and the gesture bar matches the page. -->
+    <color name="window_background">#F6F0E4</color>
+</resources>

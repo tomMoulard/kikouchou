@@ -13,6 +13,9 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Shows behind the status bar and the gesture bar, where SystemBars
+             pads the window (MainActivity): the page's own colour. -->
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 
 
