@@ -1,11 +1,8 @@
 package app.kikouchou;
 
-import android.content.pm.PackageInfo;
-import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebView;
 
-import androidx.activity.EdgeToEdge;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -17,22 +14,15 @@ import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
 
-    /**
-     * The first WebView that reports the system bars to the page as
-     * `env(safe-area-inset-*)`. Capacitor's SystemBars plugin uses the same
-     * threshold (`WEBVIEW_VERSION_WITH_SAFE_AREA_FIX`).
-     */
-    private static final int WEBVIEW_WITH_SAFE_AREA_INSETS = 140;
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Draw under the system bars before Android 15 too, where a target SDK
-        // of 35 or more forces it, but only on a WebView that hands the insets
-        // to the page. On an older one, SystemBars pads the window instead.
-        // Called before `super.onCreate`, which sets the content view.
-        if (webViewMajorVersion() >= WEBVIEW_WITH_SAFE_AREA_INSETS) {
-            EdgeToEdge.enable(this);
-        }
+        // No `EdgeToEdge.enable(this)`. 0.1.5 to 0.1.9 called it, and on a
+        // Fairphone 4 (Android 15, WebView 157) the WebView then reserved an
+        // extra 57 CSS px strip at its top, which it never repainted: a stale,
+        // squashed copy of the header sat there in every one of those
+        // versions, and 0.1.4, without the call, had none. Android 15 draws
+        // the app edge-to-edge anyway, and SystemBars pads the window by the
+        // bars (`capacitor.config.ts`, `lib/native/viewport`).
         // The app's own plugins register before the bridge starts.
         registerPlugin(ContactSearchPlugin.class);
         super.onCreate(savedInstanceState);
@@ -90,21 +80,5 @@ public class MainActivity extends BridgeActivity {
             density
         );
         webView.post(() -> webView.evaluateJavascript(script, null));
-    }
-
-    /** The installed WebView's major version, or 0 when Android cannot say. */
-    private static int webViewMajorVersion() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return 0;
-        }
-        try {
-            PackageInfo info = WebView.getCurrentWebViewPackage();
-            if (info == null || info.versionName == null) {
-                return 0;
-            }
-            return Integer.parseInt(info.versionName.split("\\.")[0]);
-        } catch (RuntimeException exception) {
-            return 0;
-        }
     }
 }
