@@ -1,0 +1,1 @@
+La barre du haut, avec son bouton de menu, est de nouveau entièrement visible sur les téléphones où le web view du système la cachait.
