@@ -707,9 +707,11 @@
  *
  * `env(safe-area-inset-top)` on the website and in the iPhone app, where it is
  * the status bar or the notch. The Android app replaces it with the status
- * bar's own height (`MainActivity`, inline on `<html>`): there the WebView's
- * inset is the larger of the status bar and the display cutout, and on a
- * Fairphone 4 that came to 93px under a 37px status bar.
+ * bar's own height (`MainActivity`, inline on `<html>`) while the page draws
+ * under the status bar, because the WebView's inset is then the larger of the
+ * status bar and the display cutout (93px under a 37px status bar on a
+ * Fairphone 4). Below the status bar it keeps `env()`, which on that phone is
+ * the 57px strip its WebView never repaints, so the header clears it.
  */
 :root {
   --app-inset-top: env(safe-area-inset-top, 0px);

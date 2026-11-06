@@ -31,7 +31,8 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * Hands the page the height of the status bar alone, as the CSS variable
-     * `--app-inset-top`, which the header pads itself with (`src/index.css`).
+     * `--app-inset-top`, which the header pads itself with (`src/index.css`),
+     * when the page draws under the status bar.
      *
      * `env(safe-area-inset-top)` is the larger of the status bar and the
      * display cutout, and on a Fairphone 4 (Android 15, WebView 157) it came
@@ -69,11 +70,19 @@ public class MainActivity extends BridgeActivity {
         int[] location = new int[2];
         webView.getLocationOnScreen(location);
         float statusTop = Math.max(0, statusBars.top - location[1]) / density;
+        // Under the status bar, the header pads itself by the status bar
+        // alone. Below it, the page keeps `env(safe-area-inset-top)`: 0 on a
+        // sound WebView, and on the Fairphone 4 the 57px strip its WebView
+        // reserves and never repaints, which the header then clears instead
+        // of sitting under it with its menu button out of sight.
+        String inset = statusTop > 0
+            ? String.format(Locale.ROOT, "document.documentElement.style.setProperty('--app-inset-top','%.1fpx');", statusTop)
+            : "document.documentElement.style.removeProperty('--app-inset-top');";
         String script = String.format(
             Locale.ROOT,
-            "document.documentElement.style.setProperty('--app-inset-top','%.1fpx');" +
+            "%s" +
             "window.__kikouchouInsets={status_top:%.1f,cutout_top:%.1f,webview_top:%.1f,density:%.3f};",
-            statusTop,
+            inset,
             statusTop,
             cutout.top / density,
             location[1] / density,
