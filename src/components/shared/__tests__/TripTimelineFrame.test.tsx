@@ -70,6 +70,19 @@ function stubMeasurements(measurements: {
 // Tests
 // ============================================================================
 
+
+/**
+ * A grid template as the CSSOM writes it back: a zero length gains its unit
+ * (`minmax(0, 1fr)` reads back as `minmax(0px, 1fr)`), in browsers and in
+ * jsdom since 31. Comparing through it asserts the same template, not the
+ * same spelling.
+ */
+function asSerialized(template: string | undefined): string {
+  const probe = document.createElement('div');
+  probe.style.gridTemplateColumns = template ?? '';
+  return probe.style.gridTemplateColumns;
+}
+
 describe('TripTimelineFrame', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -995,7 +1008,7 @@ describe('TripTimelineFrame header and layout', () => {
     const grid = container.querySelector('.grid') as HTMLElement;
     expect(last().dayGridTemplateColumns).not.toBe(before);
     expect(last().dayGridTemplateColumns).toMatch(/^repeat\(3, /);
-    expect(grid.style.gridTemplateColumns).toBe(last().dayGridTemplateColumns);
+    expect(grid.style.gridTemplateColumns).toBe(asSerialized(last().dayGridTemplateColumns));
   });
 
   it('lays the day header out on the template it hands the rows', () => {
@@ -1004,7 +1017,7 @@ describe('TripTimelineFrame header and layout', () => {
 
     const grid = container.querySelector('.grid') as HTMLElement;
     expect(grid).toHaveClass('grid', 'h-full', 'min-w-0', 'w-full');
-    expect(grid.style.gridTemplateColumns).toBe(last().dayGridTemplateColumns);
+    expect(grid.style.gridTemplateColumns).toBe(asSerialized(last().dayGridTemplateColumns));
   });
 
   it('offers no scrollbar before the surface has been measured', () => {

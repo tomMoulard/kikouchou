@@ -21,7 +21,7 @@ import 'fake-indexeddb/auto';
 // Testing Library Extensions
 // ============================================================================
 
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 
 // ============================================================================
 // Imports

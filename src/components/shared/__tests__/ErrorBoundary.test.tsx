@@ -348,8 +348,8 @@ describe('ErrorBoundary', () => {
     // has to reload. `window.location` is unforgeable and cannot be spied on,
     // and jsdom cannot navigate: it reports the attempt on its virtual console
     // instead, which is the only trace a reload leaves under test. The handle
-    // is jsdom's own; if a jsdom upgrade renames it, this fails rather than
-    // passing blind.
+    // is jsdom's own (`window._virtualConsole` until jsdom 31); if a jsdom
+    // upgrade renames it, this fails rather than passing blind.
     it('reloads the tab when the reader taps retry', async () => {
       reloadMock.mockReturnValue('cooldown');
       const { user } = render(
@@ -360,12 +360,14 @@ describe('ErrorBoundary', () => {
       );
       const virtualConsole = (
         window as unknown as {
-          readonly _virtualConsole?: {
-            on(event: 'jsdomError', listener: (error: Error) => void): void;
-            off(event: 'jsdomError', listener: (error: Error) => void): void;
+          readonly _settings?: {
+            readonly virtualConsole?: {
+              on(event: 'jsdomError', listener: (error: Error) => void): void;
+              off(event: 'jsdomError', listener: (error: Error) => void): void;
+            };
           };
         }
-      )._virtualConsole;
+      )._settings?.virtualConsole;
       expect(virtualConsole).toBeDefined();
       const navigations: string[] = [];
       const listen = (error: Error): void => {

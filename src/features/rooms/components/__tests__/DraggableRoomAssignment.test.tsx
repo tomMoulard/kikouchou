@@ -97,7 +97,7 @@ describe('DraggableRoomAssignment', () => {
       withProviders: false,
     });
 
-    expect(pill().style.transform).toBe('translate3d(12px, 4px, 0)');
+    expect(pill().style.transform).toBe('translate3d(12px, 4px, 0px)');
     expect(pill()).toHaveClass('opacity-60');
     expect(screen.getByRole('button', { name: 'Alice' })).toHaveClass('cursor-grabbing');
     expect(screen.getByRole('button', { name: 'Alice' })).not.toHaveClass('cursor-grab');

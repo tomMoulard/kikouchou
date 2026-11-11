@@ -248,7 +248,7 @@ describe('DraggableGuest', () => {
 
       const handle = screen.getByRole('button', { name: 'Marc' });
       const bar = barAround(handle);
-      expect(bar.style.transform).toBe('translate3d(12px, 4px, 0)');
+      expect(bar.style.transform).toBe('translate3d(12px, 4px, 0px)');
       expect(bar).toHaveClass('opacity-60', 'z-50');
       expect(handle).toHaveClass('cursor-grabbing');
       expect(handle).not.toHaveClass('cursor-grab');
@@ -256,7 +256,7 @@ describe('DraggableGuest', () => {
 
       render(<DraggableGuest person={person} startDate={tripDay(1)} endDate={tripDay(5)} />);
       const badge = screen.getByRole('button', { name: 'Marc' }).parentElement!;
-      expect(badge.style.transform).toBe('translate3d(12px, 4px, 0)');
+      expect(badge.style.transform).toBe('translate3d(12px, 4px, 0px)');
       expect(badge).toHaveClass('opacity-50', 'z-50');
     });
 

@@ -1,12 +1,17 @@
 /**
  * Unit tests for the ES2022 polyfills an old Android WebView needs.
  *
- * Each test removes the native built-in, evaluates the module afresh, and
- * puts the native back afterwards.
+ * Each test removes the native built-in, runs the install step, and puts the
+ * native back afterwards. It calls `installPolyfills` rather than importing
+ * the module afresh: the test runner's module loader calls both built-ins, so
+ * an import with them removed fails inside the loader, not in the code under
+ * test.
  *
  * @module lib/__tests__/polyfills.test
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { installPolyfills } from '@/lib/polyfills';
 
 // ============================================================================
 // Helpers
@@ -34,11 +39,6 @@ function restoreNatives(): void {
   });
 }
 
-async function importPolyfills(): Promise<void> {
-  vi.resetModules();
-  await import('@/lib/polyfills');
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -53,10 +53,10 @@ describe('lib/polyfills', () => {
     restoreNatives();
   });
 
-  it('defines Object.hasOwn where the browser lacks it', async () => {
+  it('defines Object.hasOwn where the browser lacks it', () => {
     expect('hasOwn' in Object).toBe(false);
 
-    await importPolyfills();
+    installPolyfills();
 
     const record: Record<string, unknown> = { own: undefined };
     expect(Object.hasOwn(record, 'own')).toBe(true);
@@ -66,16 +66,16 @@ describe('lib/polyfills', () => {
     expect(() => Object.hasOwn(null as unknown as object, 'own')).toThrow(TypeError);
   });
 
-  it('keeps Object.hasOwn off the enumerable keys of Object', async () => {
-    await importPolyfills();
+  it('keeps Object.hasOwn off the enumerable keys of Object', () => {
+    installPolyfills();
 
     expect(Object.keys(Object)).not.toContain('hasOwn');
   });
 
-  it('defines Array.prototype.at where the browser lacks it', async () => {
+  it('defines Array.prototype.at where the browser lacks it', () => {
     expect('at' in []).toBe(false);
 
-    await importPolyfills();
+    installPolyfills();
 
     const letters = ['a', 'b', 'c'];
     expect(letters.at(0)).toBe('a');
@@ -87,19 +87,18 @@ describe('lib/polyfills', () => {
     expect(Object.keys(letters)).toEqual(['0', '1', '2']);
   });
 
-  it('leaves a native built-in in place', async () => {
+  it('leaves a native built-in in place', () => {
     restoreNatives();
 
-    await importPolyfills();
+    installPolyfills();
 
     expect(Object.hasOwn).toBe(nativeHasOwn);
     expect(Array.prototype.at).toBe(nativeAt);
   });
 
-  it('logs and does not throw when a definition is refused', async () => {
+  it('logs and does not throw when a definition is refused', () => {
     const refusal = new TypeError('Cannot define property');
-    // The module loader defines properties too, so only the two polyfills
-    // are refused.
+    // Only the two polyfills are refused: nothing else may break mid-test.
     vi.spyOn(Object, 'defineProperty').mockImplementation((target, key, attributes) => {
       if (key === 'hasOwn' || key === 'at') {
         throw refusal;
@@ -108,7 +107,7 @@ describe('lib/polyfills', () => {
     });
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await expect(importPolyfills()).resolves.toBeUndefined();
+    expect(() => installPolyfills()).not.toThrow();
 
     expect(consoleError).toHaveBeenCalledWith('Failed to polyfill hasOwn:', refusal);
     expect(consoleError).toHaveBeenCalledWith('Failed to polyfill at:', refusal);

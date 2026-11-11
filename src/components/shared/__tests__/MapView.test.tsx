@@ -819,8 +819,9 @@ describe('MapView Height', () => {
   it('applies string height', () => {
     render(<MapView center={[0, 0]} height="50vh" />);
 
+    // The inline value, not the computed one: jsdom resolves vh to pixels.
     const wrapper = screen.getByRole('application');
-    expect(wrapper).toHaveStyle({ height: '50vh' });
+    expect(wrapper.style.height).toBe('50vh');
   });
 });
 

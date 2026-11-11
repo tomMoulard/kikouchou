@@ -33,11 +33,20 @@ function define(target: object, name: string, value: unknown): void {
   }
 }
 
-define(Object, 'hasOwn', function hasOwn(object: object, key: PropertyKey): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
-});
+/**
+ * Defines each missing built-in. Exported for the tests: a test that removed a
+ * native and re-imported this module ran the test runner's own module loader
+ * without it, and Vitest 5's loader calls both.
+ */
+export function installPolyfills(): void {
+  define(Object, 'hasOwn', function hasOwn(object: object, key: PropertyKey): boolean {
+    return Object.prototype.hasOwnProperty.call(object, key);
+  });
 
-define(Array.prototype, 'at', function at<T>(this: readonly T[], index: number): T | undefined {
-  const integer = Math.trunc(index) || 0;
-  return this[integer < 0 ? this.length + integer : integer];
-});
+  define(Array.prototype, 'at', function at<T>(this: readonly T[], index: number): T | undefined {
+    const integer = Math.trunc(index) || 0;
+    return this[integer < 0 ? this.length + integer : integer];
+  });
+}
+
+installPolyfills();

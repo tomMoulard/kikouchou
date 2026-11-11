@@ -7,8 +7,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { type ManifestOptions, VitePWA } from 'vite-plugin-pwa'
 
-import { appleAppSiteAssociation, assetLinks } from './app-links'
-import { HERE_MANIFEST_FILENAME, withoutStartUrl } from './src/lib/pwa/manifest-variants'
+import { appleAppSiteAssociation, assetLinks } from './app-links.ts'
+import { HERE_MANIFEST_FILENAME, withoutStartUrl } from './src/lib/pwa/manifest-variants.ts'
 
 // The app is served from the root of its own host — `app.kikouchou.app` on
 // GitHub Pages, `127.0.0.1` in dev and in the Playwright `production` project.
@@ -546,19 +546,19 @@ export default defineConfig({
     format: 'es',
   },
   build: {
-    // esbuild is Vite's default for both, and both are already on for a
-    // production build; they are named here so the intent survives a config
-    // edit and a future `--mode` that is not 'production'. Not Lightning CSS:
-    // it only reaches this repo as a transitive dependency of Tailwind, and it
-    // reads its own browser targets rather than the esbuild ones the JS is
-    // compiled against.
-    minify: 'esbuild',
+    // Both are named here so the intent survives a config edit and a future
+    // `--mode` that is not 'production'. Oxc is Vite 8's default for the JS;
+    // its esbuild path is deprecated. The CSS stays on esbuild, which is a
+    // devDependency for that reason alone, since Vite 8 no longer installs it.
+    // Not Lightning CSS: it reads its own browser targets rather than the ones
+    // the JS is compiled against.
+    minify: 'oxc',
     cssMinify: 'esbuild',
     // Emitted so PostHog Error Tracking can de-minify production stack traces.
     // The deploy workflow uploads the maps and then deletes them, so they are
     // never served from GitHub Pages — see .github/workflows/deploy.yml.
     sourcemap: true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         manualChunks,
       },
