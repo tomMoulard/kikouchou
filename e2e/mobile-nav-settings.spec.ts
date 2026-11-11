@@ -47,6 +47,18 @@ function bottomBar(page: Page) {
   return page.getByRole('navigation', { name: LABELS.mobileNav });
 }
 
+/**
+ * Picks menu mode and waits until it is saved. The radio reads its state from
+ * the settings row, so it turns checked only once the write has committed. A
+ * `page.goto` straight after the click could reload the page before that, and
+ * the next page then showed the bar (CI, workers: 1).
+ */
+async function chooseMenuMode(page: Page): Promise<void> {
+  const radio = page.getByRole('radio', { name: LABELS.menuMode });
+  await radio.click();
+  await expect(radio).toBeChecked();
+}
+
 /** Seeds one trip and returns its id. */
 async function seedOneTrip(page: Page): Promise<string> {
   const { tripId } = await seedTrip(page, {
@@ -100,7 +112,7 @@ test.describe('phone navigation preferences', () => {
 
     await page.goto('/settings');
     await waitForRoute(page);
-    await page.getByRole('radio', { name: LABELS.menuMode }).click();
+    await chooseMenuMode(page);
 
     await page.goto(`/trips/${tripId}/calendar`);
     await waitForRoute(page);
@@ -121,7 +133,7 @@ test.describe('phone navigation preferences', () => {
 
     await page.goto('/settings');
     await waitForRoute(page);
-    await page.getByRole('radio', { name: LABELS.menuMode }).click();
+    await chooseMenuMode(page);
 
     // A list with a trip on it: an empty one puts its create button in the
     // empty state rather than in a FAB.
