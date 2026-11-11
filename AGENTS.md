@@ -278,8 +278,14 @@ is shaped by cost.
   Keep that notice when you change the card.
 - **A build with no Supabase project shows no chat**, which is why the e2e
   spec runs in the `sync` project.
-- **`$ai_generation` claims no cost** for it either. The cost is real, but the
-  client does not know it; OpenRouter's activity for the project's key does.
+- **`$ai_generation` carries OpenRouter's own cost.** The server asks for
+  usage (`"usage": {"include": true}`), and OpenRouter ends the stream with
+  the tokens and the US dollars charged. `chat-stream` reads that event, and
+  the page sends it as `$ai_input_tokens`, `$ai_output_tokens` and
+  `$ai_total_cost_usd`, which PostHog adds up per trace and per session. An
+  answer that is stopped or fails before that event carries no cost, rather
+  than a false 0, so the PostHog total is a floor. OpenRouter's activity for
+  the project's key stays the bill.
 
 ### Every turn is offered the whole action catalogue
 

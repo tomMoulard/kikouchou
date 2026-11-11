@@ -10,6 +10,7 @@ import {
   KikouchouApiError,
   streamKikouchouChat,
 } from '../client';
+import type { ChatUsage } from '../../chat-stream';
 
 /** A 200 whose body arrives as the given raw pieces. */
 function streamResponse(pieces: readonly string[]): Response {
@@ -23,6 +24,10 @@ function streamResponse(pieces: readonly string[]): Response {
   return new Response(body, { status: 200 });
 }
 
+function event(payload: unknown): string {
+  return `data: ${JSON.stringify(payload)}\n\n`;
+}
+
 function delta(content: string): string {
   return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
 }
@@ -32,10 +37,12 @@ function request(
   {
     token = 'access-token',
     onChunk,
+    onUsage,
     signal = new AbortController().signal,
   }: {
     readonly token?: string | null;
     readonly onChunk?: (text: string) => void;
+    readonly onUsage?: (usage: ChatUsage) => void;
     readonly signal?: AbortSignal;
   } = {},
 ) {
@@ -46,6 +53,7 @@ function request(
     ],
     signal,
     onChunk,
+    onUsage,
     getAccessToken: async () => token,
     fetchImpl,
   });
@@ -146,6 +154,77 @@ describe('streamKikouchouChat', () => {
 
     expect(error.kind).toBe('provider');
     expect(error.message).toBe('upstream overloaded');
+  });
+
+  it('reports the tokens and the cost from the last event', async () => {
+    const onUsage = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      streamResponse([
+        delta('Done.'),
+        event({
+          choices: [{ delta: { content: '' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1200, completion_tokens: 80, total_tokens: 1280, cost: 0.00042 },
+        }),
+        'data: [DONE]\n\n',
+      ]),
+    );
+
+    const answer = await request(fetchImpl, { onUsage });
+
+    expect(answer).toBe('Done.');
+    expect(onUsage).toHaveBeenCalledExactlyOnceWith({
+      inputTokens: 1200,
+      outputTokens: 80,
+      costUsd: 0.00042,
+    });
+  });
+
+  it('adds the provider share of a BYOK answer to OpenRouter fee', async () => {
+    const onUsage = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      streamResponse([
+        delta('Done.'),
+        event({
+          choices: [],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 2,
+            cost: 0.0001,
+            is_byok: true,
+            cost_details: { upstream_inference_cost: 0.002 },
+          },
+        }),
+      ]),
+    );
+
+    await request(fetchImpl, { onUsage });
+
+    expect(onUsage.mock.calls[0]![0].costUsd).toBeCloseTo(0.0021, 10);
+  });
+
+  it('drops a usage figure that is not a finite, non-negative number', async () => {
+    const onUsage = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      streamResponse([
+        delta('Done.'),
+        event({ choices: [], usage: { prompt_tokens: -3, completion_tokens: '9', cost: null } }),
+      ]),
+    );
+
+    await request(fetchImpl, { onUsage });
+
+    expect(onUsage).toHaveBeenCalledExactlyOnceWith({});
+  });
+
+  it('reports no usage when the stream carries none', async () => {
+    const onUsage = vi.fn();
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      streamResponse([delta('Done.'), event({ choices: [], usage: null }), 'data: [DONE]\n\n']),
+    );
+
+    await request(fetchImpl, { onUsage });
+
+    expect(onUsage).not.toHaveBeenCalled();
   });
 
   it('resolves empty when the request is aborted before an answer', async () => {

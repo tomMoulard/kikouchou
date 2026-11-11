@@ -106,6 +106,10 @@ pub fn upstream_body(messages: &[Message], model: &str, max_tokens: u32) -> Valu
         "messages": messages,
         "stream": true,
         "max_tokens": max_tokens,
+        // OpenRouter then ends the stream with the tokens and the US dollars
+        // the answer cost. The client reads that event and reports it to
+        // PostHog, which is how the project sees what each conversation costs.
+        "usage": { "include": true },
     })
 }
 
@@ -137,6 +141,7 @@ mod tests {
         assert_eq!(upstream["model"], "openrouter/auto");
         assert_eq!(upstream["max_tokens"], 2048);
         assert_eq!(upstream["stream"], true);
+        assert_eq!(upstream["usage"]["include"], true);
         assert_eq!(upstream["messages"][1]["content"], "Hello");
     }
 

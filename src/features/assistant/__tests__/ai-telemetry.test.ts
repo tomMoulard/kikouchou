@@ -9,7 +9,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { redactAiMessages, redactAiOutput } from '@/features/assistant/ai-telemetry';
+import {
+  aiUsageProperties,
+  redactAiMessages,
+  redactAiOutput,
+} from '@/features/assistant/ai-telemetry';
 import type { ChatMessage } from '@/features/assistant/hooks/useAssistantChat';
 
 // ============================================================================
@@ -72,5 +76,26 @@ describe('redactAiOutput', () => {
     expect(redactAiOutput(answer)).toEqual([
       { role: 'assistant', content: `[redacted: ${answer.length} chars]` },
     ]);
+  });
+});
+
+describe('aiUsageProperties', () => {
+  it('names the tokens and the cost the way PostHog reads them', () => {
+    expect(
+      aiUsageProperties({ inputTokens: 1200, outputTokens: 80, costUsd: 0.00042 }),
+    ).toEqual({
+      $ai_input_tokens: 1200,
+      $ai_output_tokens: 80,
+      $ai_total_cost_usd: 0.00042,
+    });
+  });
+
+  it('claims no cost when the stream reported none', () => {
+    expect(aiUsageProperties(undefined)).toEqual({});
+    expect(aiUsageProperties({ inputTokens: 5 })).toEqual({ $ai_input_tokens: 5 });
+  });
+
+  it('keeps a reported cost of zero, which is a free answer and not a missing one', () => {
+    expect(aiUsageProperties({ costUsd: 0 })).toEqual({ $ai_total_cost_usd: 0 });
   });
 });

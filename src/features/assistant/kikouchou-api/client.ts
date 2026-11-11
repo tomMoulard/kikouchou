@@ -13,7 +13,7 @@
 
 import { getSupabaseClient } from '@/lib/supabase/client';
 
-import { isAbortError, readChatStream } from '../chat-stream';
+import { type ChatUsage, isAbortError, readChatStream } from '../chat-stream';
 
 // ============================================================================
 // Type Definitions
@@ -29,6 +29,8 @@ export interface KikouchouChatRequest {
   readonly messages: readonly KikouchouApiMessage[];
   readonly signal: AbortSignal;
   readonly onChunk?: (text: string) => void;
+  /** Receives what the answer cost, once the stream reports it. */
+  readonly onUsage?: (usage: ChatUsage) => void;
   /** Supplies the access token; the signed-in session's by default. */
   readonly getAccessToken?: () => Promise<string | null>;
   readonly fetchImpl?: typeof fetch;
@@ -105,6 +107,7 @@ export async function streamKikouchouChat({
   messages,
   signal,
   onChunk,
+  onUsage,
   getAccessToken = readAccessToken,
   fetchImpl = fetch,
 }: KikouchouChatRequest): Promise<string> {
@@ -143,5 +146,5 @@ export async function streamKikouchouChat({
     provider: (message) => new KikouchouApiError('provider', message),
     dropped: () =>
       new KikouchouApiError('network', 'The connection to the Kikouchou server dropped.'),
-  });
+  }, onUsage);
 }

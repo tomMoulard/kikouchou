@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import i18n from '@/lib/i18n';
 
+import { type ChatUsage } from '../chat-stream';
 import {
   KikouchouApiError,
   streamKikouchouChat,
@@ -55,10 +56,14 @@ export interface UseAssistantChatReturn {
   readonly status: AssistantStatus;
   /** Why the last answer failed, in words the user can act on. */
   readonly error: string | null;
-  /** Streams one answer to a message history. */
+  /**
+   * Streams one answer to a message history. `onUsage` receives what the
+   * answer cost, when the server reports it.
+   */
   generate: (
     messages: ChatMessage[],
     onChunk?: (chunk: string) => void,
+    onUsage?: (usage: ChatUsage) => void,
   ) => Promise<string>;
   /** Stops the answer in flight; it resolves with what already arrived. */
   interrupt: () => void;
@@ -123,6 +128,7 @@ export function useAssistantChat({
     async (
       messages: ChatMessage[],
       onChunk?: (chunk: string) => void,
+      onUsage?: (usage: ChatUsage) => void,
     ): Promise<string> => {
       const controller = new AbortController();
       abortControllerRef.current?.abort();
@@ -135,6 +141,7 @@ export function useAssistantChat({
           messages,
           signal: controller.signal,
           onChunk,
+          onUsage,
         });
       } catch (err) {
         if (!(err instanceof KikouchouApiError)) throw err;

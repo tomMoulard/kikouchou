@@ -97,7 +97,24 @@ describe('useAssistantChat', () => {
     expect(result.current.status).toBe('ready');
   });
 
-  it('says the daily limit is reached, and stays ready for tomorrow', async () => {
+  it('hands the cost of the answer to the caller', async () => {
+    const usage = `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900, completion_tokens: 40, cost: 0.0003 } })}\n\n`;
+    fetchMock.mockResolvedValue(new Response(`${delta('Done.')}${usage}data: [DONE]\n\n`));
+    const onUsage = vi.fn();
+    const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
+
+    await act(async () => {
+      await result.current.generate([{ role: 'user', content: 'Plan it' }], undefined, onUsage);
+    });
+
+    expect(onUsage).toHaveBeenCalledExactlyOnceWith({
+      inputTokens: 900,
+      outputTokens: 40,
+      costUsd: 0.0003,
+    });
+  });
+
+    it('says the daily limit is reached, and stays ready for tomorrow', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 429 }));
     const { result } = renderHook(() => useAssistantChat({ accountSignedIn: true }));
 

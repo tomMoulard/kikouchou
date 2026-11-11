@@ -64,7 +64,12 @@ import {
   useTripActions,
 } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
-import { redactAiMessages, redactAiOutput } from '../ai-telemetry';
+import {
+  aiUsageProperties,
+  redactAiMessages,
+  redactAiOutput,
+} from '../ai-telemetry';
+import type { ChatUsage } from '../chat-stream';
 import { splitReasoning } from '../reasoning';
 import { ViewShortcuts } from '../components/ViewShortcuts';
 import { StarterPrompts } from '../components/StarterPrompts';
@@ -543,6 +548,10 @@ function AssistantPageComponent(): ReactElement {
         ...trimChatHistoryForPrompt(chatHistoryRef.current),
       ];
 
+      // What the answer cost, from the stream's last event. A stopped or failed
+      // answer may never get there, and its event then carries no cost.
+      let usage: ChatUsage | undefined;
+
       try {
         const response = await generateRef.current(fullMessages, (chunk) => {
           // Split on every chunk rather than once at the end: while a reasoning
@@ -561,6 +570,8 @@ function AssistantPageComponent(): ReactElement {
                 : msg,
             ),
           );
+        }, (reported) => {
+          usage = reported;
         });
 
         // The transcript was cleared while this ran: its history is gone, so
@@ -638,9 +649,9 @@ function AssistantPageComponent(): ReactElement {
           $ai_output_choices: redactAiOutput(response),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
-          // The answer is billed to the project, which the server's own
-          // OpenRouter activity records. The client does not know the cost, so
-          // it claims none rather than a false 0.
+          // The answer is billed to the project's OpenRouter key, and the
+          // server relays OpenRouter's own figure at the end of the stream.
+          ...aiUsageProperties(usage),
         });
 
         return 'answered';
@@ -678,6 +689,7 @@ function AssistantPageComponent(): ReactElement {
           $ai_stream: true,
           $ai_is_error: true,
           $ai_error: detail,
+          ...aiUsageProperties(usage),
         });
 
         return 'failed';

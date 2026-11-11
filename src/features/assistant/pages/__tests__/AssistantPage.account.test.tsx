@@ -209,7 +209,7 @@ describe('AssistantPage and the account', () => {
     expect(mockUseAssistantChat).toHaveBeenLastCalledWith({ accountSignedIn: false });
   });
 
-  it('reports an answer under the kikouchou provider, with no made-up cost', async () => {
+  it('reports an answer under the kikouchou provider, with no made-up cost when the stream gave none', async () => {
     auth.session = { user: { is_anonymous: false } };
     mockUseAssistantChat.mockReturnValue(chat({ status: 'ready' }));
     const { user } = render(<AssistantPage />, { withProviders: false });
@@ -225,6 +225,37 @@ describe('AssistantPage and the account', () => {
     expect(generation.$ai_provider).toBe('kikouchou');
     expect(generation.$ai_model).toBe('kikouchou/assistant');
     expect(generation).not.toHaveProperty('$ai_total_cost_usd');
+  });
+
+  it('reports the cost the stream gave for the answer', async () => {
+    auth.session = { user: { is_anonymous: false } };
+    mockGenerate.mockImplementation(
+      async (
+        _messages: unknown,
+        _onChunk: unknown,
+        onUsage?: (usage: { inputTokens: number; outputTokens: number; costUsd: number }) => void,
+      ) => {
+        onUsage?.({ inputTokens: 1500, outputTokens: 60, costUsd: 0.0007 });
+        return 'Done.';
+      },
+    );
+    mockUseAssistantChat.mockReturnValue(chat({ status: 'ready' }));
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'assistant.starters.explorePlan' }),
+    );
+
+    await waitFor(() => {
+      expect(mockCapture).toHaveBeenCalledWith('$ai_generation', expect.anything());
+    });
+    const generation = mockCapture.mock.calls.find(([name]) => name === '$ai_generation')![1] as Record<string, unknown>;
+    expect(generation).toMatchObject({
+      $ai_input_tokens: 1500,
+      $ai_output_tokens: 60,
+      $ai_total_cost_usd: 0.0007,
+    });
+    expect(generation.$ai_session_id).toEqual(expect.any(String));
   });
 
   it('says the assistant is unavailable in a build with no accounts', () => {

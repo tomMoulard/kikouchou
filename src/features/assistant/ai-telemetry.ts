@@ -22,11 +22,19 @@
  * @module features/assistant/ai-telemetry
  */
 
+import type { ChatUsage } from './chat-stream';
 import type { ChatMessage } from './hooks/useAssistantChat';
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
+
+/** What an answer cost, in the property names of PostHog's LLM analytics. */
+export interface AiUsageProperties {
+  readonly $ai_input_tokens?: number;
+  readonly $ai_output_tokens?: number;
+  readonly $ai_total_cost_usd?: number;
+}
 
 /** One turn as the analytics event carries it. */
 export interface RedactedChatMessage {
@@ -82,4 +90,32 @@ export function redactAiOutput(
   response: string,
 ): readonly RedactedChatMessage[] {
   return [{ role: 'assistant', content: redactedPlaceholder(response) }];
+}
+
+/**
+ * The cost of one answer, as `$ai_generation` carries it.
+ *
+ * PostHog adds up `$ai_total_cost_usd` per trace and per session. The figure
+ * is OpenRouter's own, read from the stream, so PostHog never has to guess a
+ * price from the model name. A figure the stream did not report is left out
+ * rather than sent as 0: no cost is not the same as a free answer.
+ *
+ * @param usage - What the stream reported, or nothing when it reported none
+ * @returns The properties to spread into the event
+ */
+export function aiUsageProperties(
+  usage: ChatUsage | undefined,
+): AiUsageProperties {
+  if (usage === undefined) return {};
+  return {
+    ...(usage.inputTokens === undefined
+      ? {}
+      : { $ai_input_tokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined
+      ? {}
+      : { $ai_output_tokens: usage.outputTokens }),
+    ...(usage.costUsd === undefined
+      ? {}
+      : { $ai_total_cost_usd: usage.costUsd }),
+  };
 }
