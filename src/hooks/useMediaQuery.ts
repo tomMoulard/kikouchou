@@ -10,12 +10,19 @@
  * The reads are guarded rather than assumed. `matchMedia` is missing in a
  * server render and in some test environments, and Safari has historically
  * thrown on a query string it could not parse; either way the answer is "no
- * match", which renders the smaller layout rather than nothing at all.
+ * match", which renders the smaller layout rather than nothing at all. Both
+ * the reads and the subscription go through `lib/utils/media-query`.
  *
  * @module hooks/useMediaQuery
  */
 
 import { useEffect, useState } from 'react';
+
+import {
+  openMediaQuery,
+  readMediaQueryMatches,
+  subscribeToMediaQuery,
+} from '@/lib/utils/media-query';
 
 // ============================================================================
 // Helpers
@@ -28,14 +35,7 @@ import { useEffect, useState } from 'react';
  * @returns Whether it matches now, and `false` when it cannot be asked
  */
 function readMediaQuery(query: string): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  try {
-    return window.matchMedia(query).matches === true;
-  } catch {
-    return false;
-  }
+  return readMediaQueryMatches(openMediaQuery(query));
 }
 
 // ============================================================================
@@ -62,28 +62,18 @@ export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState<boolean>(() => readMediaQuery(query));
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-
-    let list: MediaQueryList;
-    try {
-      list = window.matchMedia(query);
-    } catch {
+    const list = openMediaQuery(query);
+    if (list === null) {
       return;
     }
 
     // The query may have changed since the state was seeded, and a resize can
     // land between the render and this effect.
-    setMatches(list.matches === true);
+    setMatches(readMediaQueryMatches(list));
 
-    const update = (event: MediaQueryListEvent): void => {
-      setMatches(event.matches);
-    };
-    list.addEventListener('change', update);
-    return () => {
-      list.removeEventListener('change', update);
-    };
+    return subscribeToMediaQuery(list, (event) => {
+      setMatches(event.matches === true);
+    });
   }, [query]);
 
   return matches;

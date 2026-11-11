@@ -11,6 +11,7 @@ import { reportGoogleAdsInstallConversion } from '@/lib/google-tag';
 import { trackMetaPixelCustomEvent } from '@/lib/meta-pixel';
 import { captureEvent } from '@/lib/posthog';
 import { STANDALONE_MEDIA_QUERY, isRunningStandalone } from '@/lib/pwa/display-mode';
+import { openMediaQuery, subscribeToMediaQuery } from '@/lib/utils/media-query';
 
 // ============================================================================
 // Type Definitions
@@ -387,7 +388,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
      * Handler for display-mode media query changes.
      * Detects when app enters standalone mode.
      */
-    function handleDisplayModeChange(event: MediaQueryListEvent): void {
+    function handleDisplayModeChange(event: Pick<MediaQueryListEvent, 'matches'>): void {
       if (isMountedRef.current && event.matches) {
         setIsInstalled(true);
       }
@@ -398,8 +399,10 @@ export function useInstallPrompt(): UseInstallPromptResult {
     window.addEventListener('appinstalled', handleAppInstalled);
 
     // Set up media query listener for standalone mode changes
-    const mediaQuery = window.matchMedia(STANDALONE_MEDIA_QUERY);
-    mediaQuery.addEventListener('change', handleDisplayModeChange);
+    const stopFollowingDisplayMode = subscribeToMediaQuery(
+      openMediaQuery(STANDALONE_MEDIA_QUERY),
+      handleDisplayModeChange,
+    );
 
     // Check if already installed via related apps API
     void checkInstalledRelatedApps().then((installed) => {
@@ -415,7 +418,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
         handleBeforeInstallPrompt,
       );
       window.removeEventListener('appinstalled', handleAppInstalled);
-      mediaQuery.removeEventListener('change', handleDisplayModeChange);
+      stopFollowingDisplayMode();
     };
     // `installIntent` never changes after the first render, so this listed
     // dependency cannot re-register the listeners; it is here because the
