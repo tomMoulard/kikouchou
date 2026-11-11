@@ -138,6 +138,42 @@ describe('ensureContactsAccess', () => {
     await expect(ensureContactsAccess()).resolves.toBe(false);
   });
 
+  // A plugin whose @Permission list reached the bridge empty resolves both
+  // calls with no data at all: Capacitor's Plugin.checkPermissions calls
+  // `resolve()` when getPermissionStates() is empty. R8 did that to the
+  // release builds (PostHog: "Cannot destructure property 'contacts'").
+  it('answers false, without throwing or reporting an error, when checkPermissions resolves nothing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    plugin.checkPermissions.mockResolvedValue(undefined);
+
+    await expect(ensureContactsAccess()).resolves.toBe(false);
+    expect(plugin.requestPermissions).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('answers false, without reporting an error, when requestPermissions resolves nothing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    plugin.checkPermissions.mockResolvedValue({ contacts: 'prompt' });
+    plugin.requestPermissions.mockResolvedValue(undefined);
+
+    await expect(ensureContactsAccess()).resolves.toBe(false);
+    expect(console.error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it.each([null, {}, { contacts: 42 }, { contacts: 'maybe' }])(
+    'answers false for a malformed permission result %j',
+    async (result) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      plugin.checkPermissions.mockResolvedValue(result);
+
+      await expect(ensureContactsAccess()).resolves.toBe(false);
+      expect(plugin.requestPermissions).not.toHaveBeenCalled();
+      expect(console.error).not.toHaveBeenCalled();
+    },
+  );
+
   it('still asks when storage is blocked', async () => {
     Reflect.deleteProperty(globalThis, 'localStorage');
     plugin.checkPermissions.mockResolvedValue({ contacts: 'prompt' });
