@@ -67,14 +67,12 @@ const VehicleDialog = memo(function VehicleDialog({
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
-  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open, as TransportDialog does. */
   useEffect(() => {
     if (open) {
       setIsDirty(false);
       setShowDiscardConfirm(false);
     }
   }, [open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const isEditMode = vehicle !== undefined;
 

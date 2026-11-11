@@ -9,7 +9,7 @@
  * @module hooks/useFormSubmission
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { reportError } from '@/lib/posthog';
 import { describeCause } from '@/lib/db/repository-error';
@@ -82,13 +82,16 @@ export function useFormSubmission<T>(
   // Prevents state updates after component unmounts
   const isMountedRef = useRef(true);
 
-  // Store latest onSubmit to avoid stale closures
+  // Store latest onSubmit to avoid stale closures, and errorKey to avoid an
+  // unstable dependency in handleSubmit. Written after commit, because a ref
+  // written during render is a render with a side effect (react-hooks/refs).
   const onSubmitRef = useRef(onSubmit);
-  onSubmitRef.current = onSubmit;
-
-  // Store errorKey in ref to avoid unstable dependency in handleSubmit
   const errorKeyRef = useRef(options?.errorKey);
-  errorKeyRef.current = options?.errorKey;
+  const errorKey = options?.errorKey;
+  useLayoutEffect(() => {
+    onSubmitRef.current = onSubmit;
+    errorKeyRef.current = errorKey;
+  });
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);

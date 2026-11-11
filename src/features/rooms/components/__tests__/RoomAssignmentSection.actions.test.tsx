@@ -1071,6 +1071,7 @@ describe('RoomAssignmentSection — the form dialog', () => {
 
     await openTheEditDialog(user);
     fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

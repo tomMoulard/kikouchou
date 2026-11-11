@@ -235,7 +235,7 @@ const DataSection = memo(function DataSection(): ReactElement {
     if (!isClearing) {
       setShowClearDialog(open);
     }
-  }, [isClearing]);
+  }, [isClearing, setShowClearDialog]);
 
   return (
     <>

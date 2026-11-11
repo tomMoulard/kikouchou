@@ -483,6 +483,7 @@ function IdentityStep({ tripId, remoteTripId, trip }: IdentityStepProps): ReactE
       return;
     }
     pendingClaimRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Runs once, guarded by pendingClaimRef: the claim answers a stored choice, not a render.
     void handleClaim(pending.personId);
   }, [available, claiming, handleClaim, tripId, user]);
 

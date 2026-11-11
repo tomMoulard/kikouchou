@@ -98,14 +98,12 @@ const PersonDialog = memo(function PersonDialog({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Reset dirty state when dialog opens (prevents stale state from previous session)
-  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
   useEffect(() => {
     if (open) {
       setIsDirty(false);
       setShowDiscardConfirm(false);
     }
   }, [open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ============================================================================
   // Derived Values

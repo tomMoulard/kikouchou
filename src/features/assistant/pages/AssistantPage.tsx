@@ -416,17 +416,20 @@ function AssistantPageComponent(): ReactElement {
 
   // Latest-value refs: a turn started minutes ago must still generate against
   // the current trip prompt and action executor, not the ones captured when it
-  // was queued.
+  // was queued. Written after commit: a ref written during render is a render
+  // with a side effect (react-hooks/refs).
   const systemPromptRef = useRef(systemPrompt);
-  systemPromptRef.current = systemPrompt;
   const buildSystemPromptRef = useRef(buildSystemPrompt);
-  buildSystemPromptRef.current = buildSystemPrompt;
   const offeredActionsRef = useRef(offeredActions);
-  offeredActionsRef.current = offeredActions;
   const generateRef = useRef(generate);
-  generateRef.current = generate;
   const executeActionsRef = useRef(executeActions);
-  executeActionsRef.current = executeActions;
+  useLayoutEffect(() => {
+    systemPromptRef.current = systemPrompt;
+    buildSystemPromptRef.current = buildSystemPrompt;
+    offeredActionsRef.current = offeredActions;
+    generateRef.current = generate;
+    executeActionsRef.current = executeActions;
+  });
 
   const [pendingDeletions, setPendingDeletions] = useState<PendingDeletions | null>(null);
 
@@ -465,7 +468,9 @@ function AssistantPageComponent(): ReactElement {
     });
   }, [pendingDeletions, t]);
   const tRef = useRef(t);
-  tRef.current = t;
+  useLayoutEffect(() => {
+    tRef.current = t;
+  });
 
   // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
   useLayoutEffect(() => {
@@ -761,6 +766,7 @@ function AssistantPageComponent(): ReactElement {
   useEffect(() => {
     if (status !== 'ready') return;
     const pending = takePendingPrompt();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Sends a prompt stored before sign-in, once: takePendingPrompt forgets it.
     if (pending !== null) handleSend(pending.text);
   }, [handleSend, status]);
 

@@ -112,14 +112,12 @@ const RideDialog = memo(function RideDialog({
 
   // Reset the guard when the dialog opens, so a discarded edit does not leave
   // the next one believing it is already dirty.
-  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
   useEffect(() => {
     if (open) {
       setIsDirty(false);
       setShowDiscardConfirm(false);
     }
   }, [open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ============================================================================
   // Derived Values

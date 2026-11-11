@@ -681,6 +681,7 @@ describe('QuickAssignmentDialog — saving', () => {
         vi.advanceTimersByTime(STALL_TIMEOUT_MS + 10);
       });
       fireEvent.pointerDown(document.body);
+      fireEvent.click(document.body);
       await waitFor(() => {
         expect(onOpenChangeAgain).toHaveBeenCalledWith(false);
       });
@@ -719,6 +720,7 @@ describe('QuickAssignmentDialog — saving', () => {
 
     onOpenChange.mockClear();
     fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });

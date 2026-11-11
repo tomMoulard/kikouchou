@@ -104,7 +104,6 @@ const ExpenseDialog = memo(function ExpenseDialog({
   );
 
   // Reset dirty state when the dialog opens (prevents stale state carrying over)
-  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
   useEffect(() => {
     if (open) {
       setIsDirty(false);
@@ -112,7 +111,6 @@ const ExpenseDialog = memo(function ExpenseDialog({
       setShowDeleteConfirm(false);
     }
   }, [open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const isEditMode = expense !== undefined;
 

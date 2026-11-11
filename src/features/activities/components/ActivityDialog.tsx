@@ -87,14 +87,12 @@ const ActivityDialog = memo(function ActivityDialog({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Reset dirty state when the dialog opens (prevents stale state carrying over)
-  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
   useEffect(() => {
     if (open) {
       setIsDirty(false);
       setShowDiscardConfirm(false);
     }
   }, [open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const isEditMode = Boolean(activityId);
 
