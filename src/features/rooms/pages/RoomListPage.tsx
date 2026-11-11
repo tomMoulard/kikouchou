@@ -846,7 +846,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    dragAnnouncements = useMemo(
     () =>
       createRoomDragAnnouncements({
-        t,
+        t: (key, options) => t(key, options ?? {}),
         rooms: roomsWithOccupancy.map(({ room, availableSpots }) => ({
           id: room.id,
           name: room.name,

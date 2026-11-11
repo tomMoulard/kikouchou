@@ -54,7 +54,7 @@ bunx supabase start           # Postgres + auth + realtime + studio on :54321-54
 bunx supabase stop            # Ten containers; stop them when you are done
 bunx supabase test db         # pgTAP — RLS and the SQL functions
 bunx supabase db reset        # Reapply every migration to a clean database
-bunx supabase db push         # Apply pending migrations to the LINKED project
+bunx supabase db push --remote # Apply pending migrations to the LINKED project (CLI 3: bare `db push` is local)
 bun run db:types              # Regenerate src/lib/supabase/database.types.ts
 
 # Type check

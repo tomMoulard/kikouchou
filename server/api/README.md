@@ -106,7 +106,7 @@ replace the quota and OpenRouter.
 behind Traefik on `api.kikouchou.app`. Before the first deploy:
 
 1. Add a DNS record for `api.kikouchou.app` that points at the server.
-2. Apply the migration (`bunx supabase db push`), which creates the counter
+2. Apply the migration (`bunx supabase db push --remote`), which creates the counter
    table and the quota function.
 3. Set `OPENROUTER_API_KEY` in the shell or the `.env` beside the compose file.
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are the ones share-preview

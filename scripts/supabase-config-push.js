@@ -6,7 +6,7 @@
  * Usage:
  *   bun run db:config-push          # or: node scripts/supabase-config-push.js
  *
- * Any flags are passed through to the CLI (`--project-ref`, `--debug`, …).
+ * Any flags are passed through to the CLI (`--remote=<ref>`, `--debug`, …).
  *
  * ## Why this exists
  *

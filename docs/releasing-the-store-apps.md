@@ -40,13 +40,13 @@ Run these commands from the repository root, on `main`.
 1. Apply the migration:
 
    ```bash
-   bunx supabase db push
+   bunx supabase db push --remote
    ```
 
 2. Make sure that the function exists. The result must be `delete_my_account`:
 
    ```bash
-   bunx supabase db query --linked "select proname from pg_proc where proname = 'delete_my_account'"
+   bunx supabase db query --remote "select proname from pg_proc where proname = 'delete_my_account'"
    ```
 
 3. Push the new sign-in return address, `app.kikouchou://auth/callback`.

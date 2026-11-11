@@ -291,7 +291,10 @@ export const NavBarSettings = memo(function NavBarSettings(): ReactElement {
         })),
       [t],
     ),
-    announcements = useMemo(() => buildOrderAnnouncements(t, order), [order, t]);
+    announcements = useMemo(
+      () => buildOrderAnnouncements((key, fallback, options) => t(key, fallback, options ?? {}), order),
+      [order, t],
+    );
 
   return (
     <Card>

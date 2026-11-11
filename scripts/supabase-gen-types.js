@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * `supabase gen types typescript --linked`, with its own docblock preserved and
+ * `supabase gen types typescript --remote` (the linked project), with its own docblock preserved and
  * its failures made audible.
  *
  * Usage:
@@ -70,7 +70,7 @@ function readDocblock(source) {
 
 const result = spawnSync(
   'supabase',
-  ['gen', 'types', 'typescript', '--linked', ...process.argv.slice(2)],
+  ['gen', 'types', 'typescript', '--remote', ...process.argv.slice(2)],
   { cwd: ROOT, encoding: 'utf8' },
 );
 
@@ -93,7 +93,7 @@ if (result.status !== 0 || !stdout.includes(GENERATED_MARKER)) {
   console.error(
     '\nIf this is "Cannot find project ref", the CLI is not linked to a project:\n' +
       '  bunx supabase link --project-ref <ref>    # `supabase projects list` shows it\n' +
-      '\nNote that --linked reads the *deployed* schema, so a migration that has not\n' +
+      '\nNote that --remote reads the *deployed* schema, so a migration that has not\n' +
       'been pushed will not appear here however many times this is run.',
   );
   process.exit(1);

@@ -600,7 +600,7 @@ const TripForm = memo(function TripForm({
   );
 
   const sizeSummaryLine = useMemo(
-    () => formatTripSizeSummary(sizeSummary, t),
+    () => formatTripSizeSummary(sizeSummary, (key, options) => t(key, options ?? {})),
     [sizeSummary, t],
   );
 
