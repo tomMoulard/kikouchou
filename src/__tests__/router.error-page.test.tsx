@@ -26,10 +26,18 @@ vi.mock('@/lib/posthog', () => ({
   default: { capture: vi.fn(), captureException: vi.fn() },
 }));
 
+// Only the reload is faked; `isModuleLoadError` stays real.
+vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/pwa/stale-chunk')>()),
+  tryReloadForStaleChunk: vi.fn(() => 'reloaded' as const),
+}));
+
 import { reportError } from '@/lib/posthog';
+import { resetStaleChunkReloadForTests, tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 import { appRoutes } from '../router';
 
 const mockedReportError = vi.mocked(reportError);
+const mockedReloadForStaleChunk = vi.mocked(tryReloadForStaleChunk);
 
 // ============================================================================
 // Helpers
@@ -79,6 +87,8 @@ const reload = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetStaleChunkReloadForTests();
+  mockedReloadForStaleChunk.mockReturnValue('reloaded');
   // jsdom implements neither, and the page calls both.
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -148,6 +158,37 @@ describe('the route error page', () => {
       expect.anything(),
       expect.objectContaining({ route_status: 503 }),
     );
+    consoleError.mockRestore();
+  });
+
+  /**
+   * A lazy piece of the layout with no boundary of its own (the trip glance
+   * panel, for one) throws to this page. It used to report the stale chunk
+   * and leave the user on the error screen, where every other catch of the
+   * same failure reloads the tab first.
+   */
+  it('reloads the tab for a stale chunk, and reports nothing when it goes ahead', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderErrorPage(new TypeError('Importing a module script failed.'));
+
+    expect(mockedReloadForStaleChunk).toHaveBeenCalledTimes(1);
+    expect(mockedReportError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('reports a stale chunk the reload did not cure, with the reason', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockedReloadForStaleChunk.mockReturnValue('cooldown');
+
+    renderErrorPage(new TypeError('Importing a module script failed.'));
+
+    expect(mockedReportError).toHaveBeenCalledWith(expect.any(TypeError), {
+      source: 'RouteErrorPage',
+      route_status: undefined,
+      stale_chunk: true,
+      reload_declined: 'cooldown',
+    });
     consoleError.mockRestore();
   });
 

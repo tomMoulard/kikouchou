@@ -5,7 +5,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { PendingInviteDialog } from '../PendingInviteDialog';
@@ -76,7 +76,10 @@ describe('PendingInviteDialog', () => {
     render(<PendingInviteDialog />);
 
     expect(await screen.findByRole('dialog', { name: 'Lake house' })).toBeInTheDocument();
-    expect(vi.mocked(forgetPendingInvite)).toHaveBeenCalledTimes(1);
+    // Forgotten once the dialog has arrived, a render after it shows.
+    await waitFor(() => {
+      expect(vi.mocked(forgetPendingInvite)).toHaveBeenCalledTimes(1);
+    });
     expect(vi.mocked(captureEvent)).toHaveBeenCalledWith('trip_invite_resumed');
   });
 

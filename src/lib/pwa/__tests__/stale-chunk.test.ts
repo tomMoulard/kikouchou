@@ -19,8 +19,20 @@ import {
   logCaughtError,
   reloadForStaleChunk,
   resetStaleChunkReloadForTests,
+  staleChunkReportContext,
   tryReloadForStaleChunk,
 } from '@/lib/pwa/stale-chunk';
+
+// ============================================================================
+// Test doubles
+// ============================================================================
+
+/** Whether the code under test runs as a store app. */
+const platform = vi.hoisted(() => ({ native: false }));
+vi.mock('@/lib/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/platform')>()),
+  isNativeApp: () => platform.native,
+}));
 
 // ============================================================================
 // Test Helpers
@@ -291,6 +303,124 @@ describe('tryReloadForStaleChunk', () => {
       }),
     ).toBe('reloaded');
     expect(reload).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * A reload with no network and no service worker to answer it does not land
+ * on a newer build: it lands on the browser's own offline page, and costs the
+ * user the app they had on screen. It is also not a fault anybody can fix, so
+ * nothing about it is reported either.
+ */
+describe('tryReloadForStaleChunk while offline', () => {
+  it('says offline, and neither reloads nor records, with no worker to answer', () => {
+    const entries = new Map<string, string>(),
+      reload = vi.fn();
+
+    expect(
+      tryReloadForStaleChunk({
+        storage: fakeStorage(entries),
+        now: () => 1_000,
+        reload,
+        isOnline: () => false,
+        isControlled: () => false,
+      }),
+    ).toBe('offline');
+    expect(reload).not.toHaveBeenCalled();
+    expect(entries.has(STALE_CHUNK_RELOAD_KEY)).toBe(false);
+  });
+
+  // The worker answers the reload from its precache, which holds the build
+  // it installed: that is the cure, network or not.
+  it('still reloads offline when a service worker controls the page', () => {
+    const reload = vi.fn();
+
+    expect(
+      tryReloadForStaleChunk({
+        storage: fakeStorage(),
+        now: () => 1_000,
+        reload,
+        isOnline: () => false,
+        isControlled: () => true,
+      }),
+    ).toBe('reloaded');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // The store apps register no worker: their files are on the device, so a
+  // reload there needs no network either, and can roll a bad bundle back.
+  it('still reloads offline in a store app', () => {
+    platform.native = true;
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false),
+      reload = vi.fn();
+    try {
+      expect(tryReloadForStaleChunk({ storage: fakeStorage(), now: () => 1_000, reload })).toBe(
+        'reloaded',
+      );
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      platform.native = false;
+      onLine.mockRestore();
+    }
+  });
+});
+
+/**
+ * The 2026-11-09 session (iOS Chrome, build 63f465aa): one reload had already
+ * run, the chunk still would not load, and the same failure was filed three
+ * times in two seconds: by `AuthContext`, by a route's boundary, and as an
+ * unhandled error from the pet's lazy chunk. One failure is one report.
+ */
+describe('staleChunkReportContext', () => {
+  const SAFARI = 'Importing a module script failed.';
+
+  it('reports nothing for a reload that went ahead', () => {
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'reloaded')).toBeNull();
+  });
+
+  it('reports nothing for a failure that is only the network being down', () => {
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'offline')).toBeNull();
+  });
+
+  it('reports a reload that did not cure the tab, with the reason', () => {
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'cooldown')).toEqual({
+      stale_chunk: true,
+      reload_declined: 'cooldown',
+    });
+  });
+
+  it('reports the same failure once per document', () => {
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'cooldown')).not.toBeNull();
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'cooldown')).toBeNull();
+  });
+
+  // Safari names no chunk, so the reason is what tells a broken deploy from a
+  // browser that cannot hold the guard: neither may hide the other.
+  it('still reports the same wording held back for another reason', () => {
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'no_storage')).not.toBeNull();
+    expect(staleChunkReportContext(new TypeError(SAFARI), 'cooldown')).not.toBeNull();
+  });
+
+  // A controlled page reloads offline; a chunk its precache lacks then fails
+  // again as `cooldown`, which is the network, not a broken deploy.
+  it('reports nothing while the browser says it is offline', () => {
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      expect(staleChunkReportContext(new TypeError(SAFARI), 'cooldown')).toBeNull();
+    } finally {
+      onLine.mockRestore();
+    }
+  });
+
+  // Chrome names the chunk, so two chunks are two failures worth knowing.
+  it('still reports a different chunk', () => {
+    const chunk = (name: string): TypeError =>
+      new TypeError(
+        `Failed to fetch dynamically imported module: https://app.kikouchou.app/assets/${name}.js`,
+      );
+
+    expect(staleChunkReportContext(chunk('SignInPage-F004ZNhA'), 'cooldown')).not.toBeNull();
+    expect(staleChunkReportContext(chunk('vendor-supabase-uUMQlnk1'), 'cooldown')).not.toBeNull();
   });
 });
 

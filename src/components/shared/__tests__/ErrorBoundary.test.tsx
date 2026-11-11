@@ -20,7 +20,7 @@ import type { ReactElement } from 'react';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { reportError } from '@/lib/posthog';
-import { tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import { resetStaleChunkReloadForTests, tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 
 // The helper's own decisions — the once-per-tab guard, the storage failures —
 // are covered in `src/lib/pwa/__tests__/stale-chunk.test.ts`. What matters here
@@ -44,6 +44,12 @@ const reportMock = vi.mocked(reportError);
 /** The message Chrome throws when a deploy has removed the chunk. */
 const STALE_CHUNK_MESSAGE =
   'Failed to fetch dynamically imported module: https://app.kikouchou.app/assets/TripEditPage-CfPSMXkw.js';
+
+// A stale chunk is reported once per document, and that memory is module
+// state: no test may inherit the report of the test before it.
+beforeEach(() => {
+  resetStaleChunkReloadForTests();
+});
 
 // ============================================================================
 // Test Helpers
@@ -249,6 +255,41 @@ describe('ErrorBoundary', () => {
         });
       }
     );
+
+    // No network and no worker to answer a reload: nothing to cure, and
+    // nothing anybody could fix.
+    it('reports nothing when the chunk failed because the device is offline', () => {
+      reloadMock.mockReturnValue('offline');
+
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reportMock).not.toHaveBeenCalled();
+    });
+
+    // The 2026-11-09 session: one chunk that one reload did not cure reached
+    // several catches in the same document, and each filed it again.
+    it('reports a stale chunk once, however many boundaries catch it', () => {
+      reloadMock.mockReturnValue('cooldown');
+
+      render(
+        <>
+          <ErrorBoundary>
+            <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+          </ErrorBoundary>
+        </>,
+        { withProviders: false }
+      );
+
+      expect(reportMock).toHaveBeenCalledTimes(1);
+    });
 
     it('reports an ordinary error without the stale chunk flag', () => {
       render(

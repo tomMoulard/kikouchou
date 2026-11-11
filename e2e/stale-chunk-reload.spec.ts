@@ -35,6 +35,9 @@ const CREATE_PAGE_CHUNK = /TripCreatePage[^/]*\.(tsx|js)(\?|$)/;
 /** Where `reloadForStaleChunk` records its once-per-tab guard. */
 const RELOAD_GUARD_KEY = 'kikouchou:stale-chunk-reload';
 
+/** The pet's overlay, a lazy chunk that `App` mounts beside the router. */
+const PET_OVERLAY_CHUNK = /PetOverlay[^/]*\.(tsx|js)(\?|$)/;
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -71,5 +74,37 @@ test.describe('a lazy page chunk the origin no longer serves', () => {
       RELOAD_GUARD_KEY,
     );
     expect(guard).not.toBeNull();
+  });
+
+  /**
+   * The 2026-11-09 session: a first open (pet on) on iOS Chrome, where the
+   * pet's chunk failed after one reload had already run. The overlay sat in a
+   * `Suspense` with no boundary, outside the router, so the failure was
+   * uncaught and React unmounted the whole app.
+   *
+   * Every request for the chunk is refused here, so the reload cannot cure it:
+   * the first failure reloads, the second finds the guard and gives up on the
+   * pet alone.
+   */
+  test('a pet chunk that never loads costs the pet, not the app', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('kikouchou-pet', JSON.stringify({ enabled: true }));
+    });
+    let refused = 0;
+    await page.route(PET_OVERLAY_CHUNK, async (route) => {
+      refused += 1;
+      await route.abort('failed');
+    });
+
+    await page.goto('/trips');
+    await waitForRoute(page);
+
+    await expect.poll(() => refused).toBeGreaterThanOrEqual(2);
+    // Past the reload: the second document has asked for the chunk too.
+    await waitForRoute(page);
+    await expect(
+      page.getByRole('heading', { name: /my trips|mes voyages|mes séjours/i, level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByTestId('pet')).toHaveCount(0);
   });
 });

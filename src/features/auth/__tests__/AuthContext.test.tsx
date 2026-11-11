@@ -24,7 +24,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import { resetStaleChunkReloadForTests, tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 import { reportError } from '@/lib/posthog';
 
 // ============================================================================
@@ -241,6 +241,9 @@ function installMemoryLocalStorage(): void {
 
 beforeEach(() => {
   installMemoryLocalStorage();
+  // A stale chunk is reported once per document, and that memory is module
+  // state: no test may inherit the report of the test before it.
+  resetStaleChunkReloadForTests();
   mockedGetClient.mockReset();
   mockedIsConfigured.mockReset();
   mockedCapturedCode.mockReset();
@@ -756,14 +759,14 @@ describe('AuthProvider — state', () => {
   it('survives the client chunk failing to load', async () => {
     mockedIsConfigured.mockReturnValue(true);
     mockedGetClient.mockRejectedValue(new Error('chunk load failed'));
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     // Offline on a cold launch, or a stale service worker. Sign-in is
     // unavailable; nothing else about the app is affected.
     await waitFor(() => {
-      expect(consoleError).toHaveBeenCalled();
+      expect(consoleWarn).toHaveBeenCalled();
     });
     expect(result.current.session).toBeNull();
 
@@ -776,7 +779,50 @@ describe('AuthProvider — state', () => {
       expect(result.current.isResolved).toBe(true);
     });
 
+    consoleWarn.mockRestore();
+  });
+
+  // `capture_console_errors` files a console.error as an unhandled exception,
+  // so a console.error beside the report was the same failure filed twice: on
+  // 2026-11-09 the unhandled twin arrived 1 ms before the report.
+  it('files a client that will not load once, and logs it as a warning', async () => {
+    mockedIsConfigured.mockReturnValue(true);
+    mockedGetClient.mockRejectedValue(new TypeError('Importing a module script failed.'));
+    mockedReloadForStaleChunk.mockReturnValueOnce('cooldown');
+    mockedReportError.mockClear();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isResolved).toBe(true);
+    });
+    expect(mockedReportError).toHaveBeenCalledTimes(1);
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalled();
+
     consoleError.mockRestore();
+    consoleWarn.mockRestore();
+  });
+
+  // No network and no worker: a reload would land on the browser's offline
+  // page, and the failure is not a fault anybody can fix.
+  it('reports nothing when the client chunk failed because the device is offline', async () => {
+    mockedIsConfigured.mockReturnValue(true);
+    mockedGetClient.mockRejectedValue(new TypeError('Importing a module script failed.'));
+    mockedReloadForStaleChunk.mockReturnValueOnce('offline');
+    mockedReportError.mockClear();
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isResolved).toBe(true);
+    });
+    expect(mockedReportError).not.toHaveBeenCalled();
+
+    consoleWarn.mockRestore();
   });
 
   /**

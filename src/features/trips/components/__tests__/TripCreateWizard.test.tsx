@@ -75,7 +75,16 @@ vi.mock('@/features/sharing/utils/pending-invite', () => ({
 }));
 
 const confetti = vi.fn();
-vi.mock('canvas-confetti', () => ({ default: (...args: unknown[]) => confetti(...args) }));
+/** When set, reading the module's export fails the way a chunk that will not load does. */
+const confettiImport = vi.hoisted(() => ({ fails: false }));
+vi.mock('canvas-confetti', () => ({
+  get default(): (...args: unknown[]) => unknown {
+    if (confettiImport.fails) {
+      throw new TypeError('Importing a module script failed.');
+    }
+    return (...args: unknown[]) => confetti(...args);
+  },
+}));
 
 vi.mock('../../lib/create-trip-with-details', () => ({ createTripWithDetails: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn() }));
@@ -180,6 +189,7 @@ function pendingCreation(): { finish: () => Promise<void> } {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  confettiImport.fails = false;
   mockedCreate.mockResolvedValue(outcome());
 });
 
@@ -708,6 +718,25 @@ describe('TripCreateWizard invite screen', () => {
       await vi.dynamicImportSettled();
     });
     expect(confetti).toHaveBeenCalledTimes(1);
+  });
+
+  // A decoration: its chunk failing to arrive was an unhandled rejection,
+  // which PostHog files as an error, over an invite screen that worked.
+  it('lets the confetti go quietly when its chunk will not load', async () => {
+    confettiImport.fails = true;
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+
+    await waitFor(() => {
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[wizard] confetti did not load:',
+        expect.any(TypeError),
+      );
+    });
+    expect(confetti).not.toHaveBeenCalled();
+    consoleWarn.mockRestore();
   });
 
   describe('and the motion preference', () => {
