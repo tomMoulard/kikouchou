@@ -828,8 +828,17 @@ A photo in the document would be replayed by every member on every start.
   may execute). Unpublishing hides them with the rest of the template.
 - **Every photo is resized before it is stored** (`preparePhoto`: 1600 px,
   WebP or JPEG, under the bucket's 2 MiB cap), which also drops the EXIF GPS.
-- **The sample trip's photos are SVG drawings.** The bucket refuses SVG, and
-  the upload sweep skips it, so they never leave the device.
+- **The sample trip's photos are six public-domain pictures**, one for the
+  trip and one for each room (`utils/sample-photos/`, listed with their
+  sources in `CREDITS.md`). They are build assets, not part of the script.
+  The seed writes the sample with no photo, so the first paint never waits
+  for a download. `main.tsx` then calls `attachSamplePhotos()`, which fetches
+  the pictures and puts each on its row, found by `SAMPLE_ROOM_PHOTOS` and
+  the room's `order`. A picture that did not load is left out, and a photo
+  the user chose in the meantime stays. Keep every one CC0 or public domain. The sample
+  is never uploaded, but a room copied out of it into a shared trip takes its
+  photo along, and that photo goes to the bucket. A device seeded before
+  2026-11 holds SVG drawings instead, which the upload sweep still skips.
 - **The assistant reads that a photo exists and cannot set one.** No action
   carries an image.
 

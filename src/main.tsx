@@ -23,6 +23,7 @@ import { createRoot } from 'react-dom/client';
 
 import { storePetEnabled } from '@/features/pet/lib/pet-preferences';
 import {
+  attachSamplePhotos,
   seedSampleTripOnce,
   shouldOfferSampleTrip,
 } from '@/features/trips/utils/seed-sample-trip';
@@ -119,6 +120,11 @@ async function initializeApp(): Promise<void> {
             .then((outcome) => {
               if (outcome === 'seeded') {
                 storePetEnabled(true);
+                // Not awaited: the pictures are a download, and the first
+                // paint does not wait for one.
+                void attachSamplePhotos().catch((error: unknown) => {
+                  console.warn('Failed to attach the sample trip photos:', error);
+                });
               }
             })
             .catch((error: unknown) => {

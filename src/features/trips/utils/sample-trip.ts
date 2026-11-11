@@ -28,10 +28,8 @@
 import { addDays } from 'date-fns';
 
 import { toAllDayActivityInstant } from '@/features/activities/utils/activity-utils';
-import { SAMPLE_PHOTOS, samplePhotoBlob } from '@/features/trips/utils/sample-trip-photos';
+import type { SamplePhotoSubject } from '@/features/trips/utils/sample-trip-photos';
 
-import type { PhotoRow } from '@/lib/db/database';
-import { createPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
   createActivityId,
   createExpenseId,
@@ -82,8 +80,6 @@ export interface SampleTripRows {
   readonly transports: readonly Transport[];
   readonly activities: readonly Activity[];
   readonly expenses: readonly Expense[];
-  /** The bytes of the photos the trip and its rooms name. */
-  readonly photos: readonly PhotoRow[];
   readonly meals: readonly Meal[];
   readonly shoppingItems: readonly ShoppingItem[];
 }
@@ -118,10 +114,10 @@ interface SampleTripCopy {
     readonly station: string;
     readonly airport: string;
     readonly paris: string;
-    readonly lyon: string;
-    readonly valence: string;
-    readonly apt: string;
-    readonly gordes: string;
+    readonly toulouse: string;
+    readonly agen: string;
+    readonly market: string;
+    readonly village: string;
     readonly lake: string;
     readonly restaurant: string;
     readonly house: string;
@@ -144,7 +140,7 @@ interface SampleTripCopy {
   };
   readonly activities: {
     readonly market: { readonly title: string; readonly notes: string };
-    readonly lavender: { readonly title: string; readonly notes: string };
+    readonly garden: { readonly title: string; readonly notes: string };
     readonly lake: { readonly title: string; readonly notes: string };
     readonly hike: { readonly title: string; readonly notes: string };
     readonly village: { readonly title: string; readonly notes: string };
@@ -172,7 +168,7 @@ interface SampleTripCopy {
     readonly arrival: string;
     readonly lake: string;
     readonly barbecue: string;
-    readonly bastide: string;
+    readonly restaurant: string;
   };
   readonly shopping: {
     readonly bread: { readonly name: string; readonly quantity: string };
@@ -189,20 +185,36 @@ interface SampleTripCopy {
 /** Days from today to the first day of the sample trip. */
 export const SAMPLE_TRIP_LEAD_DAYS = 14;
 
+/**
+ * The picture of each sample room, by the room's `order`. The pictures are
+ * attached after the seed (`attachSamplePhotos`), which finds the rooms again
+ * by this.
+ */
+export const SAMPLE_ROOM_PHOTOS: readonly SamplePhotoSubject[] = [
+  'master',
+  'twin',
+  'bunk',
+  'sofa',
+  'tent',
+];
+
+/** The picture on the sample trip itself. */
+export const SAMPLE_TRIP_PHOTO: SamplePhotoSubject = 'house';
+
 /** Nights in the sample trip; the last day is the check-out day. */
 export const SAMPLE_TRIP_NIGHTS = 5;
 
 const COORDINATES = {
-  house: { lat: 43.9116, lon: 5.2003 },
-  station: { lat: 43.9216, lon: 4.7861 },
-  airport: { lat: 43.4393, lon: 5.2214 },
-  paris: { lat: 48.8443, lon: 2.3744 },
-  lyon: { lat: 45.7606, lon: 4.8594 },
-  valence: { lat: 44.9913, lon: 4.9786 },
-  apt: { lat: 43.8764, lon: 5.3964 },
-  gordes: { lat: 43.9114, lon: 5.2006 },
-  lake: { lat: 43.9789, lon: 5.0558 },
-  restaurant: { lat: 43.8995, lon: 5.2366 },
+  house: { lat: 44.2075, lon: -1.2905 },
+  station: { lat: 44.0347, lon: -0.9117 },
+  airport: { lat: 44.8283, lon: -0.7156 },
+  paris: { lat: 48.8412, lon: 2.3206 },
+  toulouse: { lat: 43.6047, lon: 1.4442 },
+  agen: { lat: 44.2079, lon: 0.6208 },
+  market: { lat: 44.2139, lon: -1.2927 },
+  village: { lat: 44.2136, lon: -1.2935 },
+  lake: { lat: 44.223, lon: -1.208 },
+  restaurant: { lat: 44.211, lon: -1.294 },
 } as const;
 
 const COLORS = {
@@ -224,18 +236,18 @@ const PHONES = {
 
 const COPY: Readonly<Record<Language, SampleTripCopy>> = {
   en: {
-    tripName: 'Sample trip: summer in Provence',
-    tripLocation: 'Mas des Oliviers, Gordes',
+    tripName: 'Sample trip: summer by the ocean',
+    tripLocation: 'Villa des Dunes, Mimizan-Plage',
     tripDescription:
       'This is a sample trip. It shows what Kikouchou can do, so look around, change anything, or delete it from the trip settings.\n\n' +
-      '**The house**: the key box is by the blue gate, code 2468. Wi-Fi: `MasOliviers`, password on the fridge.\n\n' +
+      '**The house**: the key box is by the blue gate, code 2468. Wi-Fi: `VillaDesDunes`, password on the fridge.\n\n' +
       '**Bring**: towels, a swimsuit, and something for the barbecue.',
     rooms: {
-      master: { name: 'Main bedroom', description: 'Double bed, view on the olive trees.' },
+      master: { name: 'Main bedroom', description: 'Double bed, view on the dune.' },
       twin: { name: 'Twin room', description: 'Two single beds, next to the bathroom.' },
       bunk: { name: 'Bunk room', description: 'Bunk bed and a small bed for the kids.' },
       sofa: { name: 'Living room sofa bed', description: 'Opens into a double. First up makes the coffee.' },
-      tent: { name: 'Tent in the garden', description: 'Under the fig tree. Bring a sleeping bag.' },
+      tent: { name: 'Tent in the garden', description: 'Under the pines. Bring a sleeping bag.' },
     },
     persons: {
       camille: 'Camille',
@@ -252,16 +264,16 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       nora: 'Allergic to nuts.',
     },
     places: {
-      station: 'Avignon TGV station',
-      airport: 'Marseille Provence airport',
-      paris: 'Paris Gare de Lyon',
-      lyon: 'Lyon',
-      valence: 'Valence TGV station',
-      apt: 'Apt market square',
-      gordes: 'Gordes village',
-      lake: 'Lac de l’Isle-sur-la-Sorgue',
-      restaurant: 'La Bastide, Goult',
-      house: 'Mas des Oliviers',
+      station: 'Morcenx station',
+      airport: 'Bordeaux Mérignac airport',
+      paris: 'Paris Montparnasse',
+      toulouse: 'Toulouse',
+      agen: 'Agen station',
+      market: 'Mimizan-Plage market',
+      village: 'Mimizan-Plage',
+      lake: 'Lac d’Aureilhan',
+      restaurant: 'La Table des Dunes, Mimizan-Plage',
+      house: 'Villa des Dunes',
     },
     vehicles: {
       estate: {
@@ -277,34 +289,34 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
     },
     rides: {
       stationPickup: 'Meet at the station exit, by the taxi rank.',
-      airportPickup: 'Arrivals hall, terminal 1.',
+      airportPickup: 'Arrivals hall, hall A.',
       stationDropoff: 'Leave at 9:15 to be early for the train.',
-      carpool: 'Coffee stop in Valence to collect Hugo.',
+      carpool: 'Coffee stop in Agen to collect Hugo.',
     },
     transports: {
-      samAlexArrival: 'Change in Lille.',
+      samAlexArrival: 'Change in Bordeaux.',
       julesArrival: 'One checked bag.',
       martinsArrival: 'Stopping for lunch on the way.',
-      hugoArrival: 'Spends the week before with his grandmother in Valence.',
+      hugoArrival: 'Spends the week before with his grandmother in Agen.',
     },
     activities: {
-      market: { title: 'Saturday market in Apt', notes: 'Bring baskets. We buy for two dinners.' },
-      lavender: { title: 'Lavender garden visit', notes: 'Best before the midday heat.' },
+      market: { title: 'Market in Mimizan-Plage', notes: 'Bring baskets. We buy for two dinners.' },
+      garden: { title: 'Walk in the Promenade Fleurie gardens', notes: 'Best before the midday heat.' },
       lake: { title: 'Day at the lake', notes: 'Picnic and swimming. Sunscreen!' },
-      hike: { title: 'Hike in the ochre trail', notes: 'Wear old shoes: the ochre stains.' },
-      village: { title: 'Walk around Gordes', notes: 'Ice cream on the square after.' },
+      hike: { title: 'Hike on the dune trail', notes: 'Take a hat: the dune has no shade.' },
+      village: { title: 'Sunset on the beach', notes: 'Ice cream on the seafront after.' },
       petanque: { title: 'Pétanque tournament', notes: 'Teams of two, losers do the dishes.' },
       cooking: { title: 'Ratatouille workshop', notes: 'Hugo is the chef’s assistant.' },
-      dinner: { title: 'Dinner at La Bastide', notes: 'Table booked for 8.' },
+      dinner: { title: 'Dinner at La Table des Dunes', notes: 'Table booked for 8.' },
       cinema: { title: 'Open-air cinema', notes: 'Bring cushions and a blanket.' },
       cleanup: { title: 'Pack up and clean the house', notes: 'Check-out at noon.' },
     },
     expenses: {
       rent: { title: 'House rental', description: 'Five nights, split by the nights each guest stays.' },
       groceries: { title: 'First grocery run', description: 'Two trolleys, wine included.' },
-      dinner: { title: 'Dinner at La Bastide', description: 'Each paid for what they ordered.' },
-      fuel: { title: 'Fuel and tolls', description: 'Lyon to Gordes and back.' },
-      tickets: { title: 'Lavender garden tickets', description: 'Child ticket at half price.' },
+      dinner: { title: 'Dinner at La Table des Dunes', description: 'Each paid for what they ordered.' },
+      fuel: { title: 'Fuel and tolls', description: 'Toulouse to Mimizan and back.' },
+      tickets: { title: 'Canoe rental at the lake', description: 'Half price for the child.' },
       firewood: { title: 'Firewood and charcoal', description: 'For the barbecue.' },
       cleaning: { title: 'Cleaning supplies', description: 'The house had none left.' },
       deposit: { title: 'Deposit returned', description: 'The owner gave the deposit back to Camille.' },
@@ -317,7 +329,7 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       arrival: 'Pasta with pesto, green salad',
       lake: 'Sandwiches, peaches, a big bottle of water each',
       barbecue: 'Barbecue, grilled vegetables for Nora',
-      bastide: 'La Bastide, table for 8 at 20:00',
+      restaurant: 'La Table des Dunes, table for 8 at 20:00',
     },
     shopping: {
       bread: { name: 'Baguettes', quantity: '4' },
@@ -327,18 +339,18 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
     },
   },
   fr: {
-    tripName: 'Voyage exemple : l’été en Provence',
-    tripLocation: 'Mas des Oliviers, Gordes',
+    tripName: 'Voyage exemple : l’été à l’océan',
+    tripLocation: 'Villa des Dunes, Mimizan-Plage',
     tripDescription:
       'Ceci est un voyage exemple. Il montre ce que Kikouchou sait faire : explorez, modifiez ce que vous voulez, ou supprimez-le depuis les paramètres du voyage.\n\n' +
-      '**La maison** : la boîte à clés est près du portail bleu, code 2468. Wi-Fi : `MasOliviers`, le mot de passe est sur le frigo.\n\n' +
+      '**La maison** : la boîte à clés est près du portail bleu, code 2468. Wi-Fi : `VillaDesDunes`, le mot de passe est sur le frigo.\n\n' +
       '**À apporter** : serviettes, maillot de bain, et de quoi faire un barbecue.',
     rooms: {
-      master: { name: 'Chambre principale', description: 'Lit double, vue sur les oliviers.' },
+      master: { name: 'Chambre principale', description: 'Lit double, vue sur la dune.' },
       twin: { name: 'Chambre à deux lits', description: 'Deux lits simples, à côté de la salle de bain.' },
       bunk: { name: 'Chambre des enfants', description: 'Lits superposés et un petit lit.' },
       sofa: { name: 'Canapé-lit du salon', description: 'Se déplie en lit double. Le premier levé fait le café.' },
-      tent: { name: 'Tente dans le jardin', description: 'Sous le figuier. Prévoir un sac de couchage.' },
+      tent: { name: 'Tente dans le jardin', description: 'Sous les pins. Prévoir un sac de couchage.' },
     },
     persons: {
       camille: 'Camille',
@@ -355,16 +367,16 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       nora: 'Allergique aux fruits à coque.',
     },
     places: {
-      station: 'Gare d’Avignon TGV',
-      airport: 'Aéroport Marseille Provence',
-      paris: 'Paris Gare de Lyon',
-      lyon: 'Lyon',
-      valence: 'Gare de Valence TGV',
-      apt: 'Place du marché, Apt',
-      gordes: 'Village de Gordes',
-      lake: 'Lac de l’Isle-sur-la-Sorgue',
-      restaurant: 'La Bastide, Goult',
-      house: 'Mas des Oliviers',
+      station: 'Gare de Morcenx',
+      airport: 'Aéroport de Bordeaux-Mérignac',
+      paris: 'Paris Montparnasse',
+      toulouse: 'Toulouse',
+      agen: 'Gare d’Agen',
+      market: 'Marché de Mimizan-Plage',
+      village: 'Mimizan-Plage',
+      lake: 'Lac d’Aureilhan',
+      restaurant: 'La Table des Dunes, Mimizan-Plage',
+      house: 'Villa des Dunes',
     },
     vehicles: {
       estate: {
@@ -380,34 +392,34 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
     },
     rides: {
       stationPickup: 'Rendez-vous à la sortie de la gare, près des taxis.',
-      airportPickup: 'Hall des arrivées, terminal 1.',
+      airportPickup: 'Hall des arrivées, hall A.',
       stationDropoff: 'Départ à 9 h 15 pour être en avance au train.',
-      carpool: 'Pause café à Valence pour récupérer Hugo.',
+      carpool: 'Pause café à Agen pour récupérer Hugo.',
     },
     transports: {
-      samAlexArrival: 'Correspondance à Lille.',
+      samAlexArrival: 'Correspondance à Bordeaux.',
       julesArrival: 'Un bagage en soute.',
       martinsArrival: 'Pause déjeuner en route.',
-      hugoArrival: 'Passe la semaine d’avant chez sa grand-mère à Valence.',
+      hugoArrival: 'Passe la semaine d’avant chez sa grand-mère à Agen.',
     },
     activities: {
-      market: { title: 'Marché du samedi à Apt', notes: 'Prendre les paniers. On achète pour deux dîners.' },
-      lavender: { title: 'Visite du jardin de lavande', notes: 'Mieux avant la chaleur de midi.' },
+      market: { title: 'Marché de Mimizan-Plage', notes: 'Prendre les paniers. On achète pour deux dîners.' },
+      garden: { title: 'Balade à la Promenade Fleurie', notes: 'Mieux avant la chaleur de midi.' },
       lake: { title: 'Journée au lac', notes: 'Pique-nique et baignade. Crème solaire !' },
-      hike: { title: 'Randonnée au sentier des ocres', notes: 'Vieilles chaussures : l’ocre tache.' },
-      village: { title: 'Balade dans Gordes', notes: 'Glace sur la place ensuite.' },
+      hike: { title: 'Randonnée sur le sentier des dunes', notes: 'Prendre un chapeau : la dune n’a pas d’ombre.' },
+      village: { title: 'Coucher de soleil sur la plage', notes: 'Glace sur le front de mer ensuite.' },
       petanque: { title: 'Tournoi de pétanque', notes: 'Équipes de deux, les perdants font la vaisselle.' },
       cooking: { title: 'Atelier ratatouille', notes: 'Hugo est le commis du chef.' },
-      dinner: { title: 'Dîner à La Bastide', notes: 'Table réservée pour 8.' },
+      dinner: { title: 'Dîner à La Table des Dunes', notes: 'Table réservée pour 8.' },
       cinema: { title: 'Cinéma en plein air', notes: 'Prendre des coussins et un plaid.' },
       cleanup: { title: 'Rangement et ménage', notes: 'Départ de la maison à midi.' },
     },
     expenses: {
       rent: { title: 'Location de la maison', description: 'Cinq nuits, partagées selon les nuits de chacun.' },
       groceries: { title: 'Premières courses', description: 'Deux caddies, le vin compris.' },
-      dinner: { title: 'Dîner à La Bastide', description: 'Chacun a payé ce qu’il a commandé.' },
-      fuel: { title: 'Carburant et péages', description: 'Lyon-Gordes aller-retour.' },
-      tickets: { title: 'Billets du jardin de lavande', description: 'Billet enfant à moitié prix.' },
+      dinner: { title: 'Dîner à La Table des Dunes', description: 'Chacun a payé ce qu’il a commandé.' },
+      fuel: { title: 'Carburant et péages', description: 'Toulouse-Mimizan aller-retour.' },
+      tickets: { title: 'Location de canoës au lac', description: 'Demi-tarif pour l’enfant.' },
       firewood: { title: 'Bois et charbon', description: 'Pour le barbecue.' },
       cleaning: { title: 'Produits ménagers', description: 'La maison n’en avait plus.' },
       deposit: { title: 'Caution rendue', description: 'Le propriétaire a rendu la caution à Camille.' },
@@ -420,7 +432,7 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
       arrival: 'Pâtes au pesto, salade verte',
       lake: 'Sandwichs, pêches, une grande bouteille d’eau chacun',
       barbecue: 'Barbecue, légumes grillés pour Nora',
-      bastide: 'La Bastide, table pour 8 à 20 h',
+      restaurant: 'La Table des Dunes, table pour 8 à 20 h',
     },
     shopping: {
       bread: { name: 'Baguettes', quantity: '4' },
@@ -477,13 +489,6 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
   const key = (index: number): ISODateString => toLocalISODateString(day(index));
   const lastDay = SAMPLE_TRIP_NIGHTS;
 
-  // ---- Photos -------------------------------------------------------------
-  const photoIds = {
-    house: createPhotoId(),
-    master: createPhotoId(),
-    tent: createPhotoId(),
-  } as const;
-
   // ---- Trip ---------------------------------------------------------------
   const trip: Trip = {
     id: createTripId(),
@@ -495,22 +500,10 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     startDate: key(0),
     endDate: key(lastDay),
     currency: 'EUR',
-    photoId: photoIds.house,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
   const tripId = trip.id;
-
-  // Never pending: the sample is never uploaded.
-  const photos: PhotoRow[] = (Object.keys(photoIds) as (keyof typeof photoIds)[]).map(
-    (subject) => ({
-      tripId,
-      id: photoIds[subject],
-      blob: samplePhotoBlob(SAMPLE_PHOTOS[subject]),
-      pending: 0,
-      createdAt: timestamp,
-    }),
-  );
 
   // ---- Guests -------------------------------------------------------------
   const ids = {
@@ -599,12 +592,13 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     tent: createRoomId(),
   } as const;
 
+  // The order is also what names each room's picture: SAMPLE_ROOM_PHOTOS.
   const rooms: Room[] = [
-    { id: roomIds.master, tripId, order: 0, capacity: 2, icon: 'bed-double', photoId: photoIds.master, ...copy.rooms.master },
+    { id: roomIds.master, tripId, order: 0, capacity: 2, icon: 'bed-double', ...copy.rooms.master },
     { id: roomIds.twin, tripId, order: 1, capacity: 2, icon: 'bed-twin', ...copy.rooms.twin },
     { id: roomIds.bunk, tripId, order: 2, capacity: 3, icon: 'bunk-bed', ...copy.rooms.bunk },
     { id: roomIds.sofa, tripId, order: 3, capacity: 2, icon: 'sofa', ...copy.rooms.sofa },
-    { id: roomIds.tent, tripId, order: 4, capacity: 2, icon: 'tent', photoId: photoIds.tent, ...copy.rooms.tent },
+    { id: roomIds.tent, tripId, order: 4, capacity: 2, icon: 'tent', ...copy.rooms.tent },
   ];
 
   // ---- Room assignments: endDate is the check-out day ---------------------
@@ -707,7 +701,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       notes: copy.rides.stationDropoff,
     },
     {
-      // The Martins drive down from Lyon and collect Hugo on the way: a
+      // The Martins drive over from Toulouse and collect Hugo on the way: a
       // carpool, whose place is where the car sets off and whose stops are
       // the passengers' own legs.
       id: rideIds.carpool,
@@ -715,8 +709,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       direction: 'pickup',
       kind: 'carpool',
       meetDatetime: at(day(0), 12, 30),
-      location: copy.places.lyon,
-      coordinates: COORDINATES.lyon,
+      location: copy.places.toulouse,
+      coordinates: COORDINATES.toulouse,
       driverId: ids.martins,
       vehicleId: vehicleIds.minivan,
       notes: copy.rides.carpool,
@@ -775,8 +769,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       datetime: at(day(0), 17, 0),
       location: copy.places.house,
       coordinates: COORDINATES.house,
-      startLocation: copy.places.lyon,
-      startCoordinates: COORDINATES.lyon,
+      startLocation: copy.places.toulouse,
+      startCoordinates: COORDINATES.toulouse,
       transportMode: 'car',
       rideId: rideIds.carpool,
       needsPickup: false,
@@ -788,8 +782,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       personId: ids.hugo,
       type: 'arrival',
       datetime: at(day(0), 14, 0),
-      location: copy.places.valence,
-      coordinates: COORDINATES.valence,
+      location: copy.places.agen,
+      coordinates: COORDINATES.agen,
       transportMode: 'car',
       rideId: rideIds.carpool,
       needsPickup: true,
@@ -815,8 +809,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       personId: ids.martins,
       type: 'departure',
       datetime: at(day(lastDay - 1), 16, 0),
-      location: copy.places.lyon,
-      coordinates: COORDINATES.lyon,
+      location: copy.places.toulouse,
+      coordinates: COORDINATES.toulouse,
       startLocation: copy.places.house,
       startCoordinates: COORDINATES.house,
       transportMode: 'car',
@@ -854,8 +848,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       personId: ids.jules,
       type: 'departure',
       datetime: at(day(lastDay), 15, 0),
-      location: copy.places.gordes,
-      coordinates: COORDINATES.gordes,
+      location: copy.places.village,
+      coordinates: COORDINATES.village,
       transportMode: 'bus',
       transportNumber: '15',
       needsPickup: false,
@@ -875,19 +869,19 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       category: 'market',
       startDatetime: at(day(1), 9, 0),
       endDatetime: at(day(1), 11, 30),
-      location: copy.places.apt,
-      coordinates: COORDINATES.apt,
+      location: copy.places.market,
+      coordinates: COORDINATES.market,
       organizerId: ids.camille,
       participantIds: [ids.camille, ids.nora, ids.samAlex],
     }),
     activity({
-      title: copy.activities.lavender.title,
-      notes: copy.activities.lavender.notes,
+      title: copy.activities.garden.title,
+      notes: copy.activities.garden.notes,
       category: 'horticulture',
       startDatetime: at(day(1), 15, 0),
       endDatetime: at(day(1), 17, 0),
-      location: copy.places.gordes,
-      coordinates: COORDINATES.gordes,
+      location: copy.places.lake,
+      coordinates: COORDINATES.lake,
       organizerId: ids.martins,
       participantIds: [ids.martins, ids.hugo, ids.nora],
       maxParticipants: 6,
@@ -917,8 +911,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       notes: copy.activities.village.notes,
       category: 'visit',
       startDatetime: at(day(3), 17, 0),
-      location: copy.places.gordes,
-      coordinates: COORDINATES.gordes,
+      location: copy.places.village,
+      coordinates: COORDINATES.village,
       participantIds: [ids.nora, ids.jules],
     }),
     activity({
@@ -960,8 +954,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       notes: copy.activities.cinema.notes,
       category: 'culture',
       startDatetime: at(day(2), 21, 30),
-      location: copy.places.gordes,
-      coordinates: COORDINATES.gordes,
+      location: copy.places.village,
+      coordinates: COORDINATES.village,
       participantIds: [ids.camille, ids.nora],
     }),
     activity({
@@ -1141,7 +1135,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       slot: 'dinner',
       kind: 'restaurant',
       organizerIds: [ids.camille],
-      menu: copy.meals.bastide,
+      menu: copy.meals.restaurant,
     },
   ];
 
@@ -1191,7 +1185,6 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
     transports,
     activities,
     expenses,
-    photos,
     meals,
     shoppingItems,
   };

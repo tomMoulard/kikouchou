@@ -19,9 +19,18 @@
  * @module features/trips/utils/seed-sample-trip
  */
 
-import { buildSampleTrip } from '@/features/trips/utils/sample-trip';
+import {
+  SAMPLE_ROOM_PHOTOS,
+  SAMPLE_TRIP_PHOTO,
+  buildSampleTrip,
+} from '@/features/trips/utils/sample-trip';
+import {
+  loadSamplePhotos,
+  type SamplePhotoBlobs,
+} from '@/features/trips/utils/sample-trip-photos';
 
 import { db } from '@/lib/db/database';
+import { createPhotoId, putPhoto } from '@/lib/db/repositories/photo-repository';
 
 import { DEFAULT_SETTINGS, type Language } from '@/types';
 
@@ -108,7 +117,6 @@ export async function seedSampleTripOnce(
       db.transports,
       db.activities,
       db.expenses,
-      db.photos,
       db.meals,
       db.shoppingItems,
     ],
@@ -136,7 +144,6 @@ export async function seedSampleTripOnce(
       await db.transports.bulkAdd([...rows.transports]);
       await db.activities.bulkAdd([...rows.activities]);
       await db.expenses.bulkAdd([...rows.expenses]);
-      await db.photos.bulkAdd([...rows.photos]);
       await db.meals.bulkAdd([...rows.meals]);
       await db.shoppingItems.bulkAdd([...rows.shoppingItems]);
       await db.settings.add({
@@ -149,4 +156,60 @@ export async function seedSampleTripOnce(
       return 'seeded';
     },
   );
+}
+
+/**
+ * Puts the sample's pictures on the sample trip and its rooms.
+ *
+ * Runs after the seed and after the first paint, never inside either: the
+ * pictures are fetched, and a first open must not wait for a download. The
+ * cards show their placeholder until the rows change under them.
+ *
+ * Call it once, right after the seed answered `seeded`. It writes only where
+ * there is no photo, so a photo the user chose in the meantime stays, and it
+ * does nothing when the sample is already gone.
+ *
+ * @param loadPhotos - Fetches the pictures; a parameter so a test can pass its own
+ * @returns How many pictures were attached
+ */
+export async function attachSamplePhotos(
+  loadPhotos: () => Promise<SamplePhotoBlobs> = loadSamplePhotos,
+): Promise<number> {
+  const tripId = (await db.settings.get(SETTINGS_ID))?.sampleTripId;
+  if (tripId === undefined) {
+    return 0;
+  }
+  // Fetched before the transaction: IndexedDB commits one that waits on
+  // anything but its own requests.
+  const blobs = await loadPhotos();
+
+  return db.transaction('rw', [db.trips, db.rooms, db.photos], async () => {
+    const trip = await db.trips.get(tripId);
+    if (!trip) {
+      return 0;
+    }
+    let attached = 0;
+
+    const cover = blobs[SAMPLE_TRIP_PHOTO];
+    if (cover !== undefined && trip.photoId === undefined) {
+      const photoId = createPhotoId();
+      // Not pending: the sample is never uploaded.
+      await putPhoto(tripId, photoId, cover, false);
+      await db.trips.update(tripId, { photoId });
+      attached += 1;
+    }
+
+    for (const room of await db.rooms.where('tripId').equals(tripId).toArray()) {
+      const subject = SAMPLE_ROOM_PHOTOS[room.order];
+      const blob = subject === undefined ? undefined : blobs[subject];
+      if (blob === undefined || room.photoId !== undefined) {
+        continue;
+      }
+      const photoId = createPhotoId();
+      await putPhoto(tripId, photoId, blob, false);
+      await db.rooms.update(room.id, { photoId });
+      attached += 1;
+    }
+    return attached;
+  });
 }

@@ -3,13 +3,15 @@
  *
  * @module features/trips/utils/__tests__/seed-sample-trip.test
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   SAMPLE_TRIP_FORCE_STORAGE_KEY,
+  attachSamplePhotos,
   seedSampleTripOnce,
   shouldOfferSampleTrip,
 } from '../seed-sample-trip';
+import { SAMPLE_PHOTO_SUBJECTS, type SamplePhotoBlobs } from '../sample-trip-photos';
 
 import { db } from '@/lib/db/database';
 import { createTrip, ensureSettings, getSettings } from '@/lib/db';
@@ -23,9 +25,93 @@ function storageWith(value: string | null): Pick<Storage, 'getItem'> {
   return { getItem: (key) => (key === SAMPLE_TRIP_FORCE_STORAGE_KEY ? value : null) };
 }
 
+/** Every picture, each with its subject as its bytes. */
+function everyPhoto(): SamplePhotoBlobs {
+  return Object.fromEntries(
+    SAMPLE_PHOTO_SUBJECTS.map((subject) => [subject, new Blob([subject], { type: 'image/webp' })]),
+  );
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
+
+describe('attachSamplePhotos', () => {
+  it('gives the sample trip and every room its own picture', async () => {
+    await seedSampleTripOnce('en');
+    const photos = everyPhoto();
+    // fake-indexeddb hands a stored Blob back as an empty object, so the
+    // bytes are read on their way in.
+    const put = vi.spyOn(db.photos, 'put');
+
+    await expect(attachSamplePhotos(async () => photos)).resolves.toBe(6);
+    const written = put.mock.calls.map(([row]) => row);
+    put.mockRestore();
+
+    const trip = (await db.trips.toArray())[0]!;
+    const rooms = await db.rooms.where('tripId').equals(trip.id).sortBy('order');
+    const stored = await db.photos.toArray();
+    const blobOf = (photoId: string | undefined) =>
+      written.find((photo) => photo.id === photoId && photo.tripId === trip.id)?.blob;
+
+    expect(stored).toHaveLength(6);
+    // The sample is never uploaded, so nothing waits to be.
+    expect(stored.every((photo) => photo.pending === 0)).toBe(true);
+    expect(blobOf(trip.photoId)).toBe(photos.house);
+    expect(rooms.map((room) => [room.icon, blobOf(room.photoId)])).toEqual([
+      ['bed-double', photos.master],
+      ['bed-twin', photos.twin],
+      ['bunk-bed', photos.bunk],
+      ['sofa', photos.sofa],
+      ['tent', photos.tent],
+    ]);
+  });
+
+  it('attaches the pictures that loaded and leaves the other rows without one', async () => {
+    await seedSampleTripOnce('en');
+    const { tent } = everyPhoto();
+
+    await expect(attachSamplePhotos(async () => ({ tent: tent! }))).resolves.toBe(1);
+
+    const trip = (await db.trips.toArray())[0]!;
+    const rooms = await db.rooms.where('tripId').equals(trip.id).toArray();
+
+    expect(trip.photoId).toBeUndefined();
+    expect(rooms.filter((room) => room.photoId !== undefined).map((room) => room.icon)).toEqual([
+      'tent',
+    ]);
+    expect(await db.photos.count()).toBe(1);
+  });
+
+  it('keeps a photo the user chose in the meantime', async () => {
+    await seedSampleTripOnce('en');
+    const trip = (await db.trips.toArray())[0]!;
+    await db.trips.update(trip.id, { photoId: 'photoCHOSEN01' as never });
+
+    await expect(attachSamplePhotos(async () => everyPhoto())).resolves.toBe(5);
+    expect((await db.trips.get(trip.id))?.photoId).toBe('photoCHOSEN01');
+  });
+
+  it('writes nothing when the sample was deleted while the pictures loaded', async () => {
+    await seedSampleTripOnce('en');
+
+    const attached = attachSamplePhotos(async () => {
+      await db.trips.clear();
+      return everyPhoto();
+    });
+
+    await expect(attached).resolves.toBe(0);
+    expect(await db.photos.count()).toBe(0);
+  });
+
+  it('does not fetch anything on a device with no sample trip', async () => {
+    await ensureSettings();
+    const loadPhotos = vi.fn(async () => everyPhoto());
+
+    await expect(attachSamplePhotos(loadPhotos)).resolves.toBe(0);
+    expect(loadPhotos).not.toHaveBeenCalled();
+  });
+});
 
 describe('seedSampleTripOnce', () => {
   it('writes the whole sample on a first open, in the given language', async () => {

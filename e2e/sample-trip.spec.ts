@@ -83,7 +83,7 @@ test.describe('Sample trip', () => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/trips$/);
     await waitForRoute(page);
-    await expect(tripList(page).getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Sample trip: summer by the ocean')).toBeVisible();
     await expect(page.getByTestId('pet')).toBeVisible();
   });
 
@@ -143,7 +143,7 @@ test.describe('Sample trip', () => {
     await waitForRoute(page);
     const tripId = await sampleTripId(page);
 
-    await tripList(page).getByRole('button', { name: /^Sample trip: summer in Provence,/ }).click();
+    await tripList(page).getByRole('button', { name: /^Sample trip: summer by the ocean,/ }).click();
     await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/calendar$`));
 
     expect(await waitForCapturedProperties(page, 'sample_trip_viewed')).toEqual({
@@ -166,7 +166,7 @@ test.describe('Sample trip', () => {
     await page.reload();
     await waitForRoute(page);
 
-    await expect(tripList(page).getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Sample trip: summer by the ocean')).toBeVisible();
     await expect(page.getByTestId('pet')).toHaveCount(0);
   });
 
@@ -193,20 +193,52 @@ test.describe('Sample trip', () => {
     await expect(page.getByText('House rental').first()).toBeVisible();
   });
 
+  test('the sample trip and each of its rooms show a picture', async ({ page }) => {
+    await firstOpenIn(page, 'en');
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/trips$/);
+    await waitForRoute(page);
+
+    // The pictures are fetched after the first paint, so each one is waited
+    // for. `naturalWidth` is what tells a decoded picture from a broken one.
+    const decoded = (image: Locator) =>
+      expect
+        .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth), {
+          timeout: 15_000,
+        })
+        .toBeGreaterThan(0);
+
+    const cover = tripList(page).locator('img[src^="blob:"]').first();
+    await expect(cover).toBeVisible({ timeout: 15_000 });
+    await decoded(cover);
+
+    const tripId = await sampleTripId(page);
+    await page.goto(`/trips/${tripId}/rooms`);
+    await waitForRoute(page);
+    // The page opens on the timeline; the pictures are on the cards.
+    await page.getByText('Cards', { exact: true }).click();
+    const pictures = roomCards(page).locator('img[src^="blob:"]');
+    await expect(pictures).toHaveCount(5, { timeout: 15_000 });
+    for (const picture of await pictures.all()) {
+      await picture.scrollIntoViewIfNeeded();
+      await decoded(picture);
+    }
+  });
+
   test('the sample follows the language of the first open', async ({ page }) => {
     await firstOpenIn(page, 'fr');
 
     await page.goto('/trips');
     await waitForRoute(page);
 
-    await expect(tripList(page).getByText('Voyage exemple : l’été en Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Voyage exemple : l’été à l’océan')).toBeVisible();
   });
 
   test('the sample is seeded once, and stays deleted', async ({ page }) => {
     await firstOpenIn(page, 'en');
     await page.goto('/trips');
     await waitForRoute(page);
-    await expect(tripList(page).getByText('Sample trip: summer in Provence')).toBeVisible();
+    await expect(tripList(page).getByText('Sample trip: summer by the ocean')).toBeVisible();
 
     // Delete it the way the database sees it, then open the app again.
     const tripId = await sampleTripId(page);
@@ -231,6 +263,6 @@ test.describe('Sample trip', () => {
     await page.reload();
     await waitForRoute(page);
 
-    await expect(page.getByText('Sample trip: summer in Provence')).toHaveCount(0);
+    await expect(page.getByText('Sample trip: summer by the ocean')).toHaveCount(0);
   });
 });

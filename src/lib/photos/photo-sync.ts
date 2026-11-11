@@ -65,9 +65,11 @@ export async function uploadPendingPhotos(
     if (!trip?.remoteTripId || trip.viewerToken !== undefined) {
       continue;
     }
-    // The sample's drawings are SVG, which the bucket refuses. Rooms copied
-    // from the sample carry them, so they are skipped here rather than sent
-    // to be refused on every pass.
+    // Until 2026-11 the sample's photos were SVG drawings, which the bucket
+    // refuses. A device seeded then still holds them, and rooms copied from
+    // its sample carry them, so they are skipped here rather than sent to be
+    // refused on every pass. The sample's photos are WebP now, all public
+    // domain, and a copied room's photo is uploaded like any other.
     if (!UPLOADABLE_TYPES.has(row.blob.type)) {
       continue;
     }

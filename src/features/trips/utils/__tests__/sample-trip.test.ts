@@ -11,11 +11,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  SAMPLE_ROOM_PHOTOS,
   SAMPLE_TRIP_LEAD_DAYS,
   SAMPLE_TRIP_NIGHTS,
+  SAMPLE_TRIP_PHOTO,
   buildSampleTrip,
   type SampleTripRows,
 } from '../sample-trip';
+import { SAMPLE_PHOTO_SUBJECTS } from '../sample-trip-photos';
 
 import { db } from '@/lib/db/database';
 import { toLocalISODateString } from '@/lib/db/utils';
@@ -67,6 +70,8 @@ const TABLES_WITHOUT_SAMPLE_ROWS: Readonly<Record<string, string>> = {
   tripMembers: 'server roster; the sample is never uploaded',
   rideNotices: 'what this device already announced',
   guestGroups: 'account-level and synced on sign-in; the sample stays on the device',
+  photos:
+    'fetched and written after the seed by attachSamplePhotos; seed-sample-trip.test holds it to one photo for the trip and one per room',
 };
 
 /**
@@ -103,11 +108,6 @@ describe('buildSampleTrip', () => {
 
     it('fills every trip-scoped table', () => {
       const filled = new Set<string>(tablesOf(rows).map(({ table }) => table));
-      // Photos have no form schema, so they are counted here rather than
-      // listed in `tablesOf`.
-      if (rows.photos.length > 0) {
-        filled.add('photos');
-      }
       const missing = db.tables
         .map((table) => table.name)
         .filter((name) => !(name in TABLES_WITHOUT_SAMPLE_ROWS) && !filled.has(name));
@@ -283,6 +283,26 @@ describe('buildSampleTrip', () => {
     it('writes no em dash or en dash', () => {
       expect(JSON.stringify(rows)).not.toMatch(/[–—]/);
     });
+  });
+
+  it('has one picture for the trip and one for each room, by the room order', () => {
+    const rows = buildSampleTrip('en', TODAY);
+
+    expect(rows.rooms.map((room) => room.order)).toEqual(SAMPLE_ROOM_PHOTOS.map((_, index) => index));
+    // The icon and the picture must tell the same story.
+    expect(rows.rooms.map((room) => [room.icon, SAMPLE_ROOM_PHOTOS[room.order]])).toEqual([
+      ['bed-double', 'master'],
+      ['bed-twin', 'twin'],
+      ['bunk-bed', 'bunk'],
+      ['sofa', 'sofa'],
+      ['tent', 'tent'],
+    ]);
+    expect([SAMPLE_TRIP_PHOTO, ...SAMPLE_ROOM_PHOTOS].sort()).toEqual(
+      [...SAMPLE_PHOTO_SUBJECTS].sort(),
+    );
+    // The builder names no photo: nothing is in the cache yet.
+    expect(rows.trip.photoId).toBeUndefined();
+    expect(rows.rooms.every((room) => room.photoId === undefined)).toBe(true);
   });
 
   it('follows the language it is given', () => {
