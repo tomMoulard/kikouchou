@@ -1050,6 +1050,8 @@ export type AnalyticsEvent =
   | 'reminders_disabled'
   | 'reminders_enable_result'
   | 'run_calendar_exported'
+  // The device had no space for the database at start (lib/db/boot)
+  | 'database_open_failed'
   // Store apps: a web bundle downloaded without a store release
   | 'live_update_downloaded'
   | 'live_update_failed'

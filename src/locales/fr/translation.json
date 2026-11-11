@@ -1727,7 +1727,11 @@
       "stack": "Pile d'appels :",
       "componentStack": "Pile de composants :"
     },
-    "rideNotFound": "Trajet introuvable. Veuillez réessayer."
+    "rideNotFound": "Trajet introuvable. Veuillez réessayer.",
+    "storageFull": {
+      "title": "Le stockage de votre appareil est plein",
+      "description": "Kikouchou enregistre vos voyages sur cet appareil et a besoin d'un peu d'espace libre pour les ouvrir. Libérez de l'espace, par exemple en supprimant des photos ou des applis dont vous ne vous servez plus, puis réessayez."
+    }
   },
   "pwa": {
     "install": "Installer l'application",

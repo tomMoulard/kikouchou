@@ -20,6 +20,9 @@ import { getCurrentLanguage, i18nReady } from '@/lib/i18n';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { SplashScreen } from '@capacitor/splash-screen';
+
+import { StorageFullScreen } from '@/components/shared/StorageFullScreen';
 
 import { storePetEnabled } from '@/features/pet/lib/pet-preferences';
 import {
@@ -29,8 +32,10 @@ import {
 } from '@/features/trips/utils/seed-sample-trip';
 
 import { ensureSettings } from '@/lib/db';
-import { retryAfterReopen } from '@/lib/db/reopen';
+import { prepareDatabase } from '@/lib/db/boot';
+import { startLiveUpdate } from '@/lib/native/live-update';
 import { fitAndroidViewport } from '@/lib/native/viewport';
+import { isNativeApp } from '@/lib/platform';
 import '@/lib/posthog';
 // Beside lib/posthog, and for the same reason it is imported here rather than
 // pasted into index.html: the module decides whether to load at all, so a dev
@@ -88,6 +93,35 @@ function getRootElement(): HTMLElement {
  */
 const DB_READY_TIMEOUT_MS = 3000;
 
+/** Runs the boot again, once the user has freed some space. */
+function reloadPage(): void {
+  window.location.reload();
+}
+
+/**
+ * Renders the storage-full screen in place of the app.
+ *
+ * In a store app, `NativeShell` is what takes the splash screen down and tells
+ * the live update plugin the bundle painted, and it lives inside `App`. Done
+ * here instead, after the first frame: without it the screen stays behind the
+ * splash, and the plugin rolls back a bundle that started fine.
+ *
+ * @param rootElement - The element to render into
+ */
+function renderStorageFullScreen(rootElement: HTMLElement): void {
+  createRoot(rootElement, { onCaughtError: logCaughtError }).render(
+    <StrictMode>
+      <StorageFullScreen onRetry={reloadPage} />
+    </StrictMode>,
+  );
+  if (isNativeApp()) {
+    requestAnimationFrame(() => {
+      void SplashScreen.hide().catch(() => undefined);
+      startLiveUpdate();
+    });
+  }
+}
+
 async function initializeApp(): Promise<void> {
   const rootElement = getRootElement();
 
@@ -99,49 +133,34 @@ async function initializeApp(): Promise<void> {
     console.error('i18n initialization failed, using fallback:', error);
   }
 
-  try {
-    // Ensure settings exist in database before app renders.
-    // This prevents write operations inside liveQuery contexts.
-    //
-    // Raced against a timeout on purpose: db.open() can block indefinitely
-    // behind another tab holding an older schema version, and a promise that
-    // never settles would leave the user on a blank page with no error, because
-    // createRoot().render() below is never reached. Rendering slightly early is
-    // safe — getSettings() falls back to defaults.
-    //
-    // The sample trip goes first: it tells a first open from a returning one by
-    // the settings row that ensureSettings() is about to create. A failed seed
-    // costs the sample and nothing else. The first open also turns the pet on,
-    // so the new visitor meets it beside the sample; a returning device keeps
-    // whatever it chose.
-    await Promise.race([
-      (shouldOfferSampleTrip()
-        ? seedSampleTripOnce(getCurrentLanguage())
-            .then((outcome) => {
-              if (outcome === 'seeded') {
-                storePetEnabled(true);
-                // Not awaited: the pictures are a download, and the first
-                // paint does not wait for one.
-                void attachSamplePhotos().catch((error: unknown) => {
-                  console.warn('Failed to attach the sample trip photos:', error);
-                });
-              }
-            })
-            .catch((error: unknown) => {
-              console.error('Failed to seed the sample trip:', error);
-            })
-        : Promise.resolve()
-      )
-        // iOS Safari can hand the page a dead IndexedDB connection; one reopen
-        // cures it (PostHog issue 01a13061).
-        .then(() => retryAfterReopen(ensureSettings)),
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, DB_READY_TIMEOUT_MS);
-      }),
-    ]);
-  } catch (error) {
-    // Log error but continue - getSettings() returns defaults if DB is unavailable
-    console.error('Database initialization failed:', error);
+  // Ensures the settings row exists before the app renders (liveQuery reads
+  // must not write), after seeding the sample trip on a first open. Never
+  // rejects, and gives up waiting after DB_READY_TIMEOUT_MS. See lib/db/boot.
+  // The first open also turns the pet on, so the new visitor meets it beside
+  // the sample; a returning device keeps whatever it chose.
+  const outcome = await prepareDatabase({
+    seed: shouldOfferSampleTrip()
+      ? async () => {
+          if ((await seedSampleTripOnce(getCurrentLanguage())) === 'seeded') {
+            storePetEnabled(true);
+            // Not awaited: the pictures are a download, and the first
+            // paint does not wait for one.
+            void attachSamplePhotos().catch((error: unknown) => {
+              console.warn('Failed to attach the sample trip photos:', error);
+            });
+          }
+        }
+      : undefined,
+    ensureSettings,
+    timeoutMs: DB_READY_TIMEOUT_MS,
+  });
+
+  // A full disk: IndexedDB cannot open, so no page of the app can work. Say
+  // so, rather than render pages that each report "Failed to load". The retry
+  // reloads, which runs this whole boot again.
+  if (outcome === 'storage-full') {
+    renderStorageFullScreen(rootElement);
+    return;
   }
 
   // Render the application

@@ -17,10 +17,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { seedSampleTripOnce } from '@/features/trips/utils/seed-sample-trip';
 
+import { captureEvent } from '@/lib/posthog';
+
 import { prepareDatabase } from '../boot';
 import { db } from '../database';
 import { ensureSettings } from '../repositories/settings-repository';
 import { isStorageFullError } from '../storage-full';
+
+vi.mock('@/lib/posthog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/posthog')>()),
+  captureEvent: vi.fn(),
+}));
 
 /** What Chrome throws from `indexedDB.open` when the disk is full. */
 function fullDiskException(): DOMException {
@@ -46,6 +53,7 @@ function fillTheDisk(): void {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.mocked(captureEvent).mockClear();
   if (!db.isOpen()) {
     await db.open();
   }
@@ -85,6 +93,17 @@ describe('isStorageFullError', () => {
     expect(isStorageFullError(undefined)).toBe(false);
   });
 
+  it('looks on cause when inner holds something else', () => {
+    const aborted = new Error('aborted');
+    aborted.name = 'AbortError';
+    const error = Object.assign(new Error('wrapped'), {
+      inner: aborted,
+      cause: fullDiskException(),
+    });
+
+    expect(isStorageFullError(error)).toBe(true);
+  });
+
   it('does not loop on a cause that points back at itself', () => {
     const error = new Error('loop');
     Object.defineProperty(error, 'cause', { value: error });
@@ -111,6 +130,26 @@ describe('prepareDatabase', () => {
     expect(outcome).toBe('storage-full');
     expect(consoleWarn).toHaveBeenCalledTimes(1);
     expect(isStorageFullError(consoleWarn.mock.calls[0]?.[1])).toBe(true);
+    expect(captureEvent).toHaveBeenCalledWith('database_open_failed', {
+      reason: 'storage_full',
+    });
+  });
+
+  it('starts the app when only the sample trip ran out of space', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const outcome = await prepareDatabase({
+      seed: () => Promise.reject(new Dexie.QuotaExceededError('photos too big')),
+      ensureSettings,
+      timeoutMs: 3000,
+    });
+
+    expect(outcome).toBe('ready');
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
+    expect(captureEvent).not.toHaveBeenCalled();
+    await expect(db.settings.count()).resolves.toBe(1);
   });
 
   it('answers ready when the database opens', async () => {

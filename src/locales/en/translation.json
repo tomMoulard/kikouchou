@@ -1727,7 +1727,11 @@
       "stack": "Stack trace:",
       "componentStack": "Component stack:"
     },
-    "rideNotFound": "Ride not found. Please try again."
+    "rideNotFound": "Ride not found. Please try again.",
+    "storageFull": {
+      "title": "Your device's storage is full",
+      "description": "Kikouchou saves your trips on this device and needs some free space to open them. Free some space, for example by deleting photos or apps you no longer use, then retry."
+    }
   },
   "pwa": {
     "install": "Install app",
