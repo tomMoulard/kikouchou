@@ -23,8 +23,13 @@ vi.mock('@/lib/platform', () => ({
   hasNativePlugin: vi.fn(() => true),
 }));
 
+vi.mock('@/lib/posthog', () => ({
+  reportError: vi.fn(),
+}));
+
 import { hasNativePlugin } from '@/lib/platform';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
+import { reportError } from '@/lib/posthog';
 
 import {
   CONTACT_SEARCH_PLUGIN,
@@ -94,6 +99,7 @@ describe('ensureContactsAccess', () => {
 
     await expect(ensureContactsAccess()).resolves.toBe(true);
     expect(plugin.requestPermissions).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
   });
 
   it('asks once, and remembers that it asked', async () => {
@@ -132,17 +138,23 @@ describe('ensureContactsAccess', () => {
     await expect(ensureContactsAccess()).resolves.toBe(true);
   });
 
-  it('answers false when the plugin fails', async () => {
-    plugin.checkPermissions.mockRejectedValue(new Error('bridge gone'));
+  it('answers false when the plugin fails, and reports it as handled', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const failure = new Error('bridge gone');
+    plugin.checkPermissions.mockRejectedValue(failure);
 
     await expect(ensureContactsAccess()).resolves.toBe(false);
+    expect(console.error).not.toHaveBeenCalled();
+    expect(reportError).toHaveBeenCalledWith(failure, {
+      source: 'contact-search.ensureContactsAccess',
+    });
   });
 
   // A plugin whose @Permission list reached the bridge empty resolves both
   // calls with no data at all: Capacitor's Plugin.checkPermissions calls
   // `resolve()` when getPermissionStates() is empty. R8 did that to the
   // release builds (PostHog: "Cannot destructure property 'contacts'").
-  it('answers false, without throwing or reporting an error, when checkPermissions resolves nothing', async () => {
+  it('answers false, without throwing or calling console.error, when checkPermissions resolves nothing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     plugin.checkPermissions.mockResolvedValue(undefined);
 
@@ -150,9 +162,12 @@ describe('ensureContactsAccess', () => {
     expect(plugin.requestPermissions).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), {
+      source: 'contact-search.readPermissionState',
+    });
   });
 
-  it('answers false, without reporting an error, when requestPermissions resolves nothing', async () => {
+  it('answers false, without calling console.error, when requestPermissions resolves nothing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     plugin.checkPermissions.mockResolvedValue({ contacts: 'prompt' });
     plugin.requestPermissions.mockResolvedValue(undefined);
@@ -160,6 +175,7 @@ describe('ensureContactsAccess', () => {
     await expect(ensureContactsAccess()).resolves.toBe(false);
     expect(console.error).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
+    expect(reportError).toHaveBeenCalledTimes(1);
   });
 
   it.each([null, {}, { contacts: 42 }, { contacts: 'maybe' }])(

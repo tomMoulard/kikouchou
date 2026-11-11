@@ -20,6 +20,7 @@ import { registerPlugin } from '@capacitor/core';
 
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { hasNativePlugin } from '@/lib/platform';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -32,16 +33,24 @@ interface NativeContact {
 }
 
 /** The permission states Capacitor reports, plus iOS 18's partial access. */
-type ContactsPermissionState =
-  | 'granted'
-  | 'denied'
-  | 'prompt'
-  | 'prompt-with-rationale'
-  | 'limited';
+const PERMISSION_STATES = [
+  'granted',
+  'denied',
+  'prompt',
+  'prompt-with-rationale',
+  'limited',
+] as const;
+
+type ContactsPermissionState = (typeof PERMISSION_STATES)[number];
 
 interface ContactSearchPlugin {
-  checkPermissions(): Promise<{ readonly contacts: ContactsPermissionState }>;
-  requestPermissions(): Promise<{ readonly contacts: ContactsPermissionState }>;
+  /**
+   * Typed `unknown` on purpose: Capacitor resolves with no data at all when
+   * the bridge finds no permission on the plugin, as the R8 release builds
+   * did. Read the answer with {@link readPermissionState}.
+   */
+  checkPermissions(): Promise<unknown>;
+  requestPermissions(): Promise<unknown>;
   search(options: {
     readonly query: string;
     readonly limit: number;
@@ -111,7 +120,31 @@ function rememberAsked(): void {
   }
 }
 
-function isReadable(state: ContactsPermissionState): boolean {
+/**
+ * Reads the `contacts` state out of a permission answer.
+ *
+ * Answers `undefined` when there is none. That is a native layer that lost its
+ * permission list, not a refusal: it is reported, the field stays a plain text
+ * field, and nothing is asked.
+ */
+function readPermissionState(result: unknown): ContactsPermissionState | undefined {
+  const state: unknown =
+    typeof result === 'object' && result !== null
+      ? (result as { readonly contacts?: unknown }).contacts
+      : undefined;
+  const known = PERMISSION_STATES.find((candidate) => candidate === state);
+  if (known === undefined) {
+    // console.warn, not console.error: capture_console_errors would report it
+    // a second time, flagged unhandled.
+    console.warn('The contacts plugin answered no permission state:', result);
+    reportError(new Error('The contacts plugin answered no permission state'), {
+      source: 'contact-search.readPermissionState',
+    });
+  }
+  return known;
+}
+
+function isReadable(state: ContactsPermissionState | undefined): boolean {
   return state === 'granted' || state === 'limited';
 }
 
@@ -128,18 +161,18 @@ export async function ensureContactsAccess(): Promise<boolean> {
     return false;
   }
   try {
-    const { contacts } = await ContactSearch.checkPermissions();
+    const contacts = readPermissionState(await ContactSearch.checkPermissions());
     if (isReadable(contacts)) {
       return true;
     }
-    if (contacts === 'denied' || hasAsked()) {
+    if (contacts === undefined || contacts === 'denied' || hasAsked()) {
       return false;
     }
     rememberAsked();
-    const requested = await ContactSearch.requestPermissions();
-    return isReadable(requested.contacts);
+    return isReadable(readPermissionState(await ContactSearch.requestPermissions()));
   } catch (error) {
-    console.error('Failed to get access to the contacts:', error);
+    console.warn('Failed to get access to the contacts:', error);
+    reportError(error, { source: 'contact-search.ensureContactsAccess' });
     return false;
   }
 }
