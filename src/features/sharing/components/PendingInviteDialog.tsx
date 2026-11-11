@@ -18,6 +18,11 @@
  * and the sign-in forms with it. Only a visit that comes back from a sign-in
  * started in the wizard ever opens it.
  *
+ * `App` mounts this beside the router, outside every route's boundary, so the
+ * dialog has a boundary of its own: a chunk that would not load used to be
+ * uncaught, which in React 19 unmounts the whole app. The boundary takes the
+ * stale chunk reload like any other catch.
+ *
  * @module features/sharing/components/PendingInviteDialog
  */
 
@@ -31,6 +36,8 @@ import {
   useRef,
   useState,
 } from 'react';
+
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 import { useAuth } from '@/features/auth/AuthContext';
 import { useTripContext } from '@/contexts/TripContext';
@@ -47,6 +54,30 @@ const ShareDialog = lazy(() =>
 );
 
 // ============================================================================
+// Type Definitions
+// ============================================================================
+
+interface DialogLoadedProps {
+  readonly onLoaded: () => void;
+}
+
+// ============================================================================
+// Sub-Components
+// ============================================================================
+
+/**
+ * Says the dialog's chunk has arrived. It sits beside the dialog in the same
+ * `Suspense`, which commits its children together, so its effect runs only
+ * once the lazy dialog has loaded.
+ */
+const DialogLoaded = memo(function DialogLoaded({ onLoaded }: DialogLoadedProps): null {
+  useEffect(() => {
+    onLoaded();
+  }, [onLoaded]);
+  return null;
+});
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -55,6 +86,7 @@ export const PendingInviteDialog = memo(function PendingInviteDialog(): ReactEle
   const { trips, isLoading } = useTripContext();
   const [pendingTripId] = useState<TripId | null>(() => readPendingInvite());
   const [dismissed, setDismissed] = useState(false);
+  const [dialogLoaded, setDialogLoaded] = useState(false);
   const reportedRef = useRef(false);
 
   const trip =
@@ -66,7 +98,10 @@ export const PendingInviteDialog = memo(function PendingInviteDialog(): ReactEle
   const open = isReady && trip !== undefined && !dismissed;
 
   useEffect(() => {
-    if (!isReady) {
+    // The key outlives a dialog that has not arrived yet: a chunk that will
+    // not load makes the boundary below reload the tab, and the reloaded page
+    // needs the key to open the dialog after all.
+    if (!isReady || (trip !== undefined && !dialogLoaded)) {
       return;
     }
     // Acted on, or a trip deleted in the meantime: either way the key is spent.
@@ -75,7 +110,7 @@ export const PendingInviteDialog = memo(function PendingInviteDialog(): ReactEle
       reportedRef.current = true;
       captureEvent('trip_invite_resumed');
     }
-  }, [isReady, trip]);
+  }, [isReady, trip, dialogLoaded]);
 
   const handleOpenChange = useCallback((next: boolean): void => {
     if (!next) {
@@ -83,12 +118,19 @@ export const PendingInviteDialog = memo(function PendingInviteDialog(): ReactEle
     }
   }, []);
 
+  const handleDialogLoaded = useCallback((): void => {
+    setDialogLoaded(true);
+  }, []);
+
   if (trip === undefined) {
     return null;
   }
   return (
-    <Suspense fallback={null}>
-      <ShareDialog open={open} onOpenChange={handleOpenChange} trip={trip} />
-    </Suspense>
+    <ErrorBoundary fallback={null}>
+      <Suspense fallback={null}>
+        <ShareDialog open={open} onOpenChange={handleOpenChange} trip={trip} />
+        <DialogLoaded onLoaded={handleDialogLoaded} />
+      </Suspense>
+    </ErrorBoundary>
   );
 });

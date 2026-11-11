@@ -199,11 +199,18 @@ export const TripCreateWizard = memo(function TripCreateWizard({
       return undefined;
     }
     let cancelled = false;
-    void import('canvas-confetti').then(({ default: confetti }) => {
-      if (!cancelled) {
-        void confetti({ particleCount: 140, spread: 75, origin: { y: 0.65 } });
-      }
-    });
+    void import('canvas-confetti')
+      .then(({ default: confetti }) => {
+        if (!cancelled) {
+          void confetti({ particleCount: 140, spread: 75, origin: { y: 0.65 } });
+        }
+      })
+      .catch((error: unknown) => {
+        // A decoration, so its chunk failing to arrive costs the confetti and
+        // nothing else: no reload over an invite screen that works, and a
+        // warning rather than the unhandled rejection PostHog files as an error.
+        console.warn('[wizard] confetti did not load:', error);
+      });
     return () => {
       cancelled = true;
     };

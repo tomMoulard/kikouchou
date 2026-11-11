@@ -22,6 +22,11 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { reportError } from '@/lib/posthog';
 import { recoverFromStaleBuild } from '@/lib/pwa/stale-build';
+import {
+  isModuleLoadError,
+  staleChunkReportContext,
+  tryReloadForStaleChunk,
+} from '@/lib/pwa/stale-chunk';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 
 // Feature route imports
@@ -114,6 +119,11 @@ function ErrorPage(): ReactElement {
    * catch-all filed `Error: "null"` — a stack with no message behind it — for
    * every path the running build does not know, which is the exact case the
    * rule exists to stay quiet about.
+   *
+   * A stale chunk lands here too, from a lazy piece of the layout with no
+   * boundary of its own (the trip glance panel, for one). It gets what every
+   * other catch gives it: the guarded reload first, and a report only when
+   * that reload did not cure the tab.
    */
   useEffect(() => {
     if (error === null || error === undefined) {
@@ -122,7 +132,14 @@ function ErrorPage(): ReactElement {
     if (isRouteErrorResponse(error) && error.status === 404) {
       return;
     }
-    reportError(error, { source: 'RouteErrorPage', route_status: status });
+    const staleChunk =
+      error instanceof Error && isModuleLoadError(error)
+        ? staleChunkReportContext(error, tryReloadForStaleChunk())
+        : undefined;
+    if (staleChunk === null) {
+      return;
+    }
+    reportError(error, { source: 'RouteErrorPage', route_status: status, ...staleChunk });
   }, [error, status]);
 
   const handleRetry = (): void => {

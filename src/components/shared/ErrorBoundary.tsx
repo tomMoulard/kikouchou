@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { reportError } from '@/lib/posthog';
 import {
   isModuleLoadError,
-  STALE_CHUNK_RELOAD_OUTCOMES,
+  staleChunkReportContext,
   tryReloadForStaleChunk,
 } from '@/lib/pwa/stale-chunk';
 import { Button } from '@/components/ui/button';
@@ -173,9 +173,11 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     // When it is held back, `reload_declined` says why. `cooldown` is the
     // broken deploy; `no_storage` and `storage_error` are a browser where the
     // reload was never tried, which is a stale chunk the guard could not cure.
-    const isStaleChunk = isModuleLoadError(error);
-    const reloadOutcome = isStaleChunk ? tryReloadForStaleChunk() : undefined;
-    if (reloadOutcome === STALE_CHUNK_RELOAD_OUTCOMES.reloaded) {
+    // What else is not filed is `staleChunkReportContext`'s to decide.
+    const staleChunk = isModuleLoadError(error)
+      ? staleChunkReportContext(error, tryReloadForStaleChunk())
+      : undefined;
+    if (staleChunk === null) {
       return;
     }
 
@@ -188,7 +190,7 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     reportError(error, {
       source: 'ErrorBoundary',
       component_stack: errorInfo.componentStack ?? undefined,
-      ...(isStaleChunk ? { stale_chunk: true, reload_declined: reloadOutcome } : {}),
+      ...staleChunk,
     });
   }
 

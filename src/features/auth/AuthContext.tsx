@@ -60,8 +60,8 @@ import {
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
-  STALE_CHUNK_RELOAD_OUTCOMES,
   isModuleLoadError,
+  staleChunkReportContext,
   tryReloadForStaleChunk,
 } from '@/lib/pwa/stale-chunk';
 import posthog, { captureEvent, reportError, resetAnalyticsIdentity } from '@/lib/posthog';
@@ -682,18 +682,22 @@ export function AuthProvider({
         //
         // The reload comes before the report, as in `ErrorBoundary`: a tab the
         // reload cures is the expected life of a PWA, not an error to file.
-        const isStaleChunk = isModuleLoadError(error instanceof Error ? error : null);
-        const reloadOutcome = isStaleChunk ? tryReloadForStaleChunk() : undefined;
+        const staleChunk =
+          error instanceof Error && isModuleLoadError(error)
+            ? staleChunkReportContext(error, tryReloadForStaleChunk())
+            : undefined;
 
-        // A chunk that will not load — offline on a cold launch, or a stale
-        // chunk the reload could not cure. Sign-in is unavailable; everything
-        // else is unaffected.
-        if (reloadOutcome !== STALE_CHUNK_RELOAD_OUTCOMES.reloaded) {
-          console.error('[auth] failed to load the Supabase client:', error);
-          reportError(error, {
-            source: 'AuthContext.getSupabaseClient',
-            ...(isStaleChunk ? { stale_chunk: true, reload_declined: reloadOutcome } : {}),
-          });
+        // A chunk that will not load: a stale chunk the reload could not
+        // cure, or any other failure. Sign-in is unavailable; everything else
+        // is unaffected. Nothing is filed for a reload under way, a device
+        // that is offline, or a failure this document already reported.
+        //
+        // A warning, not console.error: `capture_console_errors` files a
+        // console.error as an unhandled exception, so the log line beside the
+        // report was the same failure filed twice (2026-11-09, 1 ms apart).
+        if (staleChunk !== null) {
+          console.warn('[auth] failed to load the Supabase client:', error);
+          reportError(error, { source: 'AuthContext.getSupabaseClient', ...staleChunk });
         }
 
         // Resolved means "we know the answer", not "there is a session". This

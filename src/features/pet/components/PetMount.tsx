@@ -13,10 +13,18 @@
  * drawn while PostHog is asked, so the big pet never flashes before the small
  * one; without analytics the answer is `false` at once, the shipped pet.
  *
+ * `App` mounts this beside the router, outside every route's boundary, so the
+ * overlay has a boundary of its own. Without it a chunk that would not load
+ * was uncaught, and React 19 unmounted the whole app over a decoration
+ * (2026-11-09, iOS Chrome). The boundary takes the stale chunk reload like any
+ * other catch, and when that is held back the pet is simply absent.
+ *
  * @module features/pet/components/PetMount
  */
 
 import { type ReactElement, Suspense, lazy, memo } from 'react';
+
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 import { useFeatureFlagVariant } from '@/hooks/useFeatureFlag';
 
@@ -49,9 +57,11 @@ const PetExperiment = memo(function PetExperiment(): ReactElement | null {
   }
 
   return (
-    <Suspense fallback={null}>
-      <PetOverlay compact={variant === SMALL_PET_VARIANT} />
-    </Suspense>
+    <ErrorBoundary fallback={null}>
+      <Suspense fallback={null}>
+        <PetOverlay compact={variant === SMALL_PET_VARIANT} />
+      </Suspense>
+    </ErrorBoundary>
   );
 });
 

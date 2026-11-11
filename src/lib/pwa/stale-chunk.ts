@@ -24,6 +24,8 @@
  * @module lib/pwa/stale-chunk
  */
 
+import { isNativeApp } from '@/lib/platform';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -69,15 +71,19 @@ export const STALE_CHUNK_RELOAD_KEY = 'kikouchou:stale-chunk-reload',
  *
  * Reported with a stale chunk the reload did not cure, because the reasons
  * mean different things. `cooldown` is a chunk still missing one reload later,
- * which is a broken deploy. `no_storage` and `storage_error` are a browser
- * that cannot hold the guard, such as a private window, where the reload was
- * never tried.
+ * which is a broken deploy, or a network that failed twice in a row.
+ * `no_storage` and `storage_error` are a browser that cannot hold the guard,
+ * such as a private window, where the reload was never tried. `offline` is a
+ * device with no network and no service worker to answer a reload: the reload
+ * would land on the browser's own offline page, so it is not tried, and the
+ * failure is not reported either.
  */
 export const STALE_CHUNK_RELOAD_OUTCOMES = {
   reloaded: 'reloaded',
   noStorage: 'no_storage',
   storageError: 'storage_error',
   cooldown: 'cooldown',
+  offline: 'offline',
 } as const;
 
 // ============================================================================
@@ -98,6 +104,23 @@ export interface StaleChunkReloadDeps {
   readonly now?: () => number;
   /** How the tab is reloaded. Defaults to `window.location.reload`. */
   readonly reload?: () => void;
+  /** Whether the device has a network. Defaults to `navigator.onLine`. */
+  readonly isOnline?: () => boolean;
+  /**
+   * Whether a reload is answered without the network: a service worker
+   * controls the page, or this is a store app, whose files are on the device.
+   * Defaults to `isNativeApp()` or `navigator.serviceWorker.controller`.
+   */
+  readonly isControlled?: () => boolean;
+}
+
+/**
+ * What a stale chunk adds to its error report: that it was one, and why the
+ * reload did not cure it.
+ */
+export interface StaleChunkReportContext {
+  readonly stale_chunk: true;
+  readonly reload_declined: StaleChunkReloadOutcome;
 }
 
 // ============================================================================
@@ -121,8 +144,10 @@ export function isModuleLoadError(error: Error | null | undefined): boolean {
  *
  * Declining is the safe answer, so every reason to doubt the guard — no
  * session storage, a store that throws, a reload recorded a moment ago —
- * holds the reload back and leaves the caller's fallback UI on screen. The
- * outcome says which of them it was.
+ * holds the reload back and leaves the caller's fallback UI on screen. So does
+ * a device that is offline with no service worker to answer the reload. The
+ * outcome says which of them it was, and {@link staleChunkReportContext} says
+ * whether that is worth reporting.
  *
  * A second call while this document's own reload is under way answers
  * `reloaded`, not `cooldown`. One failed chunk often reaches more than one
@@ -150,6 +175,17 @@ export function tryReloadForStaleChunk(
     Math.abs(now - reloadStartedAt) < STALE_CHUNK_RELOAD_COOLDOWN_MS
   ) {
     return STALE_CHUNK_RELOAD_OUTCOMES.reloaded;
+  }
+
+  // A worker answers the reload from its precache, and a store app from its
+  // own files, network or not, so only a page nothing would answer is held
+  // back. Checked before the guard is
+  // written: a reload not taken must not hold back the one that will cure the
+  // tab once the network is back.
+  const isOnline = deps.isOnline ?? browserIsOnline,
+    isControlled = deps.isControlled ?? reloadsWithoutNetwork;
+  if (!isOnline() && !isControlled()) {
+    return STALE_CHUNK_RELOAD_OUTCOMES.offline;
   }
 
   const storage = 'storage' in deps ? deps.storage : sessionStorageOrUndefined();
@@ -200,13 +236,61 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
 }
 
 /**
- * Forgets the reload this document started, so each test starts clean.
- * Not for production paths.
+ * What to add to the report of a stale chunk, or null when it must not be
+ * reported at all.
+ *
+ * Every catch of a failed `import()` asks {@link tryReloadForStaleChunk} first
+ * and this second, so they all agree on what is worth filing:
+ *
+ * - `reloaded`: the reload is the cure, and a cured tab is the expected life
+ *   of a PWA.
+ * - `offline`, or any outcome while the browser says it is offline: a
+ *   controlled page reloads offline, and a chunk its precache lacks fails
+ *   again as `cooldown`, which would read as a broken deploy. Nothing to
+ *   cure, and nothing anybody could fix.
+ * - The same failure with the same outcome already reported in this
+ *   document: one failed chunk reaches several catches. On 2026-11-09 one
+ *   iOS Chrome session, a reload after the first failure, filed the same
+ *   "Importing a module script failed." from `AuthContext`, a route's
+ *   boundary and the pet within two seconds. Safari's wording names no chunk,
+ *   so its failures collapse into one report per outcome per document;
+ *   Chrome's names the chunk, so two missing chunks are still two reports.
+ *
+ * Anything else is a reload that did not cure the tab, which is signal, and
+ * it carries the reason.
+ *
+ * @param error - The failed import's error
+ * @param outcome - What {@link tryReloadForStaleChunk} answered for it
+ * @returns The fields to report with it, or null to report nothing
+ */
+export function staleChunkReportContext(
+  error: Error,
+  outcome: StaleChunkReloadOutcome,
+): StaleChunkReportContext | null {
+  if (
+    outcome === STALE_CHUNK_RELOAD_OUTCOMES.reloaded ||
+    outcome === STALE_CHUNK_RELOAD_OUTCOMES.offline ||
+    !browserIsOnline()
+  ) {
+    return null;
+  }
+  const key = `${outcome} ${error.name}: ${error.message}`;
+  if (reportedFailures.has(key)) {
+    return null;
+  }
+  reportedFailures.add(key);
+  return { stale_chunk: true, reload_declined: outcome };
+}
+
+/**
+ * Forgets the reload this document started and the failures it reported, so
+ * each test starts clean. Not for production paths.
  *
  * @internal
  */
 export function resetStaleChunkReloadForTests(): void {
   reloadStartedAt = null;
+  reportedFailures.clear();
 }
 
 /**
@@ -235,6 +319,37 @@ export function logCaughtError(
 
 /** When this document started its reload, or null when it has not. */
 let reloadStartedAt: number | null = null;
+
+/** The stale chunk failures this document has reported, by name and message. */
+const reportedFailures = new Set<string>();
+
+/**
+ * Whether the browser says it has a network. Only a definite `false` counts:
+ * an environment without `navigator.onLine` is treated as online.
+ *
+ * @returns False when the device is known to be offline
+ */
+function browserIsOnline(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}
+
+/**
+ * Whether a reload of this page is answered without the network: a store app
+ * loads its files from the device and registers no worker, and on the web a
+ * controlling service worker answers from its precache.
+ *
+ * @returns True when a reload does not need the network
+ */
+function reloadsWithoutNetwork(): boolean {
+  if (isNativeApp()) {
+    return true;
+  }
+  try {
+    return typeof navigator !== 'undefined' && Boolean(navigator.serviceWorker?.controller);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * `sessionStorage`, or undefined where reading it is not allowed.
