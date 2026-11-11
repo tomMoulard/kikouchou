@@ -307,6 +307,14 @@ describe('the native projects', () => {
     expect(read('ios/App/App/SceneDelegate.swift')).toContain('AppViewController()');
   });
 
+  // Without it R8 folds PluginHandle.getPluginAnnotation() to null in the
+  // release build, and every plugin reports no permissions at all.
+  it('keep Capacitor annotation types from R8 in the Android release build', () => {
+    expect(read('android/app/proguard-rules.pro')).toMatch(
+      /^-keep\S* @interface com\.getcapacitor\.\*\* \{ \*; \}$/mu,
+    );
+  });
+
   it('explain the contacts prompt on iOS, in both languages', () => {
     expect(read('ios/App/App/Info.plist')).toContain('NSContactsUsageDescription');
     expect(read('ios/App/App/en.lproj/InfoPlist.strings')).toContain('NSContactsUsageDescription');
