@@ -108,6 +108,65 @@ describe('useMediaQuery', () => {
     expect(removed).toEqual(listeners);
   });
 
+  /*
+   * Safari before 14 gives a MediaQueryList with only the deprecated
+   * `addListener`/`removeListener`, and some in-app browsers (a Google Ads
+   * click on Android) hand back a stub with no listener method at all. Calling
+   * `addEventListener` on either threw `r.addEventListener is not a function`
+   * inside Layout, which sent the whole app to the route error page.
+   */
+  it('follows a resize on a list that only has addListener', () => {
+    const listeners = new Set<ChangeListener>();
+    const removed: ChangeListener[] = [];
+    const list = {
+      matches: true,
+      media: WIDE,
+      addListener: (listener: ChangeListener) => {
+        listeners.add(listener);
+      },
+      removeListener: (listener: ChangeListener) => {
+        listeners.delete(listener);
+        removed.push(listener);
+      },
+    };
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => list),
+    });
+
+    const { result, unmount } = renderHook(() => useMediaQuery(WIDE));
+    expect(result.current).toBe(true);
+    expect(listeners.size).toBe(1);
+
+    act(() => {
+      list.matches = false;
+      listeners.forEach((listener) => {
+        listener({ matches: false } as MediaQueryListEvent);
+      });
+    });
+    expect(result.current).toBe(false);
+
+    unmount();
+    expect(listeners.size).toBe(0);
+    expect(removed).toHaveLength(1);
+  });
+
+  it('answers from a stub list with no listener method, without throwing', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => ({ matches: true })),
+    });
+
+    const { result, unmount } = renderHook(() => useMediaQuery(WIDE));
+
+    expect(result.current).toBe(true);
+    expect(() => {
+      unmount();
+    }).not.toThrow();
+  });
+
   it('answers false where matchMedia does not exist', () => {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,

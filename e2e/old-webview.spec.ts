@@ -58,4 +58,58 @@ test.describe('Old WebView', () => {
     await expect(page.locator('strong', { hasText: 'hiking boots' })).toBeVisible();
     expect(pageErrors).toEqual([]);
   });
+
+  /*
+   * Safari before 14 gives a MediaQueryList with only the deprecated
+   * `addListener`/`removeListener`, and so did the Android in-app browser
+   * PostHog reported from a Google Ads click. `useMediaQuery` runs inside
+   * Layout, so its unguarded `addEventListener` call threw on every page and
+   * sent the whole app to the route error page.
+   *
+   * Only this shape is driven end to end. A stub with no listener method at
+   * all also crashes `next-themes` and `sonner`, which call `addListener`
+   * themselves; production cannot have had that shape, or they would have
+   * thrown first. The hooks' unit tests cover it.
+   */
+  test('renders a trip page when matchMedia returns a list with addListener only', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => {
+      errors.push(error.message);
+    });
+    page.on('console', (message) => {
+      if (message.type() === 'error' && message.text().includes('addEventListener')) {
+        errors.push(message.text());
+      }
+    });
+    await page.addInitScript(() => {
+      const realMatchMedia = window.matchMedia.bind(window);
+      window.matchMedia = ((query: string) => {
+        const list = realMatchMedia(query);
+        return {
+          get matches() {
+            return list.matches;
+          },
+          media: list.media,
+          addListener: list.addListener.bind(list),
+          removeListener: list.removeListener.bind(list),
+        };
+      }) as unknown as typeof window.matchMedia;
+    });
+
+    await clearIndexedDB(page);
+    const { tripId } = await seedTrip(page, {
+      name: 'Old Safari Trip',
+      startDate: isoDate(30),
+      endDate: isoDate(40),
+    });
+
+    await page.goto(`/trips/${tripId}/calendar`);
+    await waitForRoute(page);
+
+    await expect(page.locator('#main-content')).toBeVisible();
+    await expect(page.getByText('Old Safari Trip').first()).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });

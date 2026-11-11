@@ -321,6 +321,42 @@ describe('useInstallPrompt', () => {
     expect(result.current.isInstalled).toBe(true);
   });
 
+  // Safari before 14 has only `addListener` on a MediaQueryList, and some
+  // in-app browsers return a stub with no listener method at all.
+  it('detects standalone via a list that only has addListener', () => {
+    let changeHandler: ((e: MediaQueryListEvent) => void) | null = null;
+    const removeListener = vi.fn();
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: false,
+      addListener: (handler: (e: MediaQueryListEvent) => void) => {
+        changeHandler = handler;
+      },
+      removeListener,
+    });
+
+    const { result, unmount } = renderHook(() => useInstallPrompt());
+    expect(result.current.isInstalled).toBe(false);
+
+    act(() => {
+      changeHandler?.({ matches: true } as MediaQueryListEvent);
+    });
+    expect(result.current.isInstalled).toBe(true);
+
+    unmount();
+    expect(removeListener).toHaveBeenCalledWith(changeHandler);
+  });
+
+  it('does not throw on a stub list with no listener method', () => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+
+    const { result, unmount } = renderHook(() => useInstallPrompt());
+
+    expect(result.current.isInstalled).toBe(false);
+    expect(() => {
+      unmount();
+    }).not.toThrow();
+  });
+
   it('detects installed via getInstalledRelatedApps API', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stubbing the Chromium-only `getInstalledRelatedApps`, which lib.dom does not declare.
     const nav = navigator as any;
