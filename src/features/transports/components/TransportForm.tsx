@@ -22,6 +22,7 @@ import { ChevronDown, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -40,6 +41,12 @@ import {
   toISODatetime,
 } from '@/features/transports/utils/datetime-input';
 import { listStatedStayPeriods } from '@/features/persons/utils/guest-presence';
+import {
+  copySharedLegFields,
+  getSharedLegKey,
+  groupSharedLegs,
+  listSharedLegMates,
+} from '@/lib/db/shared-legs';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import type {
@@ -48,8 +55,10 @@ import type {
   Ride,
   RideDirection,
   RideId,
+  SharedLegId,
   Transport,
   TransportFormData,
+  TransportId,
   TransportMode,
   TransportType,
   Vehicle,
@@ -60,6 +69,24 @@ import type {
 // ============================================================================
 
 /**
+ * What a save changes about who else is on the train.
+ *
+ * Sent beside the leg only when something changed, so a caller that knows
+ * nothing about shared legs keeps working with the leg alone.
+ */
+interface SharedLegChange {
+  /**
+   * The train the leg moves onto, or null to take it off the train it
+   * shares. Absent keeps the leg where it is.
+   */
+  readonly join?: SharedLegId | null;
+  /** Guests to put on the same train: one new leg each. */
+  readonly addPersonIds: readonly PersonId[];
+  /** Other guests' legs to take off the train (they keep their leg). */
+  readonly removeTransportIds: readonly TransportId[];
+}
+
+/**
  * Props for the TransportForm component.
  */
 interface TransportFormProps {
@@ -67,6 +94,11 @@ interface TransportFormProps {
   readonly transport?: Transport;
   /** List of persons for the person and driver select dropdowns. */
   readonly persons: readonly Person[];
+  /**
+   * Every leg of the trip, so the form can offer an existing train to join
+   * and show who else is on this one. Absent, the form offers neither.
+   */
+  readonly transports?: readonly Transport[];
   /**
    * The trip's car journeys, for the car select.
    *
@@ -103,8 +135,15 @@ interface TransportFormProps {
   readonly tripStartDate?: string;
   /** Last day of the trip (`YYYY-MM-DD`), used to prefill a departure. */
   readonly tripEndDate?: string;
-  /** Callback when form is successfully submitted with validated data. */
-  readonly onSubmit: (data: TransportFormData) => Promise<void>;
+  /**
+   * Callback when form is successfully submitted with validated data. The
+   * second argument is present only when the save changes who shares the
+   * train.
+   */
+  readonly onSubmit: (
+    data: TransportFormData,
+    sharedLeg?: SharedLegChange,
+  ) => Promise<void>;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
   /** Callback when form dirty state changes (for unsaved changes guard). */
@@ -137,6 +176,16 @@ interface FormState {
   rideId: RideId | '';
   driverId: PersonId | '';
   notes: string;
+  /** The train this leg shares, '' for one of its own. */
+  sharedLegKey: SharedLegId | '';
+  /** The other guests on it, ticked in "Travelling with". */
+  companionIds: readonly PersonId[];
+}
+
+/** What submitting the form hands to `useFormSubmission`. */
+interface TransportFormSubmission {
+  readonly data: TransportFormData;
+  readonly sharedLeg: SharedLegChange | undefined;
 }
 
 // ============================================================================
@@ -152,6 +201,9 @@ const TRANSPORT_MODES: TransportMode[] = ['train', 'plane', 'car', 'bus', 'other
  * Special value for "no selection" in select dropdowns.
  */
 const NO_SELECTION = '__none__';
+
+/** The default for `transports`, stable so memos keyed on it hold. */
+const EMPTY_TRANSPORTS: readonly Transport[] = [];
 
 // ============================================================================
 // Helper Functions
@@ -190,8 +242,10 @@ function getInitialFormState(
   defaultType?: TransportType,
   tripStartDate?: string,
   tripEndDate?: string,
+  transports: readonly Transport[] = [],
 ): FormState {
   const type = transport?.type ?? defaultType ?? 'arrival';
+  const mates = transport ? listSharedLegMates(transport, transports) : [];
   return {
     personId: transport?.personId ?? '',
     type,
@@ -207,7 +261,18 @@ function getInitialFormState(
     rideId: transport?.rideId ?? '',
     driverId: transport?.driverId ?? '',
     notes: transport?.notes ?? '',
+    sharedLegKey: transport && mates.length > 0 ? getSharedLegKey(transport) : '',
+    companionIds: mates.map((mate) => mate.personId),
   };
+}
+
+/** Compares two id lists as sets. */
+function haveSameIds(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
 }
 
 /**
@@ -271,6 +336,7 @@ function isValidDatetime(datetime: string): boolean {
 const TransportForm = memo(function TransportForm({
   transport,
   persons,
+  transports = EMPTY_TRANSPORTS,
   rides,
   vehicles,
   onCreateRide,
@@ -290,7 +356,7 @@ const TransportForm = memo(function TransportForm({
 
   // Form field values
   const [formState, setFormState] = useState<FormState>(() =>
-    getInitialFormState(transport, defaultType, tripStartDate, tripEndDate),
+    getInitialFormState(transport, defaultType, tripStartDate, tripEndDate, transports),
   );
 
   // Whether the user has set the datetime themselves. Until they have, the
@@ -315,7 +381,7 @@ const TransportForm = memo(function TransportForm({
 
   // Compute initial values for dirty comparison
   const initialFormState = useMemo(
-    () => getInitialFormState(transport, defaultType, tripStartDate, tripEndDate),
+    () => getInitialFormState(transport, defaultType, tripStartDate, tripEndDate, transports),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only recompute on transport.id change
     [transport?.id, defaultType, tripStartDate, tripEndDate],
   );
@@ -333,6 +399,8 @@ const TransportForm = memo(function TransportForm({
       formState.rideId !== initialFormState.rideId ||
       formState.driverId !== initialFormState.driverId ||
       formState.notes !== initialFormState.notes ||
+      formState.sharedLegKey !== initialFormState.sharedLegKey ||
+      !haveSameIds(formState.companionIds, initialFormState.companionIds) ||
       formState.coordinates?.lat !== initialFormState.coordinates?.lat ||
       formState.coordinates?.lon !== initialFormState.coordinates?.lon ||
       formState.startCoordinates?.lat !== initialFormState.startCoordinates?.lat ||
@@ -351,16 +419,100 @@ const TransportForm = memo(function TransportForm({
   // Derived State
   // ============================================================================
 
-  /**
-   * Filter driver options to exclude the currently selected person.
-   */
-  const driverOptions = useMemo(() => {
-    if (!formState.personId) {return persons;}
-    return persons.filter((p) => p.id !== formState.personId);
-  }, [persons, formState.personId]);
-
   /** The date-fns locale the ride labels are formatted in. */
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  /**
+   * Filter driver options to exclude the guests on the train: whoever collects
+   * them is not on it.
+   */
+  const driverOptions = useMemo(
+    () =>
+      persons.filter(
+        (p) => p.id !== formState.personId && !formState.companionIds.includes(p.id),
+      ),
+    [persons, formState.personId, formState.companionIds],
+  );
+
+  /** The key this leg has today, in edit mode. */
+  const ownKey = transport ? getSharedLegKey(transport) : undefined;
+
+  /**
+   * The trains already entered for other guests, which this leg can join.
+   *
+   * A train the chosen guest is already on is left out, unless it is the one
+   * this leg is on: nobody takes the same train twice.
+   */
+  const sharedLegOptions = useMemo(() => {
+    const personName = new Map(persons.map((person) => [person.id, person.name]));
+    return groupSharedLegs(transports)
+      .filter((group) => {
+        const first = group[0];
+        if (!first) {
+          return false;
+        }
+        const key = getSharedLegKey(first);
+        if (key === ownKey) {
+          return group.length > 1;
+        }
+        return !group.some(
+          (leg) => leg.id === transport?.id || leg.personId === formState.personId,
+        );
+      })
+      .map((group) => {
+        const first = group[0] as Transport;
+        const names = group
+          .filter((leg) => leg.id !== transport?.id)
+          .map((leg) => personName.get(leg.personId) ?? t('common.unknown'));
+        return {
+          key: getSharedLegKey(first),
+          leg: first,
+          names,
+          label: [
+            t(`transports.${first.type}`),
+            formatTransportDatetime(first.datetime, dateLocale),
+            first.location,
+            first.transportNumber,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        };
+      });
+  }, [transports, persons, ownKey, transport?.id, formState.personId, dateLocale, t]);
+
+  /** The train chosen in "Same train or flight as", when it is not this leg's own. */
+  const joinedOption = useMemo(
+    () =>
+      formState.sharedLegKey !== '' && formState.sharedLegKey !== ownKey
+        ? sharedLegOptions.find((option) => option.key === formState.sharedLegKey)
+        : undefined,
+    [formState.sharedLegKey, ownKey, sharedLegOptions],
+  );
+
+  /**
+   * Who is already on the chosen train, by person. They are named rather than
+   * offered as boxes to tick, because ticking them would add them twice.
+   */
+  const alreadyOnBoardIds = useMemo(
+    () =>
+      new Set(
+        joinedOption
+          ? transports
+              .filter((leg) => getSharedLegKey(leg) === joinedOption.key)
+              .map((leg) => leg.personId)
+          : [],
+      ),
+    [joinedOption, transports],
+  );
+
+  /** The guests "Travelling with" can tick. */
+  const companionOptions = useMemo(
+    () =>
+      persons.filter(
+        (person) => person.id !== formState.personId && !alreadyOnBoardIds.has(person.id),
+      ),
+    [persons, formState.personId, alreadyOnBoardIds],
+  );
 
   /** The ride direction this leg needs: a pickup collects, a dropoff carries. */
   const neededDirection: RideDirection =
@@ -409,7 +561,9 @@ const TransportForm = memo(function TransportForm({
 
   // Sync form state when transport prop changes (for edit mode navigation)
   useEffect(() => {
-    setFormState(getInitialFormState(transport, defaultType, tripStartDate, tripEndDate));
+    setFormState(
+      getInitialFormState(transport, defaultType, tripStartDate, tripEndDate, transports),
+    );
     setErrors({});
     setIsDatetimeTouched(false);
   }, [transport?.id, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on transport.id change
@@ -463,6 +617,16 @@ const TransportForm = memo(function TransportForm({
       setFormState((prev) => ({ ...prev, driverId: '' }));
     }
   }, [formState.personId, formState.driverId]);
+
+  // The chosen guest is the leg's own traveller, not a companion of it.
+  useEffect(() => {
+    if (formState.personId && formState.companionIds.includes(formState.personId)) {
+      setFormState((prev) => ({
+        ...prev,
+        companionIds: prev.companionIds.filter((id) => id !== prev.personId),
+      }));
+    }
+  }, [formState.personId, formState.companionIds]);
 
   // ============================================================================
   // Validation
@@ -573,6 +737,70 @@ const TransportForm = memo(function TransportForm({
   );
 
   /**
+   * Handles the "Same train or flight as" select.
+   *
+   * Picking a train copies its time, places, mode, number and notes into the
+   * form, because joining it says this guest travels on exactly that one. The
+   * companions ticked so far are kept for the leg's own train only: on another
+   * guest's train the others are already named.
+   */
+  const handleSharedLegChange = useCallback(
+    (value: string) => {
+      if (value === NO_SELECTION) {
+        setFormState((prev) => ({
+          ...prev,
+          sharedLegKey: '',
+          companionIds: prev.sharedLegKey === ownKey ? [] : prev.companionIds,
+        }));
+        return;
+      }
+      const option = sharedLegOptions.find((candidate) => candidate.key === value);
+      if (!option) {
+        return;
+      }
+      if (option.key === ownKey) {
+        setFormState((prev) => ({
+          ...prev,
+          sharedLegKey: option.key,
+          companionIds: initialFormState.companionIds,
+        }));
+        return;
+      }
+      const shared = copySharedLegFields(option.leg);
+      setIsDatetimeTouched(true);
+      setIsDetailsOpen((prev) => prev || Boolean(shared.transportNumber ?? shared.notes));
+      setFormState((prev) => ({
+        ...prev,
+        sharedLegKey: option.key,
+        companionIds: [],
+        type: shared.type ?? prev.type,
+        datetime: shared.datetime ? formatDatetimeLocal(shared.datetime) : prev.datetime,
+        location: shared.location ?? '',
+        coordinates: shared.coordinates,
+        startLocation: shared.startLocation ?? '',
+        startCoordinates: shared.startCoordinates,
+        transportMode: shared.transportMode ?? '',
+        transportNumber: shared.transportNumber ?? '',
+        notes: shared.notes ?? '',
+      }));
+      setErrors((prev) => ({ ...prev, datetime: undefined, location: undefined }));
+    },
+    [sharedLegOptions, ownKey, initialFormState.companionIds],
+  );
+
+  /**
+   * Ticks or unticks a guest in "Travelling with".
+   */
+  const handleCompanionToggle = useCallback((personId: PersonId, checked: boolean) => {
+    setFormState((prev) => ({
+      ...prev,
+      companionIds: checked
+        ? [...prev.companionIds.filter((id) => id !== personId), personId]
+        : prev.companionIds.filter((id) => id !== personId),
+    }));
+  }, []);
+
+  /**
    * Handles a change from the date and time picker.
    */
   const handleDatetimeChange = useCallback(
@@ -672,9 +900,49 @@ const TransportForm = memo(function TransportForm({
   /**
    * Submission handler via useFormSubmission hook.
    */
-  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<TransportFormData>(
-    onSubmit,
+  const submitWithSharedLeg = useCallback(
+    async ({ data, sharedLeg }: TransportFormSubmission) => {
+      await (sharedLeg === undefined ? onSubmit(data) : onSubmit(data, sharedLeg));
+    },
+    [onSubmit],
   );
+  const { isSubmitting, submitError, handleSubmit: doSubmit } =
+    useFormSubmission<TransportFormSubmission>(submitWithSharedLeg);
+
+  /**
+   * Works out what the save changes about the train, or undefined when it
+   * changes nothing.
+   */
+  const buildSharedLegChange = useCallback((): SharedLegChange | undefined => {
+    const mates = transport ? listSharedLegMates(transport, transports) : [];
+    const staysOnOwnTrain =
+      formState.sharedLegKey === '' ? mates.length === 0 : formState.sharedLegKey === ownKey;
+
+    let join: SharedLegId | null | undefined;
+    if (!transport) {
+      join = formState.sharedLegKey === '' ? undefined : formState.sharedLegKey;
+    } else if (!staysOnOwnTrain) {
+      join = formState.sharedLegKey === '' ? null : formState.sharedLegKey;
+    }
+
+    const keptMates = staysOnOwnTrain ? mates : [];
+    const onBoard = new Set(keptMates.map((mate) => mate.personId));
+    const addPersonIds = formState.companionIds.filter(
+      (id) => id !== formState.personId && !onBoard.has(id) && !alreadyOnBoardIds.has(id),
+    );
+    const removeTransportIds = keptMates
+      .filter((mate) => !formState.companionIds.includes(mate.personId))
+      .map((mate) => mate.id);
+
+    if (join === undefined && addPersonIds.length === 0 && removeTransportIds.length === 0) {
+      return undefined;
+    }
+    return {
+      ...(join === undefined ? {} : { join }),
+      addPersonIds,
+      removeTransportIds,
+    };
+  }, [transport, transports, formState, ownKey, alreadyOnBoardIds]);
 
   /**
    * Handles form submission with validation and data building.
@@ -719,20 +987,24 @@ const TransportForm = memo(function TransportForm({
         // Joining a car says the same thing a driver does, so it counts here
         // too: a guest booked into the 15:00 to the station is being collected
         // whether the arrangement is a shared ride or one person's lift.
+        //
+        // A new leg that joins another guest's train starts with that train's
+        // request: the guests off one train are fetched together, and this form
+        // has no field that could say otherwise.
         needsPickup:
           formState.driverId !== '' ||
           formState.rideId !== '' ||
-          (transport?.needsPickup ?? false),
+          (transport?.needsPickup ?? joinedOption?.leg.needsPickup ?? false),
         notes: formState.notes.trim() || undefined,
       };
 
       try {
-        await doSubmit(data);
+        await doSubmit({ data, sharedLeg: buildSharedLegChange() });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, formState, transport],
+    [validateForm, doSubmit, formState, transport, buildSharedLegChange, joinedOption],
   );
 
   // ============================================================================
@@ -825,6 +1097,81 @@ const TransportForm = memo(function TransportForm({
           </p>
         )}
       </div>
+
+      {/*
+        Same train or flight as: joins a leg already entered for another
+        guest, and copies its time and places, so a guest on the organiser's
+        TGV does not type it a second time.
+      */}
+      {sharedLegOptions.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="transport-shared-leg">{t('transports.sharedLeg')}</Label>
+          <Select
+            value={formState.sharedLegKey || NO_SELECTION}
+            onValueChange={handleSharedLegChange}
+            disabled={isSubmitting}
+          >
+            <SelectTrigger id="transport-shared-leg" className="w-full">
+              <SelectValue placeholder={t('transports.sharedLegNone')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_SELECTION}>{t('transports.sharedLegNone')}</SelectItem>
+              {sharedLegOptions.map((option) => (
+                <SelectItem key={option.key} value={option.key}>
+                  <div className="flex flex-col items-start">
+                    <span>{option.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {option.names.join(', ')}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {joinedOption && (
+            <p className="text-sm text-muted-foreground">
+              {t('transports.alreadyOnBoard', { names: joinedOption.names.join(', ') })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Travelling with: one leg per guest ticked, all on this train. */}
+      {companionOptions.length > 0 && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium leading-none">
+            {t('transports.travellingWith')}
+          </legend>
+          <p className="text-xs text-muted-foreground">
+            {t('transports.travellingWithHint')}
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {companionOptions.map((person) => {
+              const checkboxId = `transport-companion-${person.id}`;
+              return (
+                <div key={person.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={checkboxId}
+                    checked={formState.companionIds.includes(person.id)}
+                    onCheckedChange={(checked) => {
+                      handleCompanionToggle(person.id, checked === true);
+                    }}
+                    disabled={isSubmitting}
+                  />
+                  <Label htmlFor={checkboxId} className="flex items-center gap-2 font-normal">
+                    <span
+                      className="size-3 rounded-full shrink-0"
+                      style={{ backgroundColor: person.color }}
+                      aria-hidden="true"
+                    />
+                    {person.name}
+                  </Label>
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
 
       {/* Datetime Field */}
       <fieldset className="space-y-2">
@@ -1125,4 +1472,4 @@ const TransportForm = memo(function TransportForm({
 // ============================================================================
 
 export { TransportForm };
-export type { TransportFormProps };
+export type { SharedLegChange, TransportFormProps };

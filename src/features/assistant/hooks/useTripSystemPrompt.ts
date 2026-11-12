@@ -50,6 +50,7 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 
+import { listSharedLegMates } from '@/lib/db/shared-legs';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { formatCoordinates, hasValidCoordinates } from '@/lib/geocoding';
 import { DEFAULT_LANGUAGE } from '@/lib/i18n';
@@ -460,6 +461,7 @@ function formatTransportLine(
   transport: Transport,
   persons: ReadonlyMap<string, Person>,
   drivenRideIds: ReadonlySet<string>,
+  sameLegAs: readonly Transport[] = [],
 ): string {
   const segments = [
     `- ${transport.type} (transport id: ${transport.id})`,
@@ -467,6 +469,11 @@ function formatTransportLine(
     `${formatLocalDatetime(transport.datetime)} at ${toPromptText(transport.location)}`,
     transport.transportMode ?? '',
     transport.transportNumber ? `#${toPromptText(transport.transportNumber)}` : '',
+    // The other guests on the same train or flight, so "who is on Alice's
+    // train" has an answer and `joinTransport` a leg to name.
+    sameLegAs.length > 0
+      ? `same leg as: ${sameLegAs.map((mate) => personNameById(persons, mate.personId)).join(', ')}`
+      : '',
     transport.needsPickup && !isLegCovered(transport, drivenRideIds)
       ? 'needs a lift'
       : '',
@@ -800,7 +807,14 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     if (transports.length > 0) {
       parts.push('', '## Transports');
       for (const transport of transports) {
-        parts.push(formatTransportLine(transport, personsById, drivenRideIds));
+        parts.push(
+          formatTransportLine(
+            transport,
+            personsById,
+            drivenRideIds,
+            listSharedLegMates(transport, transports),
+          ),
+        );
       }
     } else {
       parts.push('', '## Transports', 'No transports yet.');

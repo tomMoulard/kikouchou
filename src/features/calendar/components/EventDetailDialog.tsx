@@ -114,6 +114,11 @@ export interface TransportEventData {
    * car on the strength of it.
    */
   readonly persons?: readonly Person[];
+  /**
+   * The other guests on the same train. Deleting the transport here deletes
+   * it for them too, so the dialog names them.
+   */
+  readonly sharedWith?: readonly (Person | undefined)[];
 }
 
 /**
@@ -456,11 +461,15 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
       {/* Guest */}
       <div className="flex items-center gap-3">
         <User className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
-        <div className="flex-1 min-w-0">
-          {person ? (
-            <PersonBadge person={person} size="default" />
-          ) : (
-            <span className="text-muted-foreground">{t('common.unknown')}</span>
+        <div className="flex flex-1 min-w-0 flex-wrap items-center gap-1">
+          {[person, ...(event.sharedWith ?? [])].map((traveller, index) =>
+            traveller ? (
+              <PersonBadge key={traveller.id} person={traveller} size="default" />
+            ) : (
+              <span key={`unknown-${index}`} className="text-muted-foreground">
+                {t('common.unknown')}
+              </span>
+            ),
           )}
         </div>
       </div>
@@ -720,6 +729,17 @@ const EventDetailDialog = memo(function EventDetailDialog({
   // Get date locale for formatting
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
+  // Every guest of a shared train, named in the delete prompt, or '' for a
+  // transport one guest takes alone.
+  const sharedLegNames = useMemo(() => {
+    if (!event || event.type !== 'transport' || !event.sharedWith?.length) {
+      return '';
+    }
+    return [event.person, ...event.sharedWith]
+      .map((traveller) => traveller?.name ?? t('common.unknown'))
+      .join(', ');
+  }, [event, t]);
+
   // Determine dialog title based on event type
   const dialogTitle = useMemo(() => {
     if (!event) return '';
@@ -856,14 +876,18 @@ const EventDetailDialog = memo(function EventDetailDialog({
             ? t('confirm.removeAssignment')
             : isActivityEvent(event)
               ? t('confirm.deleteActivity')
-              : t('confirm.deleteTransport')
+              : sharedLegNames
+                ? t('confirm.deleteSharedLeg', { names: sharedLegNames })
+                : t('confirm.deleteTransport')
         }
         description={
           isAssignmentEvent(event)
             ? t('confirm.removeAssignmentDescription')
             : isActivityEvent(event)
               ? t('confirm.deleteActivityDescription')
-              : t('confirm.deleteTransportDescription')
+              : sharedLegNames
+                ? t('confirm.deleteSharedLegDescription')
+                : t('confirm.deleteTransportDescription')
         }
         confirmLabel={t('common.delete')}
         variant="destructive"

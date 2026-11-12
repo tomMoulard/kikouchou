@@ -38,9 +38,20 @@ import {
   requireCanonicalDatetime,
   toCanonicalDatetime,
 } from '@/lib/db/transport-datetime';
-import { createTransportId } from '@/lib/db/utils';
+import {
+  SHARED_LEG_FIELDS,
+  getSharedLegKey,
+  pickSharedLegFields,
+  type SharedLegFields,
+} from '@/lib/db/shared-legs';
+import {
+  createSharedLegId,
+  createTransportId,
+  toSharedLegId,
+} from '@/lib/db/utils';
 import type {
   PersonId,
+  SharedLegId,
   Transport,
   TransportFormData,
   TransportId,
@@ -531,6 +542,208 @@ export async function updateTransportWithOwnershipCheck(
         : { datetime: requireCanonicalDatetime(data.datetime) }),
       ...(detachesFromRide ? { rideId: undefined } : {}),
     });
+
+    // The guests on the same train see the same train. The group is read
+    // after the write, so a patch that moves this leg onto another train
+    // brings that train's legs along and leaves the old one alone.
+    const shared = pickSharedLegFields(data);
+    if (Object.keys(shared).length > 0) {
+      const updated = await db.transports.get(id);
+      if (updated) {
+        await writeSharedFieldsToMates(tripId, updated, shared);
+      }
+    }
+  });
+}
+
+// ============================================================================
+// Shared Legs (several guests on one train)
+// ============================================================================
+
+/**
+ * Lists the legs of a trip that share a key.
+ */
+async function getSharedLegRows(
+  tripId: TripId,
+  key: SharedLegId,
+): Promise<Transport[]> {
+  return db.transports
+    .where('tripId')
+    .equals(tripId)
+    .filter((row) => getSharedLegKey(row) === key)
+    .toArray();
+}
+
+/**
+ * Writes the vehicle's fields of a leg to every other leg of its group.
+ * Must run inside a transaction over `db.transports`.
+ */
+async function writeSharedFieldsToMates(
+  tripId: TripId,
+  leg: Transport,
+  shared: SharedLegFields,
+): Promise<void> {
+  const patch = {
+    ...shared,
+    ...(shared.datetime === undefined
+      ? {}
+      : { datetime: requireCanonicalDatetime(shared.datetime) }),
+  };
+  const mates = await getSharedLegRows(tripId, getSharedLegKey(leg));
+  for (const mate of mates) {
+    if (mate.id !== leg.id) {
+      await db.transports.update(mate.id, patch);
+    }
+  }
+}
+
+/**
+ * Creates the legs of several guests who take the same train, in one
+ * transaction.
+ *
+ * With `data.sharedLegId` the guests join that existing train. Without it, the
+ * first guest's leg founds the group and the others carry its id, so a group
+ * of one is an ordinary leg with nothing extra stored.
+ *
+ * @param tripId - The trip the legs belong to
+ * @param data - The leg, without its guest
+ * @param personIds - The guests on board, at least one
+ * @returns The created legs, in the order of `personIds`
+ */
+export async function createSharedTransports(
+  tripId: TripId,
+  data: Omit<TransportFormData, 'personId'>,
+  personIds: readonly PersonId[],
+): Promise<Transport[]> {
+  const firstPersonId = personIds[0];
+  if (firstPersonId === undefined) {
+    throw new Error('A transport needs at least one guest');
+  }
+  const sanitizedData = sanitizeTransportData({ ...data, personId: firstPersonId }),
+    datetime = requireCanonicalDatetime(sanitizedData.datetime),
+    founderId = createTransportId(),
+    sharedLegId =
+      data.sharedLegId ??
+      (personIds.length > 1 ? toSharedLegId(founderId) : undefined);
+
+  const transports: Transport[] = personIds.map((personId, index) => {
+    const row: Transport = {
+      ...sanitizedData,
+      id: index === 0 ? founderId : createTransportId(),
+      tripId,
+      personId,
+      datetime,
+    };
+    delete row.sharedLegId;
+    // The founder's own key is its id, so it stores nothing.
+    const isFounder = index === 0 && data.sharedLegId === undefined;
+    if (sharedLegId !== undefined && !isFounder) {
+      row.sharedLegId = sharedLegId;
+    }
+    return row;
+  });
+
+  try {
+    await db.transaction('rw', db.transports, async () => {
+      if (data.sharedLegId !== undefined) {
+        const mates = await getSharedLegRows(tripId, data.sharedLegId);
+        if (mates.length === 0) {
+          throw new Error(`No transport of this trip is shared leg "${data.sharedLegId}"`);
+        }
+      }
+      await db.transports.bulkAdd(transports);
+    });
+    return transports;
+  } catch (error) {
+    throw repositoryError(
+      `Failed to create ${sanitizedData.type} transport for ${personIds.length} guest(s) at "${sanitizedData.location}"`,
+      error,
+    );
+  }
+}
+
+/**
+ * Puts one guest's leg on another guest's train, or takes it off.
+ *
+ * Only the guest's own row is written. Joining copies the train's time, places
+ * and number onto the leg, so the group stays one train. Leaving keeps the
+ * leg's values and gives it a key of its own: the founding leg gets a fresh
+ * key, because the others still carry its id and stay together.
+ *
+ * @param id - The guest's leg
+ * @param tripId - The expected trip ID for ownership validation
+ * @param key - The train to join, or null to travel alone
+ * @returns The leg's key once written
+ * @throws {Error} If the leg or the train is not in the trip
+ */
+export async function setTransportSharedLeg(
+  id: TransportId,
+  tripId: TripId,
+  key: SharedLegId | null,
+): Promise<SharedLegId> {
+  return db.transaction('rw', db.transports, async () => {
+    const transport = await db.transports.get(id);
+    if (!transport) {
+      throw new Error(`Transport with ID "${id}" not found`);
+    }
+    if (transport.tripId !== tripId) {
+      throw new Error('Cannot update transport: transport does not belong to current trip');
+    }
+
+    if (key === null) {
+      const ownKey = toSharedLegId(id);
+      const isFounderOfOthers = (await getSharedLegRows(tripId, ownKey)).some(
+        (row) => row.id !== id,
+      );
+      const ownSharedLegId = isFounderOfOthers ? createSharedLegId() : undefined;
+      await db.transports.update(id, { sharedLegId: ownSharedLegId });
+      return ownSharedLegId ?? ownKey;
+    }
+
+    if (getSharedLegKey(transport) === key) {
+      return key;
+    }
+    const mate = (await getSharedLegRows(tripId, key)).find((row) => row.id !== id);
+    if (!mate) {
+      throw new Error(`No transport of this trip is shared leg "${key}"`);
+    }
+    // Every shared field is written, an absent one as undefined, so a field
+    // the train does not have is cleared on the joiner too.
+    const copied: Record<string, unknown> = {};
+    for (const field of SHARED_LEG_FIELDS) {
+      copied[field] = mate[field];
+    }
+    await db.transports.update(id, {
+      ...(copied as Partial<Transport>),
+      sharedLegId: key,
+    });
+    return key;
+  });
+}
+
+/**
+ * Deletes every guest's leg of one train, in one transaction.
+ *
+ * @param id - Any leg of the train
+ * @param tripId - The expected trip ID for ownership validation
+ * @returns How many legs were deleted
+ * @throws {Error} If the leg is not in the trip
+ */
+export async function deleteSharedLegWithOwnershipCheck(
+  id: TransportId,
+  tripId: TripId,
+): Promise<number> {
+  return db.transaction('rw', db.transports, async () => {
+    const transport = await db.transports.get(id);
+    if (!transport) {
+      throw new Error(`Transport with ID "${id}" not found`);
+    }
+    if (transport.tripId !== tripId) {
+      throw new Error('Cannot delete transport: transport does not belong to current trip');
+    }
+    const rows = await getSharedLegRows(tripId, getSharedLegKey(transport));
+    await db.transports.bulkDelete(rows.map((row) => row.id));
+    return rows.length;
   });
 }
 

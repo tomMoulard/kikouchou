@@ -34,12 +34,16 @@ import {
 } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
+  createSharedTransports as repositoryCreateSharedTransports,
   createTransport as repositoryCreateTransport,
+  deleteSharedLegWithOwnershipCheck,
   deleteTransportWithOwnershipCheck,
+  setTransportSharedLeg as repositorySetTransportSharedLeg,
   updateTransportWithOwnershipCheck,
 } from '@/lib/db';
 import type {
   PersonId,
+  SharedLegId,
   Transport,
   TransportFormData,
   TransportId,
@@ -117,6 +121,35 @@ export interface TransportContextValue {
   createTransport: (data: TransportFormData) => Promise<Transport>;
 
   /**
+   * Creates one leg per guest for guests who take the same train, linked as
+   * one shared leg. With `data.sharedLegId` they join that train.
+   *
+   * @param data - The leg, without its guest
+   * @param personIds - The guests on board, at least one
+   * @returns The created legs
+   */
+  createSharedTransports: (
+    data: Omit<TransportFormData, 'personId'>,
+    personIds: readonly PersonId[],
+  ) => Promise<Transport[]>;
+
+  /**
+   * Puts a guest's leg on another leg's train (copying its time and places),
+   * or with null takes it off the train it shares.
+   */
+  setTransportSharedLeg: (
+    id: TransportId,
+    key: SharedLegId | null,
+  ) => Promise<SharedLegId>;
+
+  /**
+   * Deletes every guest's leg of the train a leg belongs to.
+   *
+   * @returns How many legs were deleted
+   */
+  deleteSharedLeg: (id: TransportId) => Promise<number>;
+
+  /**
    * Updates an existing transport.
    * Verifies the transport belongs to the current trip before updating.
    *
@@ -177,6 +210,9 @@ const compareTransports = (a: Transport, b: Transport): boolean =>
   // unrelated field on the leg happened to change too, which is exactly the
   // bug the three map fields below record.
   a.rideId === b.rideId &&
+  // Which train the leg shares. Missing, a guest joining a train would stay
+  // on their own card until another field of the leg changed.
+  a.sharedLegId === b.sharedLegId &&
   a.location === b.location &&
   a.transportMode === b.transportMode &&
   a.transportNumber === b.transportNumber &&
@@ -462,6 +498,72 @@ export function TransportProvider({
   ),
 
   /**
+   * Creates the legs of several guests on one train.
+   */
+   createSharedTransports = useCallback(
+    async (
+      data: Omit<TransportFormData, 'personId'>,
+      personIds: readonly PersonId[],
+    ): Promise<Transport[]> => {
+      const tripId = currentTripId;
+      if (!tripId) {
+        throw new Error('Cannot create transport: no trip selected');
+      }
+
+      setError((prev) => (prev === null ? prev : null));
+
+      try {
+        return await repositoryCreateSharedTransports(tripId, data, personIds);
+      } catch (err) {
+        throw wrapAndSetError(err, 'Failed to create transport', setError);
+      }
+    },
+    [currentTripId],
+  ),
+
+  /**
+   * Joins a leg to a train, or takes it off.
+   */
+   setTransportSharedLeg = useCallback(
+    async (id: TransportId, key: SharedLegId | null): Promise<SharedLegId> => {
+      const tripId = currentTripId;
+      if (!tripId) {
+        throw new Error('Cannot update transport: no trip selected');
+      }
+
+      setError((prev) => (prev === null ? prev : null));
+
+      try {
+        return await repositorySetTransportSharedLeg(id, tripId, key);
+      } catch (err) {
+        throw wrapAndSetError(err, 'Failed to update transport', setError);
+      }
+    },
+    [currentTripId],
+  ),
+
+  /**
+   * Deletes a whole train: every guest's leg on it.
+   */
+   deleteSharedLeg = useCallback(
+    async (id: TransportId): Promise<number> => {
+      const tripId = currentTripId;
+      if (!tripId) {
+        throw new Error('Cannot delete transport: no trip selected');
+      }
+
+      setError((prev) => (prev === null ? prev : null));
+
+      try {
+        return await deleteSharedLegWithOwnershipCheck(id, tripId);
+      } catch (err) {
+        throw wrapAndSetError(err, 'Failed to delete transport', setError);
+      }
+    },
+    [currentTripId],
+  ),
+
+  /**
    * Synchronously retrieves transports by person using O(1) Map lookup.
    */
    getTransportsByPerson = useCallback(
@@ -480,8 +582,11 @@ export function TransportProvider({
       isLoading,
       error,
       createTransport,
+      createSharedTransports,
+      setTransportSharedLeg,
       updateTransport,
       deleteTransport,
+      deleteSharedLeg,
       getTransportsByPerson,
     }),
     [
@@ -493,8 +598,11 @@ export function TransportProvider({
       isLoading,
       error,
       createTransport,
+      createSharedTransports,
+      setTransportSharedLeg,
       updateTransport,
       deleteTransport,
+      deleteSharedLeg,
       getTransportsByPerson,
     ],
   );

@@ -39,6 +39,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
 import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
+import { groupSharedLegs } from '@/lib/db/shared-legs';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
@@ -78,6 +79,8 @@ interface RunSheetRowProps {
   readonly transport: Transport;
   /** The guest travelling. */
   readonly person: Person | undefined;
+  /** The other guests on the same train whose line this is too. */
+  readonly companions?: readonly (Person | undefined)[];
   /** The driver, when one is assigned. */
   readonly driver: Person | undefined;
   /** Date locale for formatting. */
@@ -113,12 +116,24 @@ function parseFilter(raw: string | null): RunSheetFilter {
 // RunSheetRow Component
 // ============================================================================
 
+/** The default for a line with one guest, stable across renders. */
+const NO_COMPANIONS: readonly (Person | undefined)[] = [];
+
+/**
+ * What must match for two guests of one train to share a line: the line's
+ * pickup flag and driver speak for every guest on it.
+ */
+function runSheetLineKey(transport: Transport): string {
+  return `${String(transport.needsPickup)}|${transport.driverId ?? ''}`;
+}
+
 /**
  * One leg of the run sheet: the clock, who travels, where, and who drives.
  */
 const RunSheetRow = memo(function RunSheetRow({
   transport,
   person,
+  companions = NO_COMPANIONS,
   driver,
   dateLocale,
   isPast,
@@ -140,10 +155,11 @@ const RunSheetRow = memo(function RunSheetRow({
     onOpen(transport.id);
   }, [onOpen, transport.id]);
 
+  const travellers = [person, ...companions];
   const parts = [
     time,
     transport.type === 'arrival' ? t('transports.arrival') : t('transports.departure'),
-    person?.name ?? t('common.unknown'),
+    travellers.map((traveller) => traveller?.name ?? t('common.unknown')).join(', '),
     transport.location,
   ];
   if (needsDriver) {
@@ -186,12 +202,18 @@ const RunSheetRow = memo(function RunSheetRow({
           aria-hidden="true"
         />
 
-        {person ? (
-          <PersonBadge person={person} size="sm" />
-        ) : (
-          <Badge variant="secondary" className="text-muted-foreground">
-            {t('common.unknown')}
-          </Badge>
+        {travellers.map((traveller, index) =>
+          traveller ? (
+            <PersonBadge key={traveller.id} person={traveller} size="sm" />
+          ) : (
+            <Badge
+              key={`unknown-${index}`}
+              variant="secondary"
+              className="text-muted-foreground"
+            >
+              {t('common.unknown')}
+            </Badge>
+          ),
         )}
 
         <span className="flex min-w-0 flex-1 items-center gap-1 text-sm text-muted-foreground">
@@ -540,21 +562,27 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
                 {group.displayDate}
               </h2>
               <ul className="space-y-2">
-                {group.transports.map((transport) => (
-                  <RunSheetRow
-                    key={transport.id}
-                    transport={transport}
-                    person={personsMap.get(transport.personId)}
-                    driver={
-                      transport.driverId ? personsMap.get(transport.driverId) : undefined
-                    }
-                    dateLocale={dateLocale}
-                    isPast={!isTransportUpcoming(transport.datetime, nowMs)}
-                    isMine={isMyTransport(transport, currentPersonId)}
-                    isDriving={isDrivenBy(transport, currentPersonId)}
-                    onOpen={handleOpenTransport}
-                  />
-                ))}
+                {/* One line per train: its guests share it when their pickup
+                    reads the same. */}
+                {groupSharedLegs(group.transports, runSheetLineKey).map((legs) => {
+                  const [transport, ...mates] = legs as [Transport, ...Transport[]];
+                  return (
+                    <RunSheetRow
+                      key={transport.id}
+                      transport={transport}
+                      person={personsMap.get(transport.personId)}
+                      companions={mates.map((mate) => personsMap.get(mate.personId))}
+                      driver={
+                        transport.driverId ? personsMap.get(transport.driverId) : undefined
+                      }
+                      dateLocale={dateLocale}
+                      isPast={!isTransportUpcoming(transport.datetime, nowMs)}
+                      isMine={legs.some((leg) => isMyTransport(leg, currentPersonId))}
+                      isDriving={isDrivenBy(transport, currentPersonId)}
+                      onOpen={handleOpenTransport}
+                    />
+                  );
+                })}
               </ul>
             </section>
           ))}

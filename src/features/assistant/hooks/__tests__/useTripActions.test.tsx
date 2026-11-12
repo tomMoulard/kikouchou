@@ -1532,6 +1532,65 @@ describe('useTripActions — rides and cars', () => {
     expect(stored).toBe(0);
   });
 
+  it("puts a guest on another guest's train, writing only the new guest's leg", async () => {
+    const { tripId, tomId, legId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    const joined = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'joinTransport', data: { transportId: legId, personId: tomId } }),
+    );
+
+    expect(joined.count).toBe(1);
+    const tomsLegs = await db.transports.where('personId').equals(tomId).toArray();
+    expect(tomsLegs).toHaveLength(1);
+    expect(tomsLegs[0]).toMatchObject({
+      sharedLegId: legId,
+      location: 'Lyon Part-Dieu',
+      datetime: '2024-07-16T15:00:00.000Z',
+      // Alice asked for a pickup, and Tom comes off the same train.
+      needsPickup: true,
+    });
+    expect((await db.transports.get(legId))?.sharedLegId).toBeUndefined();
+
+    // Asked again, the guest is already on board: nothing changes.
+    const again = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'joinTransport', data: { transportId: legId, personId: tomId } }),
+    );
+    expect(again.count).toBe(0);
+    expect(await db.transports.where('personId').equals(tomId).count()).toBe(1);
+  });
+
+  it("refuses to put a guest on another trip's train", async () => {
+    const { tripId, tomId } = await seedRideTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const stranger = await createPerson(other.id, {
+      name: 'Not mine',
+      color: hexColor('#8b5cf6'),
+    });
+    const foreignLeg = await createTransport(other.id, {
+      personId: stranger.id,
+      type: 'arrival',
+      datetime: '2025-01-01T10:00:00.000Z' as ISODateTimeString,
+      location: 'Elsewhere',
+      needsPickup: false,
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'joinTransport', data: { transportId: foreignLeg.id, personId: tomId } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.transports.where('personId').equals(tomId).count()).toBe(0);
+  });
+
   it('puts a leg in a car and takes it back out', async () => {
     const { tripId, legId } = await seedRideTrip();
     const ride = await createRide(tripId, {

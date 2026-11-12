@@ -41,6 +41,7 @@ import {
   createShareId,
   createShoppingItemId,
   createTransportId,
+  toSharedLegId,
   createTripId,
   createVehicleId,
   toLocalISODateString,
@@ -718,6 +719,10 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
   ];
 
   // ---- Transports ---------------------------------------------------------
+  // Sam & Alex and Nora go home on the same TGV: Nora's leg carries the id of
+  // theirs, so the train is one card for the three of them.
+  const sharedDepartureId = createTransportId();
+
   const transports: Transport[] = [
     {
       id: createTransportId(),
@@ -817,7 +822,7 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       needsPickup: false,
     },
     {
-      id: createTransportId(),
+      id: sharedDepartureId,
       tripId,
       personId: ids.samAlex,
       type: 'departure',
@@ -834,11 +839,12 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       tripId,
       personId: ids.nora,
       type: 'departure',
-      datetime: at(day(lastDay), 11, 4),
+      datetime: at(day(lastDay), 10, 52),
       location: copy.places.station,
       coordinates: COORDINATES.station,
       transportMode: 'train',
-      transportNumber: 'TGV 6172',
+      transportNumber: 'TGV 6170',
+      sharedLegId: toSharedLegId(sharedDepartureId),
       rideId: rideIds.stationDropoff,
       needsPickup: true,
     },

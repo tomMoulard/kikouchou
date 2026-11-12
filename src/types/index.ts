@@ -44,6 +44,14 @@ export type ExpenseId = Brand<'ExpenseId'>;
 /** Type-safe Ride identifier (nanoid generated) */
 export type RideId = Brand<'RideId'>;
 
+/**
+ * Names one train, flight or coach that several guests take together.
+ *
+ * Its value is the id of the first leg of the group, or a fresh nanoid for a
+ * leg that left a group it had founded. Read it through `getSharedLegKey()`.
+ */
+export type SharedLegId = Brand<'SharedLegId'>;
+
 /** Type-safe Vehicle identifier (nanoid generated) */
 export type VehicleId = Brand<'VehicleId'>;
 
@@ -1166,6 +1174,23 @@ export interface Transport extends Identifiable, TripScoped {
   rideId?: RideId;
 
   /**
+   * The train, flight or coach this leg shares with other guests' legs.
+   *
+   * A leg still belongs to one guest: three guests on one TGV are three rows,
+   * and they are one train because they carry the same key. The key is
+   * `sharedLegId ?? id` (`getSharedLegKey`), so the first leg of a group
+   * carries nothing and every leg that joins it carries the first leg's id.
+   * A guest who joins a train therefore writes only their own row, for the
+   * same reason as {@link rideId}: two guests joining one train while both
+   * offline cannot overwrite each other's join.
+   *
+   * The fields that describe the vehicle itself (type, datetime, places,
+   * mode, number, notes) are kept equal across the group by the writes that
+   * edit them (`SHARED_LEG_FIELDS`). The pickup fields stay per guest.
+   */
+  sharedLegId?: SharedLegId;
+
+  /**
    * Reference to the person responsible for pickup/dropoff.
    *
    * @deprecated Legacy single-passenger form, kept because records created
@@ -2196,6 +2221,8 @@ export interface TransportFormData {
   transportNumber?: string;
   /** The car journey carrying this leg, when one has been arranged */
   rideId?: RideId;
+  /** The train or flight this leg shares with other guests, see {@link Transport.sharedLegId} */
+  sharedLegId?: SharedLegId;
   /** @deprecated Legacy single-passenger driver — see {@link Transport.driverId} */
   driverId?: PersonId;
   /** Whether pickup/dropoff is needed */

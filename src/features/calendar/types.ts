@@ -92,6 +92,11 @@ export interface CalendarTransport {
    * rendering those exactly as it did before rides existed.
    */
   readonly ride?: ResolvedRide;
+  /**
+   * The other guests' legs drawn on this same pill: they share the train
+   * (`sharedLegId`) and the car. `personName` then names every guest.
+   */
+  readonly sharedWith?: readonly Transport[];
 }
 
 /**

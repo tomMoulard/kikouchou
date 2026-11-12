@@ -28,7 +28,11 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useRideContext } from '@/contexts/RideContext';
 import { RideDialog } from '@/features/transports/components/RideDialog';
-import { TransportForm } from '@/features/transports/components/TransportForm';
+import {
+  type SharedLegChange,
+  TransportForm,
+} from '@/features/transports/components/TransportForm';
+import { getSharedLegKey } from '@/lib/db/shared-legs';
 import { captureUsage } from '@/lib/posthog';
 import type {
   Ride,
@@ -99,7 +103,13 @@ const TransportDialog = memo(function TransportDialog({
   defaultType,
 }: TransportDialogProps) {
   const { t } = useTranslation();
-  const { transports, createTransport, updateTransport } = useTransportContext();
+  const {
+    transports,
+    createTransport,
+    createSharedTransports,
+    setTransportSharedLeg,
+    updateTransport,
+  } = useTransportContext();
   // The car select's options. Resolved here rather than inside the form so the
   // form stays renderable without a `RideProvider` around it.
   const { rides, vehicles } = useRideContext();
@@ -178,11 +188,26 @@ const TransportDialog = memo(function TransportDialog({
    * its own submission state via useFormSubmission hook.
    */
   const handleSubmit = useCallback(
-    async (data: TransportFormData) => {
+    async (data: TransportFormData, sharedLeg?: SharedLegChange) => {
+      const { personId, ...leg } = data;
       // Use transportId directly for the check to avoid race conditions with isEditMode boolean
       if (transportId) {
-        // Edit mode - update existing transport
+        // Edit mode - update existing transport. A move onto another train
+        // goes first, so the edit below reaches that train's other guests.
+        const key =
+          sharedLeg?.join === undefined
+            ? undefined
+            : await setTransportSharedLeg(transportId, sharedLeg.join);
         await updateTransport(transportId, data);
+        if (sharedLeg) {
+          for (const mateId of sharedLeg.removeTransportIds) {
+            await setTransportSharedLeg(mateId, null);
+          }
+          const ownKey = key ?? (transport ? getSharedLegKey(transport) : undefined);
+          if (sharedLeg.addPersonIds.length > 0 && ownKey !== undefined) {
+            await createSharedTransports({ ...leg, sharedLegId: ownKey }, sharedLeg.addPersonIds);
+          }
+        }
         notifySuccess(t('transports.updateSuccess', 'Transport updated successfully'));
         captureUsage('transport_saved', {
           operation: 'updated',
@@ -191,8 +216,15 @@ const TransportDialog = memo(function TransportDialog({
           needs_pickup: data.needsPickup,
         });
       } else {
-        // Create mode - create new transport
-        await createTransport(data);
+        // Create mode - one leg, or one leg per guest on the same train
+        if (sharedLeg) {
+          await createSharedTransports(
+            { ...leg, sharedLegId: sharedLeg.join ?? undefined },
+            [personId, ...sharedLeg.addPersonIds],
+          );
+        } else {
+          await createTransport(data);
+        }
         notifySuccess(t('transports.createSuccess', 'Transport created successfully'));
         captureUsage('transport_saved', {
           operation: 'created',
@@ -204,7 +236,17 @@ const TransportDialog = memo(function TransportDialog({
       // Always close dialog on success, regardless of mount state
       onOpenChange(false);
     },
-    [transportId, updateTransport, createTransport, t, onOpenChange, notifySuccess],
+    [
+      transportId,
+      transport,
+      updateTransport,
+      createTransport,
+      createSharedTransports,
+      setTransportSharedLeg,
+      t,
+      onOpenChange,
+      notifySuccess,
+    ],
   );
 
   /**
@@ -288,6 +330,7 @@ const TransportDialog = memo(function TransportDialog({
             vehicles={vehicles}
             transport={transport}
             persons={persons}
+            transports={transports}
             defaultType={isEditMode ? undefined : defaultType}
             tripStartDate={currentTrip?.startDate}
             tripEndDate={currentTrip?.endDate}

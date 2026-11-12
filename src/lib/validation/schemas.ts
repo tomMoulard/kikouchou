@@ -47,6 +47,7 @@ import type {
   MealSlot,
   PersonId,
   RideId,
+  SharedLegId,
   RoomIcon,
   RoomId,
   TransportMode,
@@ -227,6 +228,13 @@ const brandedIdSchema = <T extends string>() =>
 export const personIdSchema = brandedIdSchema<PersonId>();
 export const rideIdSchema = brandedIdSchema<RideId>();
 export const vehicleIdSchema = brandedIdSchema<VehicleId>();
+/**
+ * SharedLegId validator: a nanoid-shaped key, never free text, because it is
+ * compared as a group key and travels to every member's device.
+ */
+export const sharedLegIdSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/, 'Invalid shared leg') as unknown as z.ZodType<SharedLegId>;
 
 /**
  * RoomId validator.
@@ -444,6 +452,7 @@ export const RoomAssignmentFormDataSchema = z
  * - coordinates: optional GPS coordinates (end point)
  * - startLocation: optional starting place label
  * - startCoordinates: optional GPS coordinates for start
+ * - sharedLegId: optional, the train or flight shared with other guests
  * - notes: optional, max 1000 characters
  */
 export const TransportFormDataSchema = z.object({
@@ -467,6 +476,7 @@ export const TransportFormDataSchema = z.object({
     .optional(),
   driverId: personIdSchema.optional(),
   rideId: rideIdSchema.optional(),
+  sharedLegId: sharedLegIdSchema.optional(),
   needsPickup: z.boolean(),
   // Against `MAX_LENGTHS.transportNotes`, the limit the sanitizer and the CRDT
   // projection both use. This said 500 — half of it — so the schema refused

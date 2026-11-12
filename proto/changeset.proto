@@ -108,6 +108,10 @@ message Transport {
   // not as a passenger list on Ride: the CRDT merges an array field atomically,
   // so two guests joining one car offline would keep only one of the joins.
   optional string ride_id = 15;
+  // The train or flight this leg shares with other guests' legs: the first
+  // leg's id, carried by every leg that joined it. A scalar on each leg for
+  // the same reason as ride_id.
+  optional string shared_leg_id = 16;
 }
 
 // A car available to the trip — someone's own, or the one hired for the week.

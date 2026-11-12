@@ -396,6 +396,12 @@ export interface SeedTransportOptions {
    * transports the same `rideId` — never by listing passengers on the ride.
    */
   readonly rideId?: string;
+  /**
+   * The train this leg shares: the id of another seeded leg. Several guests
+   * on one train are seeded as one leg each, the later ones carrying the
+   * first one's id.
+   */
+  readonly sharedLegId?: string;
 }
 
 /**
@@ -430,6 +436,7 @@ export async function seedTransport(
           location: options.location ?? 'Test Station',
           ...(options.coordinates === undefined ? {} : { coordinates: options.coordinates }),
           ...(options.rideId === undefined ? {} : { rideId: options.rideId }),
+          ...(options.sharedLegId === undefined ? {} : { sharedLegId: options.sharedLegId }),
           needsPickup: options.type === 'arrival',
         });
 

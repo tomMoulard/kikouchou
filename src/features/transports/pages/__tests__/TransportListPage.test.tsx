@@ -1007,3 +1007,78 @@ describe('TransportListPage', () => {
     });
   });
 });
+describe('TransportListPage with several guests on one train', () => {
+  const bobOnTheTrain: Transport = {
+    ...mockArrival,
+    id: 'transport-bob' as Transport['id'],
+    personId: mockDriver.id,
+    sharedLegId: mockArrival.id as string as Transport['sharedLegId'],
+  };
+
+  function mockTrain(deleteSharedLeg = vi.fn().mockResolvedValue(2)): void {
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [mockPerson, mockDriver],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(),
+    } as unknown as ReturnType<typeof usePersonContext>);
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockArrival, bobOnTheTrain],
+      departures: [],
+      upcomingPickups: [],
+      nowMs: Date.now(),
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn().mockResolvedValue(undefined),
+      deleteSharedLeg,
+    } as unknown as ReturnType<typeof useTransportContext>);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMocks();
+  });
+
+  it('draws the train once, with every guest on it', () => {
+    mockTrain();
+    render(<TransportListPage />, { withProviders: false });
+
+    const cards = screen.getAllByRole('article');
+    expect(cards).toHaveLength(1);
+    const travellers = within(cards[0]!).getByTestId('transport-card-travellers');
+    expect(within(travellers).getByText('Alice')).toBeInTheDocument();
+    expect(within(travellers).getByText('Bob')).toBeInTheDocument();
+  });
+
+  it('keeps apart a guest whose pickup differs', () => {
+    mockTrain();
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockArrival, { ...bobOnTheTrain, needsPickup: true }],
+      departures: [],
+      upcomingPickups: [],
+      nowMs: Date.now(),
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+    render(<TransportListPage />, { withProviders: false });
+
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+  });
+
+  it('names every guest before deleting the train, and deletes it for all of them', async () => {
+    const user = userEvent.setup();
+    const deleteSharedLeg = vi.fn().mockResolvedValue(2);
+    mockTrain(deleteSharedLeg);
+    render(<TransportListPage />, { withProviders: false });
+
+    await user.click(screen.getByRole('button', { name: /common\.actions/i }));
+    await user.click(screen.getByText('common.delete'));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByText('confirm.deleteSharedLeg')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'common.delete' }));
+
+    expect(deleteSharedLeg).toHaveBeenCalledWith(mockArrival.id);
+  });
+});

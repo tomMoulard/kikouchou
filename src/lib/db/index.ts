@@ -36,6 +36,8 @@ export {
   createRoomAssignmentId,
   createTransportId,
   createRideId,
+  createSharedLegId,
+  toSharedLegId,
   createVehicleId,
   createActivityId,
   createMealId,
@@ -151,7 +153,24 @@ export {
   // Transactional operations with ownership validation (CR-2)
   updateTransportWithOwnershipCheck,
   deleteTransportWithOwnershipCheck,
+  // Several guests on one train
+  createSharedTransports,
+  setTransportSharedLeg,
+  deleteSharedLegWithOwnershipCheck,
 } from './repositories/transport-repository';
+
+// Shared legs: the key, and the fields a train keeps equal
+export {
+  SHARED_LEG_FIELDS,
+  getSharedLegKey,
+  groupSharedLegs,
+  listSharedLegMates,
+  pickSharedLegFields,
+  copySharedLegFields,
+  toSharedLegIdOrUndefined,
+  type SharedLegField,
+  type SharedLegFields,
+} from './shared-legs';
 
 // Ride repository
 export {

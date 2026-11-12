@@ -562,6 +562,30 @@ whole trip.
 - Editing: the guest form ("Add another stay"), and the assistant's `addStay`
   action. The invite page's arrival question writes the first stay only.
 
+### Several guests on one train: one leg each, one key
+
+A transport row belongs to one guest. Three guests on one TGV are three rows,
+and they are one train because they carry the same key, `sharedLegId ?? id`
+(`getSharedLegKey` in `lib/db/shared-legs`). The first leg stores nothing, and
+each leg that joins it stores the first leg's id.
+
+- **A join writes the joiner's own row only.** Two guests who join one train
+  offline both stay on it, for the same reason as `rideId`. Do not add a list
+  of travellers to any row.
+- **The train's fields stay equal.** `updateTransportWithOwnershipCheck` writes
+  the `SHARED_LEG_FIELDS` (type, time, places, mode, number, notes) to every
+  leg of the train. The pickup fields (`needsPickup`, `rideId`, `driverId`)
+  stay per guest.
+- **A founder who leaves gets a fresh key.** The others still carry its id, so
+  they stay together (`setTransportSharedLeg`).
+- **A remote key is bounded.** `toSharedLegIdOrUndefined` drops anything not
+  shaped like an id, in the sync bridge and in the QR mapper.
+- **One card speaks for every guest on it.** The list, the run sheet and the
+  calendar draw one card per train and pickup arrangement. A guest whose
+  pickup differs gets a card of their own. Counts stay per guest.
+- **Deleting the card deletes the train for everyone**, and the confirmation
+  names them. Taking one guest off is an edit: untick them.
+
 ### An assignment's `endDate` is the check-out day, not the last night
 
 `listStayNights` and `isDateInStayRange` (`features/rooms/utils/capacity-utils`)

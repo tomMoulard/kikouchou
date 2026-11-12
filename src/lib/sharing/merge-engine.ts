@@ -353,6 +353,7 @@ function getTransportConflictingFields(host: Transport, guest: Transport): strin
   if (host.needsPickup !== guest.needsPickup) fields.push('needsPickup');
   if (host.driverId !== guest.driverId) fields.push('driverId');
   if (host.rideId !== guest.rideId) fields.push('rideId');
+  if (host.sharedLegId !== guest.sharedLegId) fields.push('sharedLegId');
   if (host.notes !== guest.notes) fields.push('notes');
   if (JSON.stringify(host.coordinates) !== JSON.stringify(guest.coordinates)) fields.push('coordinates');
   if (host.startLocation !== guest.startLocation) fields.push('startLocation');

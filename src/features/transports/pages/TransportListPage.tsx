@@ -11,7 +11,8 @@
  *   three unrelated cards that never mentioned one another, so the driver had
  *   to reconstruct the car in their head.
  * - **A leg travelling on its own** (`TransportCard`) — a transport with no
- *   ride and nobody driving it, rendered exactly as it always was.
+ *   ride and nobody driving it. The guests on one train who are in the same
+ *   situation share the card: one train, one card, every guest's badge on it.
  *
  * Which is which is decided by `resolveRides`, never here: the card, the
  * calendar, the map and the "time to leave" notification all read that one
@@ -131,6 +132,7 @@ import { TransportScopeFilter } from '@/features/transports/components/Transport
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import { useTransportScope } from '@/features/transports/hooks/useTransportScope';
 import { captureDeletion } from '@/lib/posthog';
+import { getSharedLegKey, listSharedLegMates } from '@/lib/db/shared-legs';
 import {
   collectDrivenRideIds,
   isLegCovered,
@@ -166,6 +168,14 @@ interface TransportCardProps {
   readonly transport: Transport;
   /** The person associated with this transport */
   readonly person: Person | undefined;
+  /**
+   * The other guests on the same train who share this card. Their legs move
+   * with the card when it is dragged into a car.
+   */
+  readonly companions?: readonly {
+    readonly transportId: TransportId;
+    readonly person: Person | undefined;
+  }[];
   /** The driver for pickup (if applicable) */
   readonly driver: Person | undefined;
   /** Callback when edit is clicked */
@@ -220,7 +230,10 @@ type TransportListEntry =
       readonly kind: 'leg';
       readonly key: string;
       readonly datetime: string;
+      /** The first leg of the card, whose train the card describes. */
       readonly transport: Transport;
+      /** Every guest's leg on the card, `transport` first. */
+      readonly transports: readonly Transport[];
     };
 
 /**
@@ -418,13 +431,30 @@ function buildListEntries(
     });
   }
 
+  // The lone legs of one train share a card, unless one guest asked for a
+  // pickup and another did not: the card's badge speaks for every guest on it.
+  const cards = new Map<string, Transport[]>();
   for (const transport of transports) {
-    if (!covered.has(transport.id)) {
+    if (covered.has(transport.id)) {
+      continue;
+    }
+    const cardKey = `${getSharedLegKey(transport)}|${String(transport.needsPickup)}`;
+    const card = cards.get(cardKey);
+    if (card) {
+      card.push(transport);
+    } else {
+      cards.set(cardKey, [transport]);
+    }
+  }
+  for (const legs of cards.values()) {
+    const [transport] = legs;
+    if (transport) {
       entries.push({
         kind: 'leg',
         key: transport.id,
         datetime: transport.datetime,
         transport,
+        transports: legs,
       });
     }
   }
@@ -436,10 +466,15 @@ function buildListEntries(
 // Drag and Drop
 // ============================================================================
 
-/** What a dragged leg carries to the drop handler. */
+/** What a dragged card carries to the drop handler. */
 interface DraggableLegData {
-  /** The leg being moved into a car. */
+  /** The card's first leg. */
   readonly transportId: TransportId;
+  /**
+   * Every guest's leg on the card: the guests off one train ride together.
+   * Absent, the card is the one leg.
+   */
+  readonly transportIds?: readonly TransportId[];
 }
 
 /**
@@ -451,6 +486,9 @@ interface DraggableLegData {
  */
 const LEG_DRAGGABLE_PREFIX = 'leg-drag-';
 
+/** The default for a card with one guest, stable across renders. */
+const NO_COMPANIONS: NonNullable<TransportCardProps['companions']> = [];
+
 // ============================================================================
 // TransportCard Component
 // ============================================================================
@@ -461,6 +499,7 @@ const LEG_DRAGGABLE_PREFIX = 'leg-drag-';
 const TransportCard = memo(function TransportCard({
   transport,
   person,
+  companions = NO_COMPANIONS,
   driver,
   onEdit,
   onDelete,
@@ -533,14 +572,19 @@ const TransportCard = memo(function TransportCard({
     isDragging,
   } = useDraggable({
     id: `${LEG_DRAGGABLE_PREFIX}${transport.id}`,
-    data: { transportId: transport.id } satisfies DraggableLegData,
+    data: {
+      transportId: transport.id,
+      transportIds: [transport.id, ...companions.map((companion) => companion.transportId)],
+    } satisfies DraggableLegData,
   }),
 
   // Build aria-label for accessibility
    ariaLabel = useMemo(() => {
     const parts = [
       transport.type === 'arrival' ? t('transports.arrival') : t('transports.departure'),
-      person?.name ?? t('common.unknown'),
+      [person, ...companions.map((companion) => companion.person)]
+        .map((traveller) => traveller?.name ?? t('common.unknown'))
+        .join(', '),
       date,
       time,
       transport.location,
@@ -554,7 +598,17 @@ const TransportCard = memo(function TransportCard({
       parts.push(`${t('transports.driver')}: ${driver.name}`);
     }
     return parts.filter(Boolean).join(', ');
-  }, [transport, person, driver, date, time, t, showNeedsPickupBadge, isSelfDriven]);
+  }, [
+    transport,
+    person,
+    companions,
+    driver,
+    date,
+    time,
+    t,
+    showNeedsPickupBadge,
+    isSelfDriven,
+  ]);
 
   return (
     <Card
@@ -587,13 +641,29 @@ const TransportCard = memo(function TransportCard({
               )}
               aria-hidden="true"
             />
-            {person ? (
-              <PersonBadge person={person} size="default" />
-            ) : (
-              <Badge variant="secondary" className="text-muted-foreground">
-                {t('common.unknown')}
-              </Badge>
-            )}
+            {/* Every guest on this train, wrapping when there are many. */}
+            <div
+              className="flex flex-wrap items-center gap-1 min-w-0"
+              data-testid="transport-card-travellers"
+            >
+              {[{ transportId: transport.id, person }, ...companions].map((traveller) =>
+                traveller.person ? (
+                  <PersonBadge
+                    key={traveller.transportId}
+                    person={traveller.person}
+                    size="default"
+                  />
+                ) : (
+                  <Badge
+                    key={traveller.transportId}
+                    variant="secondary"
+                    className="text-muted-foreground"
+                  >
+                    {t('common.unknown')}
+                  </Badge>
+                ),
+              )}
+            </div>
             {/* Smart pickup indicator: show "needs pickup" only when no driver assigned */}
             {showNeedsPickupBadge && (
               <Badge
@@ -887,6 +957,10 @@ const DateGroupSection = memo(function DateGroupSection({
         // that partition ever widens.
         const { transport } = entry,
          person = personsMap.get(transport.personId),
+         companions = entry.transports.slice(1).map((leg) => ({
+           transportId: leg.id,
+           person: personsMap.get(leg.personId),
+         })),
          driver = transport.driverId
           ? personsMap.get(transport.driverId)
           : undefined;
@@ -896,6 +970,7 @@ const DateGroupSection = memo(function DateGroupSection({
             <TransportCard
               transport={transport}
               person={person}
+              companions={companions}
               driver={driver}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -1088,6 +1163,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     isLoading: isTransportsLoading,
     error: transportsError,
     deleteTransport,
+    deleteSharedLeg,
   } = useTransportContext(),
    // Same reason as the panel: a driven ride covers its legs. The list also
    // draws those rides, so it takes the cars along with them — and gates on the
@@ -1153,6 +1229,21 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Combine arrivals and departures into a single list
    allTransports = useMemo(() => [...arrivals, ...departures], [arrivals, departures]),
 
+  // The other guests on the train about to be deleted, which the confirmation
+  // names because deleting the card deletes the train for each of them.
+   transportToDeleteMates = useMemo(() => {
+    const target = allTransports.find((transport) => transport.id === transportToDelete);
+    return target ? listSharedLegMates(target, allTransports) : [];
+  }, [allTransports, transportToDelete]),
+
+   transportToDeleteNames = useMemo(() => {
+    const target = allTransports.find((transport) => transport.id === transportToDelete);
+    return [target, ...transportToDeleteMates]
+      .filter((leg): leg is Transport => leg !== undefined)
+      .map((leg) => personsMap.get(leg.personId)?.name ?? t('common.unknown'))
+      .join(', ');
+  }, [allTransports, transportToDelete, transportToDeleteMates, personsMap, t]),
+
   // The one read of the journey model. Everything below — which rows exist,
   // when each is filed, what a card draws — comes from this, so the list, the
   // map and the notifications cannot disagree about the same car.
@@ -1216,7 +1307,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       entry.kind === 'ride'
         ? rideConcernsPerson(entry.journey, myPersonId) ||
           entry.journey.legs.some((leg) => visibleTransportIds.has(leg.transport.id))
-        : visibleTransportIds.has(entry.transport.id),
+        : entry.transports.some((leg) => visibleTransportIds.has(leg.id)),
     );
   }, [journeys, allTransports, scope, visibleTransportIds, myPersonId]),
 
@@ -1340,7 +1431,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     if (!transportToDelete) {return;}
 
     try {
-      await deleteTransport(transportToDelete);
+      // A train several guests share is deleted for all of them: the
+      // confirmation named each one.
+      await (transportToDeleteMates.length > 0
+        ? deleteSharedLeg(transportToDelete)
+        : deleteTransport(transportToDelete));
       captureDeletion('transport_deleted', { source: 'list' });
       setTransportToDelete(null);
       notifySuccess(t('transports.deleteSuccess', 'Transport deleted successfully'));
@@ -1353,7 +1448,14 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       );
       throw error; // Re-throw to keep dialog open for retry
     }
-  }, [transportToDelete, deleteTransport, t, notifySuccess]),
+  }, [
+    transportToDelete,
+    transportToDeleteMates,
+    deleteTransport,
+    deleteSharedLeg,
+    t,
+    notifySuccess,
+  ]),
 
   /**
    * Hands a due departure to the operating system.
@@ -1409,8 +1511,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       if (legData?.transportId === undefined || rideData?.rideId === undefined) {
         return;
       }
+      const { rideId } = rideData;
 
-      void setTransportRide(legData.transportId, rideData.rideId)
+      // Every guest on the card gets in: they come off the same train.
+      void (legData.transportIds ?? [legData.transportId])
+        .reduce<Promise<void>>(
+          (previous, transportId) =>
+            previous.then(() => setTransportRide(transportId, rideId)),
+          Promise.resolve(),
+        )
         .then(() => {
           notifySuccess(t('transports.addedToRide'));
         })
@@ -1834,8 +1943,16 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       <ConfirmDialog
         open={transportToDelete !== null}
         onOpenChange={handleCancelDelete}
-        title={t('confirm.deleteTransport')}
-        description={t('confirm.deleteTransportDescription')}
+        title={
+          transportToDeleteMates.length > 0
+            ? t('confirm.deleteSharedLeg', { names: transportToDeleteNames })
+            : t('confirm.deleteTransport')
+        }
+        description={
+          transportToDeleteMates.length > 0
+            ? t('confirm.deleteSharedLegDescription')
+            : t('confirm.deleteTransportDescription')
+        }
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}

@@ -15,6 +15,7 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
+import { toSharedLegIdOrUndefined } from '@/lib/db/shared-legs';
 import { toPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
   MAX_LENGTHS,
@@ -533,6 +534,15 @@ function buildTransportRecord(
   row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.transportNotes);
   row.coordinates = boundedCoordinates(row.coordinates);
   row.startCoordinates = boundedCoordinates(row.startCoordinates);
+  // A group key is compared against every other leg's key, so a peer's free
+  // text or a megabyte string never becomes one: anything not id-shaped is
+  // read as "travels alone".
+  const sharedLegId = toSharedLegIdOrUndefined(row.sharedLegId);
+  if (sharedLegId === undefined) {
+    delete row.sharedLegId;
+  } else {
+    row.sharedLegId = sharedLegId;
+  }
 
   return row;
 }

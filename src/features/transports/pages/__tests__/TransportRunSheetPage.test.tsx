@@ -316,3 +316,40 @@ describe('TransportRunSheetPage', () => {
     expect(screen.getByText('transports.runSheetEmpty')).toBeInTheDocument();
   });
 });
+
+describe('TransportRunSheetPage with several guests on one train', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('gives the train one line naming both guests', () => {
+    const bobOnTheTrain: Transport = {
+      ...unassignedPickup,
+      id: 'transport-bob' as Transport['id'],
+      personId: bob.id,
+      sharedLegId: unassignedPickup.id as string as Transport['sharedLegId'],
+    };
+    setMocks([unassignedPickup, bobOnTheTrain]);
+    render(<TransportRunSheetPage />, { withProviders: false });
+
+    const rows = screen.getAllByTestId('run-sheet-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('Alice');
+    expect(rows[0]).toHaveTextContent('Bob');
+    expect(rows[0]).toHaveAttribute('data-needs-driver', 'true');
+  });
+
+  it('keeps a guest with a driver of their own on a line of their own', () => {
+    const bobDriven: Transport = {
+      ...unassignedPickup,
+      id: 'transport-bob' as Transport['id'],
+      personId: bob.id,
+      driverId: alice.id,
+      sharedLegId: unassignedPickup.id as string as Transport['sharedLegId'],
+    };
+    setMocks([unassignedPickup, bobDriven]);
+    render(<TransportRunSheetPage />, { withProviders: false });
+
+    expect(screen.getAllByTestId('run-sheet-row')).toHaveLength(2);
+  });
+});

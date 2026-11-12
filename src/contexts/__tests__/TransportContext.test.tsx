@@ -512,6 +512,13 @@ describe('TransportContext', () => {
         expected: 'TGV 8541',
       },
       {
+        // Joining another guest's train changes nothing else on the leg.
+        field: 'sharedLegId',
+        patch: { sharedLegId: 'other-guests-leg' as Transport['sharedLegId'] },
+        read: (t) => t?.sharedLegId,
+        expected: 'other-guests-leg',
+      },
+      {
         field: 'notes',
         patch: { notes: 'Platform 12' },
         read: (t) => t?.notes,

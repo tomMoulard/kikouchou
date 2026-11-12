@@ -23,7 +23,10 @@ import {
   createRide,
   setTransportRide,
 } from '@/lib/db/repositories/ride-repository';
-import { createTransport } from '@/lib/db/repositories/transport-repository';
+import {
+  createSharedTransports,
+  createTransport,
+} from '@/lib/db/repositories/transport-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createVehicle } from '@/lib/db/repositories/vehicle-repository';
 import { toLocalISODateString } from '@/lib/db/utils';
@@ -822,6 +825,34 @@ describe('useTripSystemPrompt — rides and cars', () => {
     expect(result.current.prompt.systemPrompt).toContain(
       `(transport id: ${legId})`,
     );
+  });
+
+  it('names the other guests on the same train, which is how joinTransport finds it', async () => {
+    const { tripId } = await seedRide({ withDriver: true });
+    const persons = await db.persons.where('tripId').equals(tripId).toArray();
+    const alice = persons.find((person) => person.name === 'Alice')!;
+    const tom = persons.find((person) => person.name === 'Tom')!;
+    const [aliceLeg] = await createSharedTransports(
+      tripId,
+      {
+        type: 'departure',
+        datetime: '2024-07-20T09:00:00.000Z' as ISODateTimeString,
+        location: 'Lyon Part-Dieu',
+        transportNumber: 'TGV 6170',
+        needsPickup: false,
+      },
+      [alice.id, tom.id],
+    );
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('TGV 6170');
+    });
+
+    const aliceLine = result.current.prompt.systemPrompt
+      .split('\n')
+      .find((line) => line.includes(`transport id: ${aliceLeg!.id}`));
+    expect(aliceLine).toContain('same leg as: Tom');
   });
 
   it('names the ride a leg is riding in, which is how leaveRide finds it', async () => {

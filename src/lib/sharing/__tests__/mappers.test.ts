@@ -420,6 +420,24 @@ describe('mappers: optional fields stay absent', () => {
     expect(protoToTransport(proto)).toEqual(transport);
   });
 
+  it('round-trips the train a leg shares with other guests', () => {
+    const transport: Transport = {
+      ...testTransport,
+      sharedLegId: 'V1StGXR8_Z5jdHi6B-myT' as Transport['sharedLegId'],
+    };
+
+    const proto = transportToProto(transport);
+
+    expect(proto.sharedLegId).toBe('V1StGXR8_Z5jdHi6B-myT');
+    expect(protoToTransport(proto)).toEqual(transport);
+  });
+
+  it('drops a shared-leg key that is not shaped like an id', () => {
+    const proto = { ...transportToProto(testTransport), sharedLegId: 'not an id at all' };
+
+    expect(protoToTransport(proto).sharedLegId).toBeUndefined();
+  });
+
   it('reads an assignment field by field', () => {
     expect(protoToAssignment(assignmentToProto(testAssignment))).toStrictEqual(testAssignment);
   });

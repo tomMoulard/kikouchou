@@ -21,6 +21,7 @@ import type {
   ISODateTimeString,
   PersonId,
   RideId,
+  SharedLegId,
   RoomAssignmentId,
   RoomId,
   ShareId,
@@ -83,6 +84,22 @@ export const createTransportId = (): TransportId => nanoid() as TransportId;
  * const rideId = createRideId();
  */
 export const createRideId = (): RideId => nanoid() as RideId;
+
+/**
+ * Creates a fresh SharedLegId, for a leg that founds a group of its own
+ * without being able to use its own id (see `Transport.sharedLegId`).
+ * @returns A branded SharedLegId string (21 characters)
+ */
+export const createSharedLegId = (): SharedLegId => nanoid() as SharedLegId;
+
+/**
+ * Names the group a transport founds: the key of a leg is its own id until it
+ * joins another leg's group.
+ * @param id - The founding leg's id
+ * @returns The same string, branded as the group's key
+ */
+export const toSharedLegId = (id: TransportId): SharedLegId =>
+  id as string as SharedLegId;
 
 /**
  * Creates a new unique Vehicle ID.

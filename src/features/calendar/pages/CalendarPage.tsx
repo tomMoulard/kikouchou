@@ -65,6 +65,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
 import { isZeroNightWindow } from '@/features/rooms/utils/capacity-utils';
+import { listSharedLegMates } from '@/lib/db/shared-legs';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import { getActivityCategoryColor } from '@/types';
@@ -115,6 +116,7 @@ import {
 import { computeBalances, type PersonBalance } from '@/features/money/lib/balances';
 import { loadTripMoney } from '@/features/money/lib/trip-money';
 import { buildGuestOverview } from '../utils/guest-overview';
+import { mergeSharedLegPills } from '../utils/transport-pills';
 import { buildCalendarTimelineDays } from '../utils/timeline-utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
@@ -193,6 +195,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     isLoading: isTransportsLoading,
     error: transportsError,
     deleteTransport,
+    deleteSharedLeg,
   } = useTransportContext();
   const {
     activities,
@@ -762,6 +765,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       }
     }
 
+    // The guests on one train are one pill: "Alice, Bob" rather than the same
+    // TGV twice, which also leaves room in a day cell that shows only two
+    // transports before "N more".
+    for (const [date, dayTransports] of map) {
+      map.set(date, mergeSharedLegPills(dayTransports));
+    }
+
     return map;
   }, [arrivals, departures, getPersonById, calendarDays, rideByTransportId, unknownLabel]);
 
@@ -1011,12 +1021,18 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         // stand for a couple — so the dialog needs the guest list to sum
         // `headcount` through.
         persons,
+        // Every other guest on the train, not only those drawn on this pill:
+        // deleting it from the dialog deletes it for all of them.
+        sharedWith: listSharedLegMates(calTransport.transport, [
+          ...arrivals,
+          ...departures,
+        ]).map((mate) => getPersonById(mate.personId)),
       };
 
       setSelectedEvent(eventData);
       setIsEventDialogOpen(true);
     },
-    [getPersonById, persons, rideByTransportId],
+    [getPersonById, persons, rideByTransportId, arrivals, departures],
   );
 
   const buildActivityEventData = useCallback(
@@ -1107,7 +1123,9 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       }
     } else if (selectedEvent.type === 'transport') {
       try {
-        await deleteTransport(selectedEvent.transport.id);
+        await (selectedEvent.sharedWith?.length
+          ? deleteSharedLeg(selectedEvent.transport.id)
+          : deleteTransport(selectedEvent.transport.id));
         captureDeletion('transport_deleted', {
           source: 'calendar',
           type: selectedEvent.transport.type,
@@ -1135,7 +1153,15 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         throw error;
       }
     }
-  }, [selectedEvent, deleteAssignment, deleteTransport, deleteActivity, t, notifySuccess]);
+  }, [
+    selectedEvent,
+    deleteAssignment,
+    deleteTransport,
+    deleteSharedLeg,
+    deleteActivity,
+    t,
+    notifySuccess,
+  ]);
 
   const handleTransportDialogClose = useCallback((open: boolean) => {
     setIsTransportDialogOpen(open);

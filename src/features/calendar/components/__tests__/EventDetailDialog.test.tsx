@@ -1237,3 +1237,29 @@ describe('EventDetailDialog details', () => {
     });
   });
 });
+
+describe('EventDetailDialog for a train several guests share', () => {
+  const bob = makePerson({ id: 'person-2' as PersonId, name: 'Bob' });
+
+  it('shows every guest on the train', () => {
+    render(
+      <EventDetailDialog {...defaultProps} event={makeTransportEvent({ sharedWith: [bob] })} />,
+    );
+
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+  });
+
+  it('warns that deleting it deletes it for every guest', async () => {
+    const user = userEvent.setup();
+    render(
+      <EventDetailDialog {...defaultProps} event={makeTransportEvent({ sharedWith: [bob] })} />,
+    );
+
+    await user.click(screen.getByText('common.delete'));
+
+    const confirm = await screen.findByRole('alertdialog');
+    expect(within(confirm).getByText('confirm.deleteSharedLeg')).toBeInTheDocument();
+    expect(within(confirm).getByText('confirm.deleteSharedLegDescription')).toBeInTheDocument();
+  });
+});

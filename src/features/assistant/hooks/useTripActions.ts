@@ -68,6 +68,9 @@ import {
   setActivityParticipation,
   setCurrentTrip,
   setTransportRide,
+  createSharedTransports,
+  getSharedLegKey,
+  getTransportsByTripId,
   toLocalISODateString,
   updateActivityWithOwnershipCheck,
   updateExpenseWithOwnershipCheck,
@@ -82,6 +85,7 @@ import {
   MealFormDataSchema,
   RideFormDataSchema,
   ShoppingItemFormDataSchema,
+  TransportFormDataSchema,
   VehicleFormDataSchema,
 } from '@/lib/validation/schemas';
 import {
@@ -1107,6 +1111,65 @@ async function executeActionBatch(
               location: d.location as string,
               defaultValue:
                 'Added {{type}} for {{person}} at {{location}}',
+            }),
+          );
+          break;
+        }
+
+        case 'joinTransport': {
+          const tid = activeTripId;
+          if (!tid) {
+            notify.error(t('assistant.noTripForAction'));
+            break;
+          }
+          const leg = await getTransportById(action.data.transportId as TransportId);
+          if (!leg || leg.tripId !== tid) {
+            notify.error(t('assistant.transportNotFound'));
+            break;
+          }
+          const joiner = await getPersonById(action.data.personId as PersonId);
+          if (!joiner || joiner.tripId !== tid) {
+            notify.error(t('assistant.guestNotFound'));
+            break;
+          }
+          const key = getSharedLegKey(leg);
+          const onBoard = (await getTransportsByTripId(tid)).some(
+            (other) => other.personId === joiner.id && getSharedLegKey(other) === key,
+          );
+          if (onBoard) {
+            // Do not report a change that did not happen.
+            break;
+          }
+
+          // The guest gets a leg of their own on that train: their own row,
+          // carrying the train's key, so nobody else's row is written.
+          const parsedLeg = TransportFormDataSchema.safeParse({
+            personId: joiner.id,
+            type: leg.type,
+            datetime: leg.datetime,
+            location: leg.location,
+            coordinates: leg.coordinates,
+            startLocation: leg.startLocation,
+            startCoordinates: leg.startCoordinates,
+            transportMode: leg.transportMode,
+            transportNumber: leg.transportNumber,
+            notes: leg.notes,
+            sharedLegId: key,
+            // Fetched with the others off the same train, as the form does.
+            needsPickup: leg.needsPickup,
+          });
+          if (!parsedLeg.success) {
+            notify.error(t('assistant.transportNotFound'));
+            break;
+          }
+          await createSharedTransports(tid, parsedLeg.data, [joiner.id]);
+          notifySuccess(t('transports.createSuccess'));
+          executedCount++;
+          summaries.push(
+            t('assistant.actionDetails.joinTransport', {
+              person: joiner.name,
+              location: leg.location,
+              defaultValue: '{{person}} takes the same transport to {{location}}',
             }),
           );
           break;

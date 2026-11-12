@@ -409,6 +409,24 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
     },
   },
   {
+    action: 'joinTransport',
+    label: 'Add a guest to a leg',
+    fields: {
+      transportId: {
+        type: 'string',
+        required: true,
+        description: 'Leg to share',
+        example: '<transport id>',
+      },
+      personId: {
+        type: 'string',
+        required: true,
+        description: 'Guest ID',
+        example: '<guest id>',
+      },
+    },
+  },
+  {
     action: 'removeTransport',
     label: 'Remove a leg',
     fields: {
@@ -1316,7 +1334,7 @@ export function generateActionPrompt(
     lines.push(
       // The envelope is shown once for the whole family, immediately above the
       // list, so the shape the model copies is still on screen next to it.
-      'Id-only, same shape, ids from the lists above:',
+      'Id-only, same shape, ids from above:',
       `  ${buildExample(idOnlyExample)}`,
       `  ${idOnly
         .map((def) => `${def.action} ${Object.keys(def.fields).join('+')}`)
@@ -1330,7 +1348,7 @@ export function generateActionPrompt(
     // a required field it was never given with a plausible-looking literal —
     // "I'll assume it's trip123" — and `validateAction` then rejects the block,
     // so the user sees a confident answer and no change.
-    'Never invent an id, a name or a date the user did not give — ask for it instead.',
+    'Never invent an id, a name or a date: ask for it instead.',
     'After createTrip, the rest applies to the new trip.',
     // Covers rides as well as activities: membership is a join/leave verb in
     // both, and updateRide has no passenger field for the model to reach for.

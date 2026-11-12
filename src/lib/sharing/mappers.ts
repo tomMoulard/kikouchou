@@ -37,6 +37,7 @@ import {
   normalizeRoomCapacity,
   sanitizeOptionalText,
 } from '@/lib/db/sanitize';
+import { toSharedLegIdOrUndefined } from '@/lib/db/shared-legs';
 import { ROOM_ICONS, normalizePersonHeadcount } from '@/types';
 import type {
   ChildSeatKind,
@@ -188,6 +189,9 @@ export function transportToProto(transport: Transport): ProtoTransport {
     // a shared car. On the guest's own device the id resolves to nothing, which
     // `checkTransportRefs` reports rather than hides.
     rideId: transport.rideId ?? undefined,
+    // Carried so a guest editing their own leg returns it still on the train
+    // they share: the host replaces the whole row with what comes back.
+    sharedLegId: transport.sharedLegId ?? undefined,
   });
 
   if (transport.transportMode) {
@@ -361,6 +365,7 @@ export function protoToTransport(proto: ProtoTransport): Transport {
     transportNumber: proto.transportNumber ?? undefined,
     driverId: proto.driverId ? (proto.driverId as PersonId) : undefined,
     rideId: proto.rideId ? (proto.rideId as RideId) : undefined,
+    sharedLegId: toSharedLegIdOrUndefined(proto.sharedLegId),
     needsPickup: proto.needsPickup,
     notes: proto.notes ?? undefined,
   };
