@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import {
   isClockSkewMessage,
   isNetworkFailureMessage,
@@ -471,6 +472,51 @@ describe('bounding what the server sends', () => {
     const stored = await db.guestGroups.get('group-1');
     expect(stored?.members[0]?.name).toBe('Lila');
     expect(stored?.members[0]?.childSeat).toBeUndefined();
+  });
+
+  it('keeps the diet tags this build knows and drops the others', async () => {
+    const { client } = fakeClient([
+      serverRow({
+        members: [
+          {
+            id: 'm1',
+            name: 'Nora',
+            color: '#3b82f6',
+            dietaryTags: ['vegetarian', 'carnivore', 42],
+            dietaryNote: '  Peanuts  ',
+          },
+        ],
+      }),
+    ]);
+
+    await syncGuestGroups(client, USER_ID);
+
+    const member = (await db.guestGroups.get('group-1'))?.members[0];
+    expect(member?.dietaryTags).toEqual(['vegetarian']);
+    expect(member?.dietaryNote).toBe('Peanuts');
+  });
+
+  it('bounds a food note and drops a diet that is not a list', async () => {
+    const { client } = fakeClient([
+      serverRow({
+        members: [
+          {
+            id: 'm1',
+            name: 'Nora',
+            color: '#3b82f6',
+            dietaryTags: 'vegetarian',
+            dietaryNote: 'x'.repeat(5000),
+          },
+        ],
+      }),
+    ]);
+
+    await syncGuestGroups(client, USER_ID);
+
+    const member = (await db.guestGroups.get('group-1'))?.members[0];
+    expect(member?.name).toBe('Nora');
+    expect(member).not.toHaveProperty('dietaryTags');
+    expect(member?.dietaryNote).toHaveLength(MAX_LENGTHS.personDietaryNote);
   });
 
   it('caps a member list longer than a group may hold', async () => {

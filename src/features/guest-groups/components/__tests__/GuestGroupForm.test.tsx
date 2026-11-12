@@ -9,6 +9,12 @@ import { render, screen, userEvent, waitFor } from '@/test/utils';
 import { GuestGroupForm } from '@/features/guest-groups/components/GuestGroupForm';
 import type { GuestGroup, GuestGroupId, GuestGroupMemberId, HexColor } from '@/types';
 
+const flag = { mealPlanner: true };
+
+vi.mock('@/hooks/useMealPlannerEnabled', () => ({
+  useMealPlannerEnabled: () => flag.mealPlanner,
+}));
+
 // ============================================================================
 // Fixtures
 // ============================================================================
@@ -287,5 +293,125 @@ describe('GuestGroupForm', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  describe('diet', () => {
+    const withDiet: GuestGroup = {
+      ...familyGroup,
+      members: [
+        {
+          id: 'member-4' as GuestGroupMemberId,
+          name: 'Nora',
+          color: '#3b82f6' as HexColor,
+          dietaryTags: ['vegetarian'],
+          dietaryNote: 'Peanuts',
+        },
+      ],
+    };
+
+    it('sets a diet and a food note on a member', async () => {
+      flag.mealPlanner = true;
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined);
+
+      render(<GuestGroupForm group={familyGroup} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      await user.click(screen.getAllByRole('button', { name: 'diets.vegan' })[1]!);
+      await user.click(screen.getAllByRole('button', { name: 'diets.vegetarian' })[1]!);
+      await user.type(screen.getAllByLabelText('diets.noteLabel')[1]!, ' Peanuts ');
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+      const [tom, alice] = onSubmit.mock.calls[0]?.[0].members ?? [];
+      expect(tom).not.toHaveProperty('dietaryTags');
+      expect(tom).not.toHaveProperty('dietaryNote');
+      // In the order the picker offers them, not the order they were tapped.
+      expect(alice).toMatchObject({
+        dietaryTags: ['vegetarian', 'vegan'],
+        dietaryNote: 'Peanuts',
+      });
+    });
+
+    it('shows a stored diet as selected and can clear it', async () => {
+      flag.mealPlanner = true;
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined);
+
+      render(<GuestGroupForm group={withDiet} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      const vegetarian = screen.getByRole('button', { name: 'diets.vegetarian' });
+      expect(vegetarian).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByLabelText('diets.noteLabel')).toHaveValue('Peanuts');
+
+      await user.click(vegetarian);
+      await user.clear(screen.getByLabelText('diets.noteLabel'));
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledWith({
+          name: 'Family',
+          members: [{ name: 'Nora', color: '#3b82f6' }],
+        });
+      });
+    });
+
+    it('hides the diet without the meal planner, and keeps it through a save', async () => {
+      // The form rebuilds every member from its drafts: a device with the flag
+      // off must not clear a diet typed on a device with it on.
+      flag.mealPlanner = false;
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined);
+
+      render(<GuestGroupForm group={withDiet} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      expect(screen.queryByRole('button', { name: 'diets.vegetarian' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('diets.noteLabel')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledWith({
+          name: 'Family',
+          members: [
+            {
+              name: 'Nora',
+              color: '#3b82f6',
+              dietaryTags: ['vegetarian'],
+              dietaryNote: 'Peanuts',
+            },
+          ],
+        });
+      });
+      flag.mealPlanner = true;
+    });
+
+    it('counts a diet change as unsaved', async () => {
+      flag.mealPlanner = true;
+      const user = userEvent.setup(),
+        onDirtyChange = vi.fn();
+
+      render(
+        <GuestGroupForm
+          group={withDiet}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+          onDirtyChange={onDirtyChange}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'diets.vegan' }));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+  });
+
+  it('labels the child seat picker where it can be seen', () => {
+    render(<GuestGroupForm group={familyGroup} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    for (const label of screen.getAllByText('childSeats.label')) {
+      expect(label).not.toHaveClass('sr-only');
+    }
   });
 });

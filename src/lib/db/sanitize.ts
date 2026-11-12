@@ -276,6 +276,8 @@ export function sanitizeGuestGroupData<
       phone?: string;
       headcount?: number;
       childSeat?: string;
+      dietaryTags?: readonly string[];
+      dietaryNote?: string;
     }[];
   },
 >(data: T): T {

@@ -757,6 +757,8 @@ export const ShoppingItemFormDataSchema = z.object({
  * - notes: optional, max 2000 characters
  * - phone: optional, max 32 characters
  * - childSeat: optional, one of the known child seat kinds
+ * - dietaryTags: optional, known diet tags
+ * - dietaryNote: optional, bounded like a guest's
  */
 export const GuestGroupMemberFormDataSchema = z.object({
   name: z
@@ -779,6 +781,14 @@ export const GuestGroupMemberFormDataSchema = z.object({
     .max(32, 'Phone number must be 32 characters or less')
     .optional(),
   childSeat: childSeatKindSchema.optional(),
+  dietaryTags: z.array(dietaryTagSchema).max(DIETARY_TAGS.length).optional(),
+  dietaryNote: z
+    .string()
+    .max(
+      MAX_LENGTHS.personDietaryNote,
+      `Food note must be ${MAX_LENGTHS.personDietaryNote} characters or less`,
+    )
+    .optional(),
 });
 
 /**

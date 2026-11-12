@@ -34,7 +34,7 @@
  */
 
 import { db } from '@/lib/db/database';
-import { MAX_LENGTHS, normalizeChildSeat } from '@/lib/db/sanitize';
+import { MAX_LENGTHS, normalizeChildSeat, normalizeDietaryTags } from '@/lib/db/sanitize';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import type { Database, Json } from '@/lib/supabase/database.types';
 import {
@@ -175,6 +175,15 @@ function toMember(value: unknown): GuestGroupMember | undefined {
   const childSeat =
     typeof raw.childSeat === 'string' ? normalizeChildSeat(raw.childSeat) : undefined;
 
+  // Same rule for the diets: they are counted on every meal of the trip the
+  // member is imported into, so an unknown tag is dropped on its own.
+  const dietaryTags = normalizeDietaryTags(raw.dietaryTags);
+
+  const dietaryNote =
+    typeof raw.dietaryNote === 'string' && raw.dietaryNote.trim().length > 0
+      ? raw.dietaryNote.trim().slice(0, MAX_LENGTHS.personDietaryNote)
+      : undefined;
+
   return {
     id: raw.id as GuestGroupMemberId,
     name: raw.name.trim().slice(0, MAX_MEMBER_NAME_LENGTH),
@@ -183,6 +192,8 @@ function toMember(value: unknown): GuestGroupMember | undefined {
     ...(notes === undefined ? {} : { notes }),
     ...(phone === undefined ? {} : { phone }),
     ...(childSeat === undefined ? {} : { childSeat }),
+    ...(dietaryTags === undefined ? {} : { dietaryTags }),
+    ...(dietaryNote === undefined ? {} : { dietaryNote }),
   };
 }
 

@@ -197,7 +197,7 @@ export interface ImportGuestGroupResult {
  * Imports members of a group into a trip as new guests.
  *
  * Every selected member becomes a `Person` carrying the member's name, colour,
- * headcount, notes, phone and child seat. Stay dates are deliberately not part
+ * headcount, notes, phone, child seat and diet. Stay dates are deliberately not part
  * of a member: they belong to a trip, not to a person, so an imported guest
  * starts with none and the calendar treats them as present for the whole trip
  * until told otherwise.
@@ -254,6 +254,11 @@ export async function importGuestGroupMembers(
         // the member. Without it the family roster gives back an adult-shaped
         // guest every summer and the ride's seat tally quietly reads zero.
         ...(member.childSeat ? { childSeat: member.childSeat } : {}),
+        // A diet outlives a holiday too, and the meal planner counts it.
+        ...(member.dietaryTags && member.dietaryTags.length > 0
+          ? { dietaryTags: [...member.dietaryTags] }
+          : {}),
+        ...(member.dietaryNote ? { dietaryNote: member.dietaryNote } : {}),
       });
     }
 
@@ -270,7 +275,7 @@ export async function importGuestGroupMembers(
  *
  * The fastest way to a first group: the family is usually already typed into
  * this year's trip. Each guest contributes its name, colour, headcount, notes,
- * phone and child seat; nothing trip-specific (stay dates, rooms, transports)
+ * phone, child seat and diet; nothing trip-specific (stay dates, rooms, transports)
  * comes along.
  *
  * @param name - Name for the new group
@@ -295,6 +300,10 @@ export async function createGuestGroupFromPersons(
       ...(person.notes ? { notes: person.notes } : {}),
       ...(person.phone ? { phone: person.phone } : {}),
       ...(person.childSeat ? { childSeat: person.childSeat } : {}),
+      ...(person.dietaryTags && person.dietaryTags.length > 0
+        ? { dietaryTags: [...person.dietaryTags] }
+        : {}),
+      ...(person.dietaryNote ? { dietaryNote: person.dietaryNote } : {}),
     })),
   });
 }

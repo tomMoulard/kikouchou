@@ -345,6 +345,62 @@ describe('createGuestGroupFromPersons', () => {
     expect(persons[0]?.childSeat).toBe('booster');
   });
 
+  it('carries a diet and a food note both ways', async () => {
+    const source = await createTestTrip('source'),
+      target = await createTestTrip('target');
+
+    await createPerson(source, {
+      name: 'Nora',
+      color: hexColor('#3b82f6'),
+      dietaryTags: ['vegetarian', 'glutenFree'],
+      dietaryNote: 'Peanuts',
+    });
+
+    // A vegetarian is a vegetarian every summer, and the meal planner counts
+    // the tags on every meal the imported guest eats.
+    const group = await createGuestGroupFromPersons(
+      'Family',
+      await getPersonsByTripId(source),
+    );
+    expect(group.members[0]).toMatchObject({
+      dietaryTags: ['vegetarian', 'glutenFree'],
+      dietaryNote: 'Peanuts',
+    });
+
+    const { persons } = await importGuestGroupMembers(target, group.id);
+    expect(persons[0]).toMatchObject({
+      dietaryTags: ['vegetarian', 'glutenFree'],
+      dietaryNote: 'Peanuts',
+    });
+  });
+
+  it('gives a member with no diet no diet keys on import', async () => {
+    const target = await createTestTrip('target'),
+      group = await createGuestGroup({
+        name: 'Family',
+        members: [{ name: 'Tom', color: hexColor('#ef4444'), dietaryTags: [] }],
+      });
+
+    const { persons } = await importGuestGroupMembers(target, group.id);
+    expect(persons[0]).not.toHaveProperty('dietaryTags');
+    expect(persons[0]).not.toHaveProperty('dietaryNote');
+  });
+
+  it('drops an unknown diet tag when a group is saved', async () => {
+    const group = await createGuestGroup({
+      name: 'Family',
+      members: [
+        {
+          name: 'Nora',
+          color: hexColor('#3b82f6'),
+          dietaryTags: ['vegetarian', 'carnivore' as 'vegan'],
+        },
+      ],
+    });
+
+    expect(group.members[0]?.dietaryTags).toEqual(['vegetarian']);
+  });
+
   it('gives an adult member no child seat on either leg of the round trip', async () => {
     const source = await createTestTrip('source'),
       target = await createTestTrip('target');

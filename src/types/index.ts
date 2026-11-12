@@ -1827,6 +1827,24 @@ export interface GuestGroupMember extends Identifiable {
    * @example "booster"
    */
   childSeat?: ChildSeatKind;
+
+  /**
+   * The diets this member follows, copied onto the imported guest.
+   *
+   * Same reason as {@link childSeat}: a vegetarian is a vegetarian every
+   * summer, so the roster is where it is typed once.
+   *
+   * @see {@link Person.dietaryTags}
+   * @example ["vegetarian"]
+   */
+  dietaryTags?: DietaryTag[];
+
+  /**
+   * Allergies and other food notes, copied onto the imported guest.
+   * @see {@link Person.dietaryNote}
+   * @example "Peanuts"
+   */
+  dietaryNote?: string;
 }
 
 /**
@@ -2109,6 +2127,10 @@ export interface GuestGroupMemberFormData {
   phone?: string;
   /** The child restraint this member needs in a car, when they need one */
   childSeat?: ChildSeatKind;
+  /** The diets this member follows */
+  dietaryTags?: DietaryTag[];
+  /** Allergies and other food notes */
+  dietaryNote?: string;
 }
 
 /**

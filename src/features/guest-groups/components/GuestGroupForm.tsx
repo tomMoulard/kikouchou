@@ -34,7 +34,9 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
+import { DietaryTagPicker } from '@/features/persons/components/DietaryTagPicker';
 import { useFormSubmission } from '@/hooks';
+import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor } from '@/lib/db/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
@@ -46,7 +48,7 @@ import {
   getPersonHeadcount,
   normalizePersonHeadcount,
 } from '@/types';
-import type { ChildSeatKind, GuestGroup, GuestGroupFormData } from '@/types';
+import type { ChildSeatKind, DietaryTag, GuestGroup, GuestGroupFormData } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -80,6 +82,8 @@ interface MemberDraft {
   phone: string;
   /** A {@link ChildSeatKind}, or {@link NO_CHILD_SEAT} for "none needed". */
   childSeat: string;
+  dietaryTags: DietaryTag[];
+  dietaryNote: string;
 }
 
 interface FormErrors {
@@ -123,6 +127,8 @@ function emptyDraft(drafts: readonly MemberDraft[]): MemberDraft {
     notes: '',
     phone: '',
     childSeat: NO_CHILD_SEAT,
+    dietaryTags: [],
+    dietaryNote: '',
   };
 }
 
@@ -140,6 +146,8 @@ function toDrafts(group: GuestGroup | undefined): MemberDraft[] {
     notes: member.notes ?? '',
     phone: member.phone ?? '',
     childSeat: member.childSeat ?? NO_CHILD_SEAT,
+    dietaryTags: [...(member.dietaryTags ?? [])],
+    dietaryNote: member.dietaryNote ?? '',
   }));
 }
 
@@ -154,6 +162,8 @@ function snapshot(name: string, drafts: readonly MemberDraft[]): string {
       draft.notes.trim(),
       draft.phone.trim(),
       draft.childSeat,
+      draft.dietaryTags,
+      draft.dietaryNote.trim(),
     ]),
   ]);
 }
@@ -184,6 +194,10 @@ const GuestGroupForm = memo(function GuestGroupForm({
   onDirtyChange,
 }: GuestGroupFormProps) {
   const { t } = useTranslation();
+  // The diet fields show where the meal planner does, as on the guest form.
+  // They are carried through the save either way: the drafts hold the stored
+  // values, so a device with the flag off never clears a diet.
+  const mealPlanner = useMealPlannerEnabled();
 
   const [name, setName] = useState(group?.name ?? '');
   const [drafts, setDrafts] = useState<MemberDraft[]>(() => toDrafts(group));
@@ -278,7 +292,8 @@ const GuestGroupForm = memo(function GuestGroupForm({
                 Number.parseInt(draft.headcount, 10),
               ),
               notes = draft.notes.trim(),
-              phone = draft.phone.trim();
+              phone = draft.phone.trim(),
+              dietaryNote = draft.dietaryNote.trim();
 
             return {
               name: draft.name.trim(),
@@ -291,6 +306,10 @@ const GuestGroupForm = memo(function GuestGroupForm({
               ...(draft.childSeat === NO_CHILD_SEAT
                 ? {}
                 : { childSeat: draft.childSeat as ChildSeatKind }),
+              ...(draft.dietaryTags.length > 0
+                ? { dietaryTags: [...draft.dietaryTags] }
+                : {}),
+              ...(dietaryNote.length > 0 ? { dietaryNote } : {}),
             };
           }),
         });
@@ -440,7 +459,9 @@ const GuestGroupForm = memo(function GuestGroupForm({
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor={`guest-group-child-seat-${draft.key}`} className="sr-only">
+                {/* Visible: the closed select reads "None" alone, which says
+                    nothing about what is missing. */}
+                <Label htmlFor={`guest-group-child-seat-${draft.key}`}>
                   {t('childSeats.label')}
                 </Label>
                 <Select
@@ -453,7 +474,6 @@ const GuestGroupForm = memo(function GuestGroupForm({
                   <SelectTrigger
                     id={`guest-group-child-seat-${draft.key}`}
                     className="w-full"
-                    aria-label={t('childSeats.label')}
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -484,6 +504,30 @@ const GuestGroupForm = memo(function GuestGroupForm({
                   className="resize-y"
                 />
               </div>
+
+              {mealPlanner && (
+                <div className="space-y-2">
+                  <DietaryTagPicker
+                    value={draft.dietaryTags}
+                    onChange={(dietaryTags) => handleMemberChange(draft.key, { dietaryTags })}
+                    hintId={`guest-group-diet-hint-${draft.key}`}
+                    disabled={isSubmitting}
+                  />
+                  <Label htmlFor={`guest-group-dietary-note-${draft.key}`}>
+                    {t('diets.noteLabel')}
+                  </Label>
+                  <Input
+                    id={`guest-group-dietary-note-${draft.key}`}
+                    value={draft.dietaryNote}
+                    onChange={(event) =>
+                      handleMemberChange(draft.key, { dietaryNote: event.target.value })
+                    }
+                    placeholder={t('diets.notePlaceholder')}
+                    maxLength={MAX_LENGTHS.personDietaryNote}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

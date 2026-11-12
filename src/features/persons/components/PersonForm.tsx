@@ -18,7 +18,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, Plus, X } from 'lucide-react';
+import { ChevronDown, Plus, X } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 
@@ -36,6 +36,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { ContactNameInput } from '@/features/persons/components/ContactNameInput';
+import { DietaryTagPicker } from '@/features/persons/components/DietaryTagPicker';
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
@@ -46,7 +47,6 @@ import { cn } from '@/lib/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
   CHILD_SEAT_KINDS,
-  DIETARY_TAGS,
   MAX_PERSON_HEADCOUNT,
   MIN_PERSON_HEADCOUNT,
   getPersonHeadcount,
@@ -537,14 +537,6 @@ const PersonForm = memo(function PersonForm({
   /**
    * Adds or removes one diet tag, keeping the order the form offers them in.
    */
-  const handleDietaryTagToggle = useCallback((tag: DietaryTag) => {
-    setDietaryTags((prev) =>
-      prev.includes(tag)
-        ? prev.filter((candidate) => candidate !== tag)
-        : DIETARY_TAGS.filter((candidate) => candidate === tag || prev.includes(candidate)),
-    );
-  }, []);
-
   const handleDietaryNoteChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setDietaryNote(e.target.value);
   }, []);
@@ -891,42 +883,12 @@ const PersonForm = memo(function PersonForm({
             {/* Diet. Counted on every meal of the planner this guest eats. */}
             {mealPlanner && (
               <div className="border-t pt-3 space-y-2">
-                <fieldset className="space-y-2" aria-describedby="person-diet-hint">
-                  <legend className="text-sm font-medium leading-none">
-                    {t('diets.label')}
-                  </legend>
-                  <div className="flex flex-wrap gap-2">
-                    {DIETARY_TAGS.map((tag) => {
-                      const isSelected = dietaryTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => handleDietaryTagToggle(tag)}
-                          disabled={isSubmitting}
-                          aria-pressed={isSelected}
-                          className={cn(
-                            'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm',
-                            'transition-colors',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                            'disabled:opacity-50',
-                            isSelected
-                              ? 'border-primary bg-primary/10 text-foreground'
-                              : 'border-input text-muted-foreground hover:bg-muted',
-                          )}
-                        >
-                          {t(`diets.${tag}`)}
-                          {isSelected && (
-                            <Check className="size-3.5 shrink-0" aria-hidden="true" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-                <p id="person-diet-hint" className="text-xs text-muted-foreground">
-                  {t('diets.hint')}
-                </p>
+                <DietaryTagPicker
+                  value={dietaryTags}
+                  onChange={setDietaryTags}
+                  hintId="person-diet-hint"
+                  disabled={isSubmitting}
+                />
                 <Label htmlFor="person-dietary-note">{t('diets.noteLabel')}</Label>
                 <Input
                   id="person-dietary-note"
