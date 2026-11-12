@@ -33,7 +33,6 @@
     "jsx": "react-jsx",
 
     /* Path aliases, so a spec can import the app's types */
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
