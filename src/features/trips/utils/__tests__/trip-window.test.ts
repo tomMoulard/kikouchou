@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getTripDates,
   inferGuestStayWindow,
+  resolveRoomPlanningWindow,
   resolveTripWorkingWindow,
   resolveUndatedTimelineRange,
   tripHasDates,
@@ -17,7 +18,17 @@ import {
 } from '../trip-window';
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import { hexColor, isoDate } from '@/test/utils';
-import type { ISODateString, Person, PersonId, Transport, TransportId, TripId } from '@/types';
+import type {
+  ISODateString,
+  Person,
+  PersonId,
+  RoomAssignment,
+  RoomAssignmentId,
+  RoomId,
+  Transport,
+  TransportId,
+  TripId,
+} from '@/types';
 
 // ============================================================================
 // Fixtures
@@ -164,6 +175,63 @@ describe('resolveTripWorkingWindow', () => {
 
   it('answers null when neither the trip nor a guest has dates', () => {
     expect(resolveTripWorkingWindow(undefined, [person('a')])).toBeNull();
+  });
+});
+
+// ============================================================================
+// resolveRoomPlanningWindow
+// ============================================================================
+
+function booking(id: string, personId: string, startDate: string, endDate: string): RoomAssignment {
+  return {
+    id: id as RoomAssignmentId,
+    tripId: TRIP_ID,
+    roomId: 'room-1' as RoomId,
+    personId: personId as PersonId,
+    startDate: isoDate(startDate),
+    endDate: isoDate(endDate),
+  } as RoomAssignment;
+}
+
+describe('resolveRoomPlanningWindow', () => {
+  it('prefers the trip dates over the guests and the bookings', () => {
+    expect(
+      resolveRoomPlanningWindow(
+        { startDate: isoDate('2026-08-01'), endDate: isoDate('2026-08-05') },
+        [person('a', { stayStartDate: isoDate('2026-07-12'), stayEndDate: isoDate('2026-07-14') })],
+        [],
+        [],
+        [booking('b1', 'a', '2026-07-01', '2026-07-30')],
+      ),
+    ).toEqual({ startDate: '2026-08-01', endDate: '2026-08-05' });
+  });
+
+  it('spans the guests and the bookings together for a trip without dates', () => {
+    expect(
+      resolveRoomPlanningWindow(
+        {},
+        [person('a', { stayStartDate: isoDate('2026-07-12'), stayEndDate: isoDate('2026-07-14') })],
+        [],
+        [],
+        [booking('b1', 'b', '2026-07-10', '2026-07-13'), booking('b2', 'b', '2026-07-13', '2026-07-16')],
+      ),
+    ).toEqual({ startDate: '2026-07-10', endDate: '2026-07-16' });
+  });
+
+  it('reads the bookings alone when no guest has dates', () => {
+    expect(
+      resolveRoomPlanningWindow({}, [person('a')], [], [], [booking('b1', 'a', '2026-07-03', '2026-07-06')]),
+    ).toEqual({ startDate: '2026-07-03', endDate: '2026-07-06' });
+  });
+
+  it('skips a booking whose dates are not calendar days', () => {
+    expect(
+      resolveRoomPlanningWindow({}, [person('a')], [], [], [booking('b1', 'a', 'junk', '2026-07-06')]),
+    ).toBeNull();
+  });
+
+  it('answers null when nothing has a date', () => {
+    expect(resolveRoomPlanningWindow(undefined, [person('a')], [], [], [])).toBeNull();
   });
 });
 

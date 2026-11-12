@@ -893,6 +893,60 @@ describe('RoomListPage — the timeline', () => {
     expect(screen.queryByText('rooms.dragHint')).not.toBeInTheDocument();
   });
 
+  it('offers a bed to a guest with no dates on a trip without dates', () => {
+    // Bob typed no stay and the trip has no dates: he stands in for the span
+    // of the other guests' stays, Alice's 2 to 8, so he gets a chip to drop.
+    resetWorld({
+      trip: {
+        ...TRIP,
+        startDate: undefined as unknown as Trip['startDate'],
+        endDate: undefined as unknown as Trip['endDate'],
+      },
+      persons: [ALICE, BOB],
+      assignments: [ALICE_IN_ATTIC],
+    });
+    renderPage('/trips/trip-1/rooms?view=timeline');
+
+    expect(timeline().unassignedGuests).toEqual([
+      expect.objectContaining({
+        person: BOB,
+        startDate: tripDay(2),
+        endDate: tripDay(8),
+      }),
+    ]);
+    expect(screen.getByText('rooms.dragHint')).toBeInTheDocument();
+  });
+
+  it('reads the bookings when no guest has dates on a trip without dates', () => {
+    // A trip whose dates were removed: Alice kept her room, from 3 to 6, but
+    // typed no stay. Bob, added after, needs a bed for those nights, and the
+    // axis covers them.
+    const aliceUndated: Person = {
+      ...ALICE,
+      stayStartDate: undefined,
+      stayEndDate: undefined,
+    };
+    resetWorld({
+      trip: {
+        ...TRIP,
+        startDate: undefined as unknown as Trip['startDate'],
+        endDate: undefined as unknown as Trip['endDate'],
+      },
+      persons: [aliceUndated, BOB],
+      assignments: [stay('a1', ALICE.id, ATTIC.id, tripDay(3), tripDay(6))],
+    });
+    renderPage('/trips/trip-1/rooms?view=timeline');
+
+    expect(timeline().unassignedGuests).toEqual([
+      expect.objectContaining({
+        person: BOB,
+        startDate: tripDay(3),
+        endDate: tripDay(6),
+      }),
+    ]);
+    expect(timeline().range).toEqual({ startDate: tripDay(3), endDate: tripDay(6) });
+  });
+
   it('wires the chip menus for an editor only', () => {
     renderPage('/trips/trip-1/rooms?view=timeline');
     expect(timeline().onAssignGuestToRoom).toBeTypeOf('function');
