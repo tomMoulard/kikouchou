@@ -98,10 +98,15 @@ describe('TripCard when the map chunk fails to load', () => {
     await renderCardUnderRouteBoundary();
 
     // The preview button carries `aria-haspopup="dialog"`; the card menu
-    // trigger carries `aria-haspopup="menu"`.
+    // trigger carries `aria-haspopup="menu"`. The address opens a dialog
+    // too, the prompt for the maps app, so it is told apart by its name.
     const preview = screen
       .queryAllByRole('button')
-      .find((button) => button.getAttribute('aria-haspopup') === 'dialog');
+      .find(
+        (button) =>
+          button.getAttribute('aria-haspopup') === 'dialog' &&
+          button.getAttribute('aria-label') !== 'trips.openAddressInMaps',
+      );
 
     expect(preview).toBeUndefined();
   });

@@ -75,3 +75,40 @@ export function buildMapsUrl(
   // so it is what goes in `query`, with the name carried alongside it.
   return `https://www.google.com/maps/search/?api=1&query=${point}`;
 }
+
+/**
+ * Builds a URL that searches a free-text address in a map application.
+ *
+ * For a place with no coordinate, for example a trip whose location was typed
+ * by hand and never geocoded. The map application resolves the text itself,
+ * so prefer {@link buildMapsUrl} whenever a coordinate exists.
+ *
+ * @param address - The address or place name to search for
+ * @returns An absolute https URL
+ */
+export function buildMapsSearchUrl(address: string): string {
+  const query = encodeURIComponent(address);
+
+  if (prefersAppleMaps()) {
+    return `https://maps.apple.com/?q=${query}`;
+  }
+
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+/**
+ * Builds the map link for a place: by coordinate when there is one, by its
+ * text otherwise.
+ *
+ * @param address - The address or place name, also the pin label
+ * @param coordinates - The point, when the place was geocoded
+ * @returns An absolute https URL
+ */
+export function buildPlaceMapsUrl(
+  address: string,
+  coordinates?: MapsLinkCoordinates,
+): string {
+  return coordinates
+    ? buildMapsUrl(coordinates, address)
+    : buildMapsSearchUrl(address);
+}

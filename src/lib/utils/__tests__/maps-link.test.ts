@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
-import { buildMapsUrl } from '../maps-link';
+import { buildMapsSearchUrl, buildMapsUrl, buildPlaceMapsUrl } from '../maps-link';
 
 /**
  * Points `navigator` at a platform for one test.
@@ -71,6 +71,42 @@ describe('buildMapsUrl', () => {
 
     expect(buildMapsUrl({ lat: -33.8688, lon: -151.2093 })).toContain(
       'query=-33.8688,-151.2093',
+    );
+  });
+});
+
+describe('buildMapsSearchUrl', () => {
+  it('searches the address in Apple Maps on Apple platforms', () => {
+    setPlatform('iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)');
+
+    expect(buildMapsSearchUrl('12 rue de la Paix, Paris')).toBe(
+      'https://maps.apple.com/?q=12%20rue%20de%20la%20Paix%2C%20Paris',
+    );
+  });
+
+  it('searches the address in Google Maps everywhere else', () => {
+    setPlatform('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)');
+
+    expect(buildMapsSearchUrl('Chez Léa & co?x=1')).toBe(
+      'https://www.google.com/maps/search/?api=1&query=Chez%20L%C3%A9a%20%26%20co%3Fx%3D1',
+    );
+  });
+});
+
+describe('buildPlaceMapsUrl', () => {
+  it('locates by coordinate when the place has one', () => {
+    setPlatform('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)');
+
+    expect(buildPlaceMapsUrl('Paris', { lat: 48.8566, lon: 2.3522 })).toBe(
+      'https://www.google.com/maps/search/?api=1&query=48.8566,2.3522',
+    );
+  });
+
+  it('searches the text when the place has no coordinate', () => {
+    setPlatform('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)');
+
+    expect(buildPlaceMapsUrl('Paris')).toBe(
+      'https://www.google.com/maps/search/?api=1&query=Paris',
     );
   });
 });

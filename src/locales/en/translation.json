@@ -248,6 +248,9 @@
     "createdWithImport": "Trip created with rooms imported",
     "importRoomsFailed": "Trip created but room import failed",
     "noMatchingLocations": "No matching previous locations",
+    "openAddressInMaps": "Open {{location}} in your maps app",
+    "openInMapsTitle": "Open in your maps app?",
+    "openInMapsDescription": "This opens {{location}} in your maps app.",
   "wizard": {
       "title": "Your first trip",
       "progress": "Step {{step}} of {{total}}",

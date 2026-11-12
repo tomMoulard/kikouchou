@@ -6,13 +6,18 @@
  *
  * @module features/trips/components/__tests__/TripCard.test
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TripCard } from '../TripCard';
 import type { Trip, TripId, ShareId } from '@/types';
 import { isoDate } from '@/test/utils';
+import { openExternalUrl } from '@/lib/native/external-links';
+
+vi.mock('@/lib/native/external-links', () => ({
+  openExternalUrl: vi.fn(),
+}));
 
 // ============================================================================
 // Test Data Factories
@@ -459,7 +464,9 @@ describe('TripCard Map Preview', () => {
     return buttons.find(
       (btn) =>
         btn.tagName === 'BUTTON' &&
-        btn.getAttribute('aria-haspopup') === 'dialog'
+        btn.getAttribute('aria-haspopup') === 'dialog' &&
+        // The address also opens a dialog: the prompt for the maps app.
+        btn.getAttribute('aria-label') !== 'trips.openAddressInMaps'
     );
   }
 
@@ -1251,5 +1258,120 @@ describe('TripCard handlers', () => {
     await user.click(screen.getByRole('button', { name: 'trips.shareTripAria' }));
 
     expect(onShare).toHaveBeenCalledWith(later);
+  });
+});
+
+// ============================================================================
+// Address: open in the maps application
+// ============================================================================
+
+describe('TripCard Address', () => {
+  beforeEach(() => {
+    vi.mocked(openExternalUrl).mockClear();
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Linux x86_64');
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (X11; Linux x86_64)',
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('asks before it opens the address, and does not open the trip', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={onClick} />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'trips.openAddressInMaps' }),
+    );
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.getByText('trips.openInMapsTitle')).toBeInTheDocument();
+    expect(openExternalUrl).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('opens a typed address in the maps application by its text', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={onClick} />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'trips.openAddressInMaps' }),
+    );
+    await user.click(await screen.findByRole('button', { name: 'map.openInMaps' }));
+
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      'https://www.google.com/maps/search/?api=1&query=Brittany%2C%20France',
+    );
+    expect(onClick).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('opens a geocoded address by its coordinate', async () => {
+    const user = userEvent.setup();
+    render(
+      <TripCard
+        trip={createTestTrip({ coordinates: { lat: 47.5, lon: -3.1 } })}
+        persons={[]}
+        onClick={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'trips.openAddressInMaps' }),
+    );
+    await user.click(await screen.findByRole('button', { name: 'map.openInMaps' }));
+
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      'https://www.google.com/maps/search/?api=1&query=47.5,-3.1',
+    );
+  });
+
+  it('opens nothing, and not the trip either, when the prompt is cancelled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TripCard trip={createTestTrip()} persons={[]} onClick={onClick} />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'trips.openAddressInMaps' }),
+    );
+    await user.click(await screen.findByRole('button', { name: 'common.cancel' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+    expect(openExternalUrl).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not ask when the card is disabled', async () => {
+    const user = userEvent.setup();
+    render(
+      <TripCard
+        trip={createTestTrip()}
+        persons={[]}
+        onClick={vi.fn()}
+        isDisabled
+      />,
+    );
+
+    const address = screen.getByRole('button', {
+      name: 'trips.openAddressInMaps',
+    });
+    expect(address).toBeDisabled();
+    await user.click(address);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 });

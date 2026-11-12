@@ -12,6 +12,7 @@ import {
   memo,
   useCallback,
   useMemo,
+  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -47,6 +48,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { openExternalUrl } from '@/lib/native/external-links';
+import { buildPlaceMapsUrl } from '@/lib/utils/maps-link';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTripDateRange } from '@/lib/utils/date-format';
@@ -130,6 +134,7 @@ const TripCard = memo(function TripCard({
   persons,
 }: TripCardProps) {
   const photoUrl = usePhotoUrl(trip, trip.photoId);
+  const [isMapsPromptOpen, setIsMapsPromptOpen] = useState(false);
   const { t, i18n } = useTranslation(),
 
   // Get locale based on current language
@@ -233,7 +238,30 @@ const TripCard = memo(function TripCard({
    */
    handleArchiveClick = useCallback(() => {
     onArchiveToggle?.(trip);
-  }, [onArchiveToggle, trip]);
+  }, [onArchiveToggle, trip]),
+
+  /**
+   * Asks before the address leaves the app for the maps application. A tap
+   * on the address is easy to make by accident on a phone, and the handoff
+   * puts the user in another app.
+   */
+   handleAddressClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation();
+      if (isDisabled) {return;}
+      setIsMapsPromptOpen(true);
+    },
+    [isDisabled],
+  ),
+
+  /**
+   * Opens the address in the viewer's own map application: by coordinate
+   * when the trip was geocoded, by its text otherwise.
+   */
+   handleOpenInMaps = useCallback(() => {
+    if (!trip.location) {return;}
+    openExternalUrl(buildPlaceMapsUrl(trip.location, trip.coordinates));
+  }, [trip.location, trip.coordinates]);
 
   // ============================================================================
   // Render
@@ -245,6 +273,7 @@ const TripCard = memo(function TripCard({
   const showCornerActions = Boolean(onShare || showCornerMenu);
 
   return (
+    <>
     <Card
       onClick={handleCardClick}
       className={cn(
@@ -376,11 +405,32 @@ const TripCard = memo(function TripCard({
           {trip.name}
         </CardTitle>
         {trip.location && (
-          <CardDescription className="flex items-center gap-1.5 truncate">
-            <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate" title={trip.location}>
-              {trip.location}
-            </span>
+          <CardDescription className="flex min-w-0">
+            {/*
+              `relative z-20` lifts the address above the full-card activation
+              button, like the map preview below. Its click stops there, so it
+              asks about the maps application instead of opening the trip.
+            */}
+            <button
+              type="button"
+              onClick={handleAddressClick}
+              disabled={isDisabled}
+              aria-haspopup="dialog"
+              aria-label={t('trips.openAddressInMaps', {
+                location: trip.location,
+              })}
+              className={cn(
+                'relative z-20 flex min-w-0 items-center gap-1.5 rounded-sm text-left',
+                'cursor-pointer underline-offset-2 hover:text-foreground hover:underline',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'disabled:cursor-not-allowed',
+              )}
+            >
+              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate" title={trip.location}>
+                {trip.location}
+              </span>
+            </button>
           </CardDescription>
         )}
       </CardHeader>
@@ -473,6 +523,25 @@ const TripCard = memo(function TripCard({
         )}
       </CardContent>
     </Card>
+
+    {/*
+      Outside the card on purpose: a click inside a portal still bubbles
+      through the React tree, so a dialog inside the card would open the trip
+      on every press of Cancel.
+    */}
+    {trip.location && (
+      <ConfirmDialog
+        open={isMapsPromptOpen}
+        onOpenChange={setIsMapsPromptOpen}
+        title={t('trips.openInMapsTitle', 'Open in your maps app?')}
+        description={t('trips.openInMapsDescription', {
+          location: trip.location,
+        })}
+        confirmLabel={t('map.openInMaps', 'Open in Maps')}
+        onConfirm={handleOpenInMaps}
+      />
+    )}
+    </>
   );
 });
 

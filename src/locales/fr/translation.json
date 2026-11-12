@@ -248,6 +248,9 @@
     "createdWithImport": "Voyage créé avec les chambres importées",
     "importRoomsFailed": "Voyage créé mais l'import des chambres a échoué",
     "noMatchingLocations": "Aucun lieu correspondant",
+    "openAddressInMaps": "Ouvrir {{location}} dans votre application de cartes",
+    "openInMapsTitle": "Ouvrir dans votre application de cartes ?",
+    "openInMapsDescription": "Cela ouvre {{location}} dans votre application de cartes.",
   "wizard": {
       "title": "Votre premier séjour",
       "progress": "Étape {{step}} sur {{total}}",
