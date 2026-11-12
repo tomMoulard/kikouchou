@@ -96,7 +96,7 @@ import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import {
-  resolveTripWorkingWindow,
+  resolveRoomPlanningWindow,
   resolveUndatedTimelineRange,
 } from '@/features/trips/utils/trip-window';
 import { notify } from '@/lib/notifications';
@@ -277,6 +277,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     [setSearchParams],
   ),
 
+  // The window the rooms are planned in: the trip's dates, or, for a trip
+  // without dates, the span of the guests' stays and of the bookings. It is
+  // also what a guest with no stay of their own needs a bed for, so the cards,
+  // the timeline's axis and its "needs room" row all read the same days.
+   roomPlanningWindow = useMemo(
+    () => resolveRoomPlanningWindow(currentTrip, persons, arrivals, departures, assignments),
+    [currentTrip, persons, arrivals, departures, assignments],
+  ),
+
   // Effective date range for capacity calculation (defaults to full trip range).
   //
   // Two guards keep the cards from disagreeing with the timeline:
@@ -297,9 +306,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       }
     }
     // Default to the full trip, or, for a trip without dates, the span of the
-    // guests' own stays.
-    return resolveTripWorkingWindow(currentTrip, persons, arrivals, departures);
-  }, [currentView, selectedDateRange, currentTrip, persons, arrivals, departures]),
+    // guests' own stays and of the bookings.
+    return roomPlanningWindow;
+  }, [currentView, selectedDateRange, roomPlanningWindow]),
 
   // Combined loading state
    isLoading = isTripLoading || isRoomsLoading || isTransportsLoading,
@@ -358,13 +367,13 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    { today: todayDate } = useToday(),
    todayStr = useMemo(() => formatToISODate(todayDate), [todayDate]),
 
-  // The timeline's axis: the trip, else the guests' stays, else one week from
-  // today. Never empty, so a trip without dates still shows a calendar.
+  // The timeline's axis: the trip, else the guests' stays and the bookings,
+  // else one week from today. Never empty, so a trip without dates still
+  // shows a calendar.
    timelineRange = useMemo(
     () =>
-      resolveTripWorkingWindow(currentTrip, persons, arrivals, departures) ??
-      resolveUndatedTimelineRange([], todayStr as ISODateString),
-    [currentTrip, persons, arrivals, departures, todayStr],
+      roomPlanningWindow ?? resolveUndatedTimelineRange([], todayStr as ISODateString),
+    [roomPlanningWindow, todayStr],
   ),
 
   // Calculate rooms with occupancy data
@@ -444,17 +453,26 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     return [...available, ...full];
   }, [roomsWithOccupancy]),
 
-  // Calculate guests without room assignments
+  // Calculate guests without room assignments.
+  //
+  // A guest with no stay of their own needs a bed for the planning window:
+  // the trip's dates, or, on a trip without dates, the span of the others'
+  // stays and of the bookings. With the trip's dates alone they had no
+  // window there, so no chip, and no way onto the timeline.
    unassignedGuests = useMemo((): readonly UnassignedGuest[] => {
     const result: UnassignedGuest[] = [];
-    
+    const stayWindow = {
+      startDate: roomPlanningWindow?.startDate,
+      endDate: roomPlanningWindow?.endDate,
+    };
+
     for (const person of persons) {
       const unassignedInfo = calculateUnassignedDates(
         person,
         arrivals,
         departures,
         assignments,
-        { startDate: currentTrip?.startDate, endDate: currentTrip?.endDate },
+        stayWindow,
       );
       
       if (unassignedInfo) {
@@ -466,7 +484,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
     
     return result;
-  }, [persons, arrivals, departures, assignments, currentTrip?.startDate, currentTrip?.endDate]),
+  }, [persons, arrivals, departures, assignments, roomPlanningWindow]),
 
   /*
     A trip whose start and end fall on the same day holds no night. Nobody

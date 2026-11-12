@@ -258,6 +258,21 @@ describe('buildTripGlance', () => {
       ]);
     });
 
+    it('counts a guest with no dates on a trip without dates, as the rooms page does', () => {
+      // The trip's dates are gone and only the booking is left: 3 to 6. The
+      // guest added afterwards needs a bed for those three nights.
+      const glance = build({
+        trip: { ...TRIP, startDate: undefined, endDate: undefined } as unknown as Trip,
+        rooms: [room('r1', 4)],
+        persons: [person('housed'), person('new')],
+        assignments: [assignment('a1', 'r1', 'housed', '2026-07-03', '2026-07-06')],
+      });
+
+      expect(glance.guestsWithoutRoom).toEqual([
+        expect.objectContaining({ personId: 'new', nightsWithoutRoom: 3 }),
+      ]);
+    });
+
     it('says nothing when every guest has a bed for their whole stay', () => {
       const glance = build({
         rooms: [room('r1', 2)],

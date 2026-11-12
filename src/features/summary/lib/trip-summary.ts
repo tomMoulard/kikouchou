@@ -22,6 +22,7 @@ import {
   type TripStayWindow,
 } from '@/features/persons/utils/guest-presence';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
+import { resolveRoomPlanningWindow } from '@/features/trips/utils/trip-window';
 import { sortTransportsByInstant } from '@/features/transports/utils/pickup-utils';
 import { db } from '@/lib/db/database';
 import { getPersonHeadcount } from '@/types';
@@ -297,9 +298,12 @@ export async function loadTripSummary(
   // printed from.
   const arrivals = transports.filter((transport) => transport.type === 'arrival');
   const departures = transports.filter((transport) => transport.type !== 'arrival');
+  // The rooms page's window, so a guest with no dates on a trip without
+  // dates is listed here exactly when the page offers them a bed.
+  const roomWindow = resolveRoomPlanningWindow(trip, persons, arrivals, departures, assignments);
   const tripWindow: TripStayWindow = {
-    startDate: trip.startDate,
-    endDate: trip.endDate,
+    startDate: roomWindow?.startDate,
+    endDate: roomWindow?.endDate,
   };
   const guestsWithoutRoom = persons
     .filter(

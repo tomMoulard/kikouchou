@@ -23,6 +23,7 @@ import {
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
 import {
   type DatedWindow,
+  resolveRoomPlanningWindow,
   resolveTripWorkingWindow,
 } from '@/features/trips/utils/trip-window';
 import {
@@ -237,7 +238,10 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
   const guestsWithoutRoom: GlanceGuestWithoutRoom[] = [];
 
   if (trip) {
-    const tripWindow = { startDate: trip.startDate, endDate: trip.endDate };
+    // The rooms page's own window, so a guest with no dates on a trip
+    // without dates is counted here exactly when they get a chip there.
+    const roomWindow = resolveRoomPlanningWindow(trip, persons, arrivals, departures, assignments);
+    const tripWindow = { startDate: roomWindow?.startDate, endDate: roomWindow?.endDate };
     for (const person of persons) {
       const unassigned = calculateUnassignedDates(
         person,

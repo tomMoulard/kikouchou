@@ -514,8 +514,13 @@ screen until they are set, even after travel exists.
   guests' own stays. The calendar timeline goes one step wider
   (`buildCalendarTimelineDays`): the span of every known stay, travel day and
   booking night, or one week from today, with no "outside the trip" shading.
-  A guest with no stay dates still falls back on the trip's dates only, never
-  on the inferred window.
+  For presence (meals, guests tonight), a guest with no stay dates still falls
+  back on the trip's dates only, never on the inferred window. The rooms are
+  the exception: `resolveRoomPlanningWindow` is the trip's dates, or the span
+  of the guests' stays and of the room bookings, and an undated guest needs a
+  bed for all of it. Without it, a guest added to a trip without dates had no
+  "needs room" chip and could not be given a room. The rooms page, the glance
+  panel and the printed summary all read that one window.
 - **A cleared date travels as `''` in the document** (`TRIP_DATE_CLEARED`). A
   missing key means "this peer said nothing", and `readTripDay` keeps the
   device's own value for it, so deleting the key could never spread a clear.

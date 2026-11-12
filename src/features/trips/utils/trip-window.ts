@@ -19,7 +19,7 @@ import { resolveGuestStayPeriods } from '@/features/persons/utils/guest-presence
 import { isCalendarDayString } from '@/lib/db/sanitize';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { parseLocalDayKey } from '@/lib/utils/trip-days';
-import type { ISODateString, Person, Transport, Trip } from '@/types';
+import type { ISODateString, Person, RoomAssignment, Transport, Trip } from '@/types';
 
 // ============================================================================
 // Types
@@ -155,6 +155,60 @@ export function resolveTripWorkingWindow(
   departures: readonly Transport[] = [],
 ): DatedWindow | null {
   return getTripDates(trip) ?? inferGuestStayWindow(persons, arrivals, departures);
+}
+
+/**
+ * The window the rooms are planned in: the trip's dates when it has them,
+ * otherwise the span of the guests' stays and of the room bookings together.
+ *
+ * It is also what a guest with no stay dates of their own needs a bed for on
+ * a trip without dates. The bookings count because a trip whose dates were
+ * cleared keeps its bookings, and its guests often typed no stay: without
+ * them, a guest added afterwards had no window, no "needs a room" chip, and
+ * no way onto the rooms timeline.
+ *
+ * Rooms only. Presence (meals, guests tonight) still reads the trip's dates
+ * alone for an undated guest.
+ *
+ * @param trip - The trip
+ * @param persons - The trip's guests
+ * @param arrivals - Arrival transports of the trip
+ * @param departures - Departure transports of the trip
+ * @param assignments - The trip's room bookings
+ * @returns The window, or null when nothing on the trip has a date
+ */
+export function resolveRoomPlanningWindow(
+  trip: Pick<Trip, 'startDate' | 'endDate'> | null | undefined,
+  persons: readonly Person[],
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+  assignments: readonly RoomAssignment[],
+): DatedWindow | null {
+  const tripDates = getTripDates(trip);
+  if (tripDates) {
+    return tripDates;
+  }
+
+  const guests = inferGuestStayWindow(persons, arrivals, departures);
+  let first: ISODateString | null = guests?.startDate ?? null;
+  let last: ISODateString | null = guests?.endDate ?? null;
+
+  for (const assignment of assignments) {
+    if (!isCalendarDayString(assignment.startDate) || !isCalendarDayString(assignment.endDate)) {
+      continue;
+    }
+    if (first === null || assignment.startDate < first) {
+      first = assignment.startDate;
+    }
+    if (last === null || assignment.endDate > last) {
+      last = assignment.endDate;
+    }
+  }
+
+  if (first === null || last === null) {
+    return null;
+  }
+  return { startDate: first, endDate: last };
 }
 
 /**
