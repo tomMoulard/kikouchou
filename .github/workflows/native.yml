@@ -80,7 +80,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -139,6 +139,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      # Vitest 5, i18next 27 and nanoid 6 need Node 22 or later. The
+      # runner image decides the default, so it is pinned here.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
       # The Gradle projects of the Capacitor plugins live in node_modules.
       - name: Install dependencies
@@ -301,6 +308,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      # Vitest 5, i18next 27 and nanoid 6 need Node 22 or later. The
+      # runner image decides the default, so it is pinned here.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
