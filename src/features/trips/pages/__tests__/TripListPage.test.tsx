@@ -399,9 +399,9 @@ describe('TripListPage', () => {
       checkConnection: mockCheckConnection,
     });
     render(<TripListPage />, { withProviders: false });
-    // Import QR button should be available even during loading
-    const importBtns = screen.getAllByLabelText(/trips\.importFromQrAria/);
-    expect(importBtns.length).toBeGreaterThanOrEqual(1);
+    // Import QR button should be available even during loading. Its name is
+    // its visible text (WCAG 2.5.3), so it is found by that.
+    expect(screen.getByRole('button', { name: 'trips.importFromQr' })).toBeInTheDocument();
   });
 
   it('renders create button on desktop', () => {

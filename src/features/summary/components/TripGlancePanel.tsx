@@ -114,15 +114,19 @@ const GlanceSection = memo(function GlanceSection({
     <Card className="gap-2 py-4">
       <CardHeader className="px-4">
         <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {/* The name starts with the visible title, so a voice-control user
+              who says what they see reaches the link (WCAG 2.5.3, axe's
+              label-content-name-mismatch). The page it opens follows, for a
+              screen reader only. */}
           <Link
             to={to}
-            aria-label={linkLabel}
             className={cn(
               'rounded-sm hover:text-foreground transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             )}
           >
             {title}
+            <span className="sr-only"> {linkLabel}</span>
           </Link>
         </CardTitle>
       </CardHeader>

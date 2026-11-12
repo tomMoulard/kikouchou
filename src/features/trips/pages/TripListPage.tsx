@@ -255,7 +255,6 @@ const TripListPage = memo(function TripListPage() {
           type="button"
           variant="outline"
           onClick={openImportQr}
-          aria-label={t('trips.importFromQrAria')}
           className="hidden sm:flex shrink-0"
         >
           <QrCode className="size-4 mr-2" aria-hidden="true" />
