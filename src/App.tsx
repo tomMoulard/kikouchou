@@ -54,6 +54,9 @@ import { router } from '@/router';
 applyStoredTheme();
 applyStoredPalette();
 
+/** The type that turns next-themes' inline script into an inert data block. */
+const THEME_SCRIPT_PROPS = { type: 'application/json' } as const;
+
 // ============================================================================
 // Hooks
 // ============================================================================
@@ -142,6 +145,11 @@ function App(): ReactElement {
       storageKey={THEME_STORAGE_KEY}
       enableSystem
       disableTransitionOnChange
+      // next-themes renders an inline <script> for server rendering. On the
+      // client React never runs it, and since React 19.3 it logs a console
+      // error for it. A non-JavaScript type makes it a data block, which React
+      // leaves alone; applyStoredTheme above does the script's job here.
+      scriptProps={THEME_SCRIPT_PROPS}
     >
       {/*
         One install prompt for the app. The banner below and the nudge on a
