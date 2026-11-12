@@ -11,6 +11,9 @@
  * Names are not unique in the database, so nothing here enforces uniqueness. It
  * only avoids handing the user two rooms they cannot tell apart.
  *
+ * The rooms page lists rooms by name with `compareRoomsByName`, so that
+ * "Double bed 2" comes before "Double bed 10", in any case and with any accent.
+ *
  * @module features/rooms/utils/room-naming
  */
 
@@ -151,4 +154,43 @@ export function buildDuplicateRoomName(
   existingNames: Iterable<string>,
 ): string {
   return nextFreeName(roomNameStem(sourceName), new Set(existingNames), 2);
+}
+
+/**
+ * The fields `compareRoomsByName` reads.
+ */
+interface NamedRoom {
+  readonly id: string;
+  readonly name: string;
+  readonly order: number;
+}
+
+/**
+ * Builds the collator for a language tag, or for the runtime's default
+ * language when Intl refuses the tag.
+ */
+function buildRoomNameCollator(locale: string | undefined): Intl.Collator {
+  const options: Intl.CollatorOptions = { numeric: true, sensitivity: 'base' };
+  try {
+    return new Intl.Collator(locale, options);
+  } catch {
+    return new Intl.Collator(undefined, options);
+  }
+}
+
+/**
+ * Returns a comparator that sorts rooms by name in alphanumeric order: the
+ * numbers in a name compare as numbers ("Room 2" before "Room 10"), and case
+ * and accents are ignored. Two rooms with the same name keep their stored
+ * `order`, then their id, so the list does not change between two renders.
+ */
+export function compareRoomsByName(
+  locale: string | undefined,
+): (a: NamedRoom, b: NamedRoom) => number {
+  const collator = buildRoomNameCollator(locale);
+
+  return (a, b) =>
+    collator.compare(a.name, b.name) ||
+    a.order - b.order ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }

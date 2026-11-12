@@ -732,32 +732,28 @@ describe('RoomListPage — occupancy on the cards', () => {
     expect(card(ATTIC.id).peakOccupancy).toBe(1);
   });
 
-  it('ignores a filter the reader set in the cards view once on the timeline', async () => {
+  it('keeps the rooms in name order whatever the filter and the view', async () => {
     resetWorld({
       persons: [ALICE, BOB],
       assignments: [ALICE_IN_ATTIC, stay('a2', BOB.id, ATTIC.id, tripDay(7), tripDay(9))],
     });
     const user = userEvent.setup();
     renderPage();
-    expect(cardOrder()).toEqual(['Barn', 'Attic']);
+    // The Attic is full over the trip. It used to sort after the Barn.
+    expect(cardOrder()).toEqual(['Attic', 'Barn']);
     pickRange(tripDay(2), tripDay(5));
-    // Filtered, the Attic has a free bed again and goes back to its place.
     expect(cardOrder()).toEqual(['Attic', 'Barn']);
 
     await user.click(screen.getByRole('radio', { name: 'rooms.view.timeline' }));
 
-    // On the timeline the Attic is full over the trip, so it sorts last.
-    expect(timeline().rooms.map((room) => room.id)).toEqual([BARN.id, ATTIC.id]);
+    expect(timeline().rooms.map((room) => room.id)).toEqual([ATTIC.id, BARN.id]);
   });
 
-  it('sorts the rooms with a free bed first, keeping their order', () => {
-    resetWorld({
-      persons: [ALICE, BOB],
-      assignments: [ALICE_IN_ATTIC, stay('a2', BOB.id, ATTIC.id, tripDay(7), tripDay(9))],
-    });
+  it('lists the rooms by name, not by their stored order', () => {
+    resetWorld({ rooms: [{ ...BARN, order: 0 }, { ...ATTIC, order: 1 }] });
     renderPage();
 
-    expect(cardOrder()).toEqual(['Barn', 'Attic']);
+    expect(cardOrder()).toEqual(['Attic', 'Barn']);
   });
 
   it('counts a couple as two when the trip has no dates to measure against', () => {

@@ -765,17 +765,22 @@ describe('RoomListPage', () => {
   });
 
   // ===========================================================================
-  // Room occupancy sorting (available before full)
+  // Room order: alphanumeric by name, full or not
   // ===========================================================================
 
-  it('sorts rooms with available spots before full rooms', () => {
+  it('lists the rooms by name in numeric order, a full room included', () => {
+    const rooms: Room[] = [
+      { ...mockRoom, id: 'room-a' as Room['id'], name: 'Room 10', order: 0 },
+      { ...mockRoom, id: 'room-b' as Room['id'], name: 'room 2', order: 1 },
+      { ...mockRoom, id: 'room-c' as Room['id'], name: 'Room 1', capacity: 1, order: 2 },
+    ];
+    // Room 1 is full: it used to be pushed after the rooms with a free bed.
     const fullAssignments = [
-      { ...mockAssignment, id: 'a-x' as RoomAssignment['id'], roomId: 'room-1' as RoomAssignment['roomId'], personId: 'person-1' as RoomAssignment['personId'] },
-      { ...mockAssignment, id: 'a-y' as RoomAssignment['id'], roomId: 'room-1' as RoomAssignment['roomId'], personId: 'person-2' as RoomAssignment['personId'] },
+      { ...mockAssignment, id: 'a-x' as RoomAssignment['id'], roomId: 'room-c' as RoomAssignment['roomId'], personId: 'person-1' as RoomAssignment['personId'] },
     ];
 
     vi.mocked(useRoomContext).mockReturnValue({
-      rooms: [mockRoom, mockRoom2],
+      rooms,
       isLoading: false,
       error: null,
       deleteRoom: mockDeleteRoom,
@@ -791,20 +796,19 @@ describe('RoomListPage', () => {
       updateAssignment: mockUpdateAssignment,
     } as unknown as ReturnType<typeof useAssignmentContext>);
     vi.mocked(usePersonContext).mockReturnValue({
-      persons: [mockPerson, mockPerson2],
+      persons: [mockPerson],
       isLoading: false,
       error: null,
-      getPersonById: vi.fn((id: string) => {
-        if (id === 'person-1') return mockPerson;
-        if (id === 'person-2') return mockPerson2;
-        return undefined;
-      }),
+      getPersonById: vi.fn((id: string) => (id === 'person-1' ? mockPerson : undefined)),
     } as unknown as ReturnType<typeof usePersonContext>);
 
     render(<RoomListPage />, { withProviders: false });
-    // Both rooms should render
-    expect(screen.getByText('Master Bedroom')).toBeInTheDocument();
-    expect(screen.getByText('Guest Room')).toBeInTheDocument();
+
+    const names = screen
+      .getAllByText(/^room (1|2|10)$/i)
+      .map((element) => element.textContent);
+
+    expect(names).toEqual(['Room 1', 'room 2', 'Room 10']);
   });
 
   // ===========================================================================

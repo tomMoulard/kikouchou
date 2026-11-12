@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBulkRoomNames,
   buildDuplicateRoomName,
+  compareRoomsByName,
   roomNameStem,
 } from '../room-naming';
 
@@ -123,5 +124,38 @@ describe('room names when every number is taken', () => {
     const taken = Array.from({ length: 10_000 }, (_, index) => `Bunk ${index + 1}`);
 
     expect(buildBulkRoomNames('Bunk', 2, taken)[0]).toBe('Bunk 1');
+  });
+});
+
+describe('compareRoomsByName', () => {
+  const room = (name: string, order = 0, id = name) => ({ id, name, order });
+
+  it('puts numbers in numeric order, not character order', () => {
+    const names = ['Room 10', 'Room 2', 'Room 1']
+      .map((name) => room(name))
+      .sort(compareRoomsByName('en'))
+      .map((r) => r.name);
+
+    expect(names).toEqual(['Room 1', 'Room 2', 'Room 10']);
+  });
+
+  it('ignores case and accents', () => {
+    const names = [room('salon'), room('Étage'), room('Attic'), room('cave')]
+      .sort(compareRoomsByName('fr'))
+      .map((r) => r.name);
+
+    expect(names).toEqual(['Attic', 'cave', 'Étage', 'salon']);
+  });
+
+  it('falls back on the stored order, then the id, for the same name', () => {
+    const ids = [room('Bunk', 2, 'c'), room('Bunk', 1, 'b'), room('bunk', 1, 'a')]
+      .sort(compareRoomsByName('en'))
+      .map((r) => r.id);
+
+    expect(ids).toEqual(['a', 'b', 'c']);
+  });
+
+  it('accepts a language tag Intl does not know', () => {
+    expect(() => compareRoomsByName('not a tag')).not.toThrow();
   });
 });

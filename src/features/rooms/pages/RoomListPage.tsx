@@ -90,6 +90,7 @@ import {
   summarizeRoomOccupancy,
 } from '@/features/rooms/utils/capacity-utils';
 import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announcements';
+import { compareRoomsByName } from '@/features/rooms/utils/room-naming';
 import { inferGuestParties } from '@/features/rooms/utils/guest-parties';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
@@ -446,12 +447,13 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       };
     }), [rooms, assignmentsByRoom, getPersonById, todayStr, effectiveDateRange, headcountOf]),
 
-  // Sort rooms: available first (by room.order), then full rooms (by room.order)
+  // The rooms are always listed by name, in alphanumeric order ("Room 2"
+  // before "Room 10"), in the cards and on the timeline. A full room stays
+  // in its place by name: it is not moved to the end of the list.
    sortedRoomsWithOccupancy = useMemo(() => {
-    const available = roomsWithOccupancy.filter((r) => !r.isFull);
-    const full = roomsWithOccupancy.filter((r) => r.isFull);
-    return [...available, ...full];
-  }, [roomsWithOccupancy]),
+    const compare = compareRoomsByName(i18n.language);
+    return [...roomsWithOccupancy].sort((a, b) => compare(a.room, b.room));
+  }, [roomsWithOccupancy, i18n.language]),
 
   // Calculate guests without room assignments.
   //
