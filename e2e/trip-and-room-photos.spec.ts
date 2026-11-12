@@ -88,6 +88,40 @@ test.describe('Trip and room photos', () => {
     await expect(roomCards(page).getByRole('img', { name: /red room/iu })).toBeVisible();
   });
 
+  test('a room photo opens full screen on a click, and closes', async ({ page }) => {
+    const tripId = await seedFutureTrip(page);
+    await seedRoom(page, { tripId, name: 'Red room', capacity: 2 });
+
+    await page.goto(`/trips/${tripId}/rooms?view=card`);
+    await waitForRoute(page);
+
+    await page.getByLabel(/open menu|ouvrir le menu/iu).first().click();
+    await page.getByRole('menuitem', { name: /^(edit|modifier)$/iu }).click();
+    const editor = page.getByRole('dialog');
+    await editor.locator('input[type="file"]').setInputFiles(PHOTO_FILE);
+    await expect(editor.getByRole('img', { name: /red room/iu })).toBeVisible();
+    await editor.getByRole('button', { name: /^(save|enregistrer)$/iu }).click();
+    await expect(editor).toBeHidden();
+
+    // A real click at the photo's centre: the card's own button lies under
+    // it, and only the stacking decides which of the two takes the click.
+    await roomCards(page).getByRole('img', { name: /red room/iu }).click();
+
+    const viewer = page.getByRole('dialog', { name: /red room/iu });
+    await expect(viewer).toBeVisible();
+    // Layout size, not `boundingBox()`: the open animation scales the box
+    // from 95%, and a bounding box measured mid-animation is that much short.
+    const size = await viewer.evaluate((element) => ({
+      width: (element as HTMLElement).offsetWidth,
+      height: (element as HTMLElement).offsetHeight,
+    }));
+    expect(size).toEqual(page.viewportSize());
+    await expect(viewer.getByRole('img', { name: /red room/iu })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+  });
+
   test('a trip cover is saved from its settings and shown on the trip card', async ({ page }) => {
     const tripId = await seedFutureTrip(page);
 
@@ -99,6 +133,16 @@ test.describe('Trip and room photos', () => {
     await page.goto('/trips');
     await waitForRoute(page);
     await expect(page.getByRole('img', { name: /photo trip/iu })).toBeVisible();
+
+    // The cover opens full screen rather than the trip.
+    await page.getByRole('img', { name: /photo trip/iu }).click();
+    const viewer = page.getByRole('dialog', { name: /photo trip/iu });
+    await expect(viewer).toBeVisible();
+    await expect(page).toHaveURL(/\/trips$/u);
+
+    await viewer.getByRole('img', { name: /photo trip/iu }).click();
+    await expect(viewer).toBeHidden();
+    await expect(page).toHaveURL(/\/trips$/u);
   });
 
   test('a photo is removed with its button', async ({ page }) => {

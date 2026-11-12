@@ -18,6 +18,8 @@ import { ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 
+import { ZoomablePhoto } from '@/components/shared/ZoomablePhoto';
+
 import { PhotoPrepareError, preparePhoto } from '@/lib/photos/prepare';
 import { cn } from '@/lib/utils';
 
@@ -143,10 +145,11 @@ export const PhotoField = memo(function PhotoField({
     <div className={cn('space-y-2', className)}>
       <Label htmlFor={inputId}>{label}</Label>
       {hasPhoto && (
-        <img
+        <ZoomablePhoto
           src={shownUrl}
           alt={alt}
-          className="h-40 w-full rounded-md border object-cover"
+          className="w-full rounded-md"
+          imageClassName="h-40 w-full rounded-md border object-cover"
         />
       )}
       <input

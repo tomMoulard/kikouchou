@@ -58,6 +58,7 @@ import { markdownToPlainText } from '@/lib/utils/markdown';
 import type { Person, Trip } from '@/types';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { ZoomablePhoto } from '@/components/shared/ZoomablePhoto';
 import { usePhotoUrl } from '@/hooks/usePhotoUrl';
 
 // ============================================================================
@@ -312,17 +313,18 @@ const TripCard = memo(function TripCard({
 
       {/*
         The cover photo, edge to edge across the top. `-mt-6` cancels the
-        card's own top padding so the photo meets the border. Decorative for
-        the activation button, which already names the trip, so `alt` names
-        it once more only for a reader moving through images.
+        card's own top padding so the photo meets the border. A click on it
+        opens the photo full screen rather than the trip, so it sits at `z-20`,
+        over the full-card activation button. The corner actions are `z-20`
+        too and come later, so they still paint over the photo.
       */}
       {photoUrl && (
-        <img
+        <ZoomablePhoto
           src={photoUrl}
           alt={t('photos.tripAlt', { name: trip.name })}
-          loading="lazy"
-          decoding="async"
-          className="-mt-6 h-36 w-full rounded-t-xl object-cover"
+          lazy
+          className="relative z-20 -mt-6 w-full rounded-t-xl"
+          imageClassName="h-36 w-full rounded-t-xl object-cover"
         />
       )}
 

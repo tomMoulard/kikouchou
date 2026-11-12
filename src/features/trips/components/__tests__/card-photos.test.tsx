@@ -3,12 +3,14 @@
  *
  * Each card shows its photo across the top and asks for it by the trip it
  * belongs to; with no photo, the card is what it was before photos existed.
+ * A click on the photo opens it full screen and leaves the card's own click
+ * alone.
  *
  * @module features/trips/components/__tests__/card-photos.test
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { render, screen, userEvent, within } from '@/test/utils';
 
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { usePhotoUrl } from '@/hooks/usePhotoUrl';
@@ -43,7 +45,7 @@ const ROOM: Room = {
   photoId: 'roomPhoto0001' as PhotoId,
 };
 
-function renderRoom(trip?: Trip) {
+function renderRoom(trip?: Trip, onClick?: () => void) {
   return render(
     <RoomCard
       room={ROOM}
@@ -54,6 +56,7 @@ function renderRoom(trip?: Trip) {
       onEdit={vi.fn()}
       onDelete={vi.fn()}
       trip={trip}
+      {...(onClick ? { onClick } : {})}
     />,
     { withProviders: false },
   );
@@ -79,6 +82,21 @@ describe('TripCard photo', () => {
     expect(usePhotoUrl).toHaveBeenCalledWith(TRIP, 'coverPhoto0001');
   });
 
+  it('opens the cover photo full screen on a click, not the trip', async () => {
+    vi.mocked(usePhotoUrl).mockReturnValue('blob:cover');
+    const onClick = vi.fn();
+
+    render(<TripCard trip={TRIP} persons={[]} onClick={onClick} />, { withProviders: false });
+    await userEvent.click(screen.getByRole('img', { name: 'photos.tripAlt' }));
+
+    const viewer = await screen.findByRole('dialog');
+    expect(within(viewer).getByRole('img', { name: 'photos.tripAlt' })).toHaveAttribute(
+      'src',
+      'blob:cover',
+    );
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('shows no image without a photo', () => {
     vi.mocked(usePhotoUrl).mockReturnValue(undefined);
 
@@ -96,6 +114,21 @@ describe('RoomCard photo', () => {
 
     expect(screen.getByRole('img', { name: 'photos.roomAlt' })).toHaveAttribute('src', 'blob:room');
     expect(usePhotoUrl).toHaveBeenCalledWith(TRIP, 'roomPhoto0001');
+  });
+
+  it('opens the room photo full screen on a click, not the card', async () => {
+    vi.mocked(usePhotoUrl).mockReturnValue('blob:room');
+    const onClick = vi.fn();
+
+    renderRoom(TRIP, onClick);
+    await userEvent.click(screen.getByRole('img', { name: 'photos.roomAlt' }));
+
+    const viewer = await screen.findByRole('dialog');
+    expect(within(viewer).getByRole('img', { name: 'photos.roomAlt' })).toHaveAttribute(
+      'src',
+      'blob:room',
+    );
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('shows no image without a photo', () => {

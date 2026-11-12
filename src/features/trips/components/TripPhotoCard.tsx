@@ -15,6 +15,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PhotoField, type PhotoChange } from '@/components/shared/PhotoField';
+import { ZoomablePhoto } from '@/components/shared/ZoomablePhoto';
 
 import { useOfflineAwareNotify } from '@/hooks/useOfflineAwareNotify';
 import { usePhotoUrl } from '@/hooks/usePhotoUrl';
@@ -102,8 +103,13 @@ const TripPhotoCard = memo(function TripPhotoCard({
             alt={alt}
             disabled={isSaving}
           />
-        ) : (
-          <img src={url} alt={alt} className="h-40 w-full rounded-md border object-cover" />
+        ) : url === undefined ? null : (
+          <ZoomablePhoto
+            src={url}
+            alt={alt}
+            className="w-full rounded-md"
+            imageClassName="h-40 w-full rounded-md border object-cover"
+          />
         )}
       </CardContent>
     </Card>

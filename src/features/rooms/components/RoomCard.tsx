@@ -38,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ZoomablePhoto } from '@/components/shared/ZoomablePhoto';
 import { usePhotoUrl, type PhotoTrip } from '@/hooks/usePhotoUrl';
 import { cn } from '@/lib/utils';
 import type { Person, Room } from '@/types';
@@ -393,15 +394,17 @@ const RoomCard = memo(function RoomCard({
         {/*
           The room's photo, edge to edge across the top, so a guest told "the
           red room" can see which one that is. `-mt-6` cancels the card's top
-          padding so the photo meets the border.
+          padding so the photo meets the border. A click on it opens the photo
+          full screen, so it sits at `z-20`, over the card's own button; the
+          menu is `z-30` and stays on top of it.
         */}
         {photoUrl && (
-          <img
+          <ZoomablePhoto
             src={photoUrl}
             alt={t('photos.roomAlt', { name: room.name })}
-            loading="lazy"
-            decoding="async"
-            className="-mt-6 h-28 w-full rounded-t-xl object-cover"
+            lazy
+            className="relative z-20 -mt-6 w-full rounded-t-xl"
+            imageClassName="h-28 w-full rounded-t-xl object-cover"
           />
         )}
 
