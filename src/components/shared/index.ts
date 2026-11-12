@@ -62,7 +62,8 @@ export type { PageHeaderProps } from './PageHeader';
 // Form Components
 // ============================================================================
 
-export { ColorPicker, DEFAULT_COLORS } from './ColorPicker';
+export { ColorPicker } from './ColorPicker';
+export { DEFAULT_COLORS } from './color-palette';
 export type { ColorPickerProps } from './ColorPicker';
 
 export { DateRangePicker } from './DateRangePicker';

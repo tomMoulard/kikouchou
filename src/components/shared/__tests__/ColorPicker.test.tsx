@@ -16,10 +16,11 @@ import userEvent from '@testing-library/user-event';
  * code against the test that was running when the module loaded.
  */
 let ColorPicker: typeof import('@/components/shared/ColorPicker').ColorPicker;
-let DEFAULT_COLORS: typeof import('@/components/shared/ColorPicker').DEFAULT_COLORS;
+let DEFAULT_COLORS: typeof import('@/components/shared/color-palette').DEFAULT_COLORS;
 
 beforeEach(async () => {
-  ({ ColorPicker, DEFAULT_COLORS } = await import('@/components/shared/ColorPicker'));
+  ({ ColorPicker } = await import('@/components/shared/ColorPicker'));
+  ({ DEFAULT_COLORS } = await import('@/components/shared/color-palette'));
 });
 
 describe('ColorPicker colour names', () => {

@@ -68,8 +68,11 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
-vi.mock('@/components/shared/ColorPicker', () => ({
+vi.mock('@/components/shared/color-palette', () => ({
   DEFAULT_COLORS: ['#3b82f6', '#ef4444', '#22c55e'],
+}));
+
+vi.mock('@/components/shared/ColorPicker', () => ({
   ColorPicker: ({ value, onChange }: { value: string; onChange: (c: string) => void }) => (
     <button
       type="button"

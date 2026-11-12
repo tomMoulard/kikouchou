@@ -33,7 +33,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
+import { ColorPicker } from '@/components/shared/ColorPicker';
+import { DEFAULT_COLORS } from '@/components/shared/color-palette';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { ContactNameInput } from '@/features/persons/components/ContactNameInput';
 import { DietaryTagPicker } from '@/features/persons/components/DietaryTagPicker';

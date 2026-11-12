@@ -10,6 +10,8 @@ import { type KeyboardEvent, memo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 
+import { DEFAULT_COLORS } from '@/components/shared/color-palette';
+
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -17,31 +19,10 @@ import { cn } from '@/lib/utils';
 // ============================================================================
 
 /**
- * Default color palette for person colors.
- * These colors provide good visual distinction and contrast. There is no red:
- * red means an error or a destructive action in this app, and a guest drawn in
- * it on the calendar or a room card reads as a warning.
- */
-const DEFAULT_COLORS = [
-  '#f97316', // Orange
-  '#f59e0b', // Amber
-  '#eab308', // Yellow
-  '#84cc16', // Lime
-  '#22c55e', // Green
-  '#14b8a6', // Teal
-  '#06b6d4', // Cyan
-  '#3b82f6', // Blue
-  '#6366f1', // Indigo
-  '#8b5cf6', // Violet
-  '#a855f7', // Purple
-  '#ec4899', // Pink
-] as const,
-
-/**
  * Translation keys for color names (used for accessibility labels).
  * Maps hex color codes to i18n translation keys.
  */
- COLOR_KEYS: Readonly<Record<string, string>> = {
+const COLOR_KEYS: Readonly<Record<string, string>> = {
   '#f97316': 'colors.orange',
   '#f59e0b': 'colors.amber',
   '#eab308': 'colors.yellow',
@@ -298,5 +279,5 @@ const ColorPicker = memo(({
 // Exports
 // ============================================================================
 
-export { ColorPicker, DEFAULT_COLORS };
+export { ColorPicker };
 export type { ColorPickerProps };
