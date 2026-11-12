@@ -2,7 +2,7 @@
 name = "kikouchou-api"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.89"
 description = "Serves api.kikouchou.app, the app's API. Today: the assistant's chat, for a signed-in account."
 publish = false
 
