@@ -244,7 +244,9 @@ const PersonCard = memo(function PersonCard({
     <Card
       onClick={handleClick}
       className={cn(
-        'relative transition-all duration-200',
+        // `min-w-0`: a grid item is as wide as its content by default, so a
+        // name with no spaces widened the card, and the page, past the screen.
+        'relative min-w-0 transition-all duration-200',
         readOnly ? 'cursor-default' : 'cursor-pointer hover:shadow-md hover:border-primary/20',
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
@@ -278,8 +280,8 @@ const PersonCard = memo(function PersonCard({
         />
       )}
 
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-3">
+      <CardHeader className="min-w-0 pb-2">
+        <div className="flex min-w-0 items-center gap-3">
           {/* Color indicator */}
           <div
             // eslint-disable-next-line kikouchou/no-raw-palette-class -- A hairline over a user-chosen colour (see the `backgroundColor` below); a theme border would vanish against half the palette.
@@ -287,7 +289,7 @@ const PersonCard = memo(function PersonCard({
             style={{ backgroundColor: person.color }}
             aria-hidden="true"
           />
-          <CardTitle className="text-lg truncate" title={person.name}>
+          <CardTitle className="min-w-0 text-lg truncate" title={person.name}>
             {person.name}
           </CardTitle>
           {personHeadcount > 1 && (

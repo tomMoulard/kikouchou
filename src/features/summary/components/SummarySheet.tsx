@@ -280,8 +280,11 @@ export const SummarySheet = memo(function SummarySheet({
   );
 
   return (
+    // Wraps anywhere: a name, a note or an address with no spaces in it has
+    // nowhere to scroll to on paper, and on a phone it pushed the whole page
+    // past the screen.
     <article
-      className="mx-auto max-w-3xl space-y-6 text-foreground print:max-w-none print:space-y-4"
+      className="mx-auto max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere] print:max-w-none print:space-y-4"
       aria-label={t('summary.title', 'Trip summary')}
     >
       {/* ==================================================================== */}
