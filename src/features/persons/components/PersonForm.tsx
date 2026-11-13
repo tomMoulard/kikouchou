@@ -43,6 +43,7 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
 import type { ContactSuggestion } from '@/lib/contacts';
 import { MAX_EXTRA_STAYS, MAX_LENGTHS, normalizeExtraStays } from '@/lib/db/sanitize';
+import { formatPhone, phoneCountriesFor, phoneProblem } from '@/lib/phone';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
@@ -78,6 +79,8 @@ interface PersonFormProps {
  */
 interface FormErrors {
   name?: string;
+  /** A phone number no phone could dial */
+  phone?: string;
   /** A further stay with only one of its two days picked */
   extraStays?: string;
 }
@@ -100,6 +103,12 @@ interface ExtraStayRow {
  * submit maps it back to `undefined`, which is what the guest stores.
  */
 const NO_CHILD_SEAT = 'none';
+
+/**
+ * How close to the notes' limit the counter appears. Below it, a count is
+ * noise; past it, the person needs to see the wall coming.
+ */
+const NOTES_COUNTER_FROM = Math.floor(MAX_LENGTHS.personNotes * 0.8);
 
 /** Whether a guest already carries a diet, so the details open on it. */
 function hasDiet(person: Person | undefined): boolean {
@@ -187,7 +196,16 @@ const PersonForm = memo(function PersonForm({
   onCancel,
   onDirtyChange,
 }: PersonFormProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Where a number typed without a "+" may be from, likeliest first.
+  const phoneCountries = useMemo(
+    () =>
+      phoneCountriesFor(
+        typeof navigator === 'undefined' ? undefined : navigator.language,
+        i18n.language,
+      ),
+    [i18n.language],
+  );
   const { currentTrip } = useTripContext();
   const { persons } = usePersonContext();
 
@@ -411,6 +429,25 @@ const PersonForm = memo(function PersonForm({
   );
 
   /**
+   * Validates the phone field: only what no phone could dial is refused.
+   */
+  const validatePhone = useCallback(
+    (value: string): string | undefined => {
+      switch (phoneProblem(value)) {
+        case 'characters':
+          return t('persons.phoneCharacters', 'Only digits, spaces and + ( ) - . can go in a phone number');
+        case 'tooShort':
+          return t('persons.phoneTooShort', 'This number is too short to call');
+        case 'tooLong':
+          return t('persons.phoneTooLong', 'A phone number has 15 digits at most');
+        default:
+          return undefined;
+      }
+    },
+    [t],
+  );
+
+  /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
@@ -421,6 +458,11 @@ const PersonForm = memo(function PersonForm({
     const nameError = validateName(name);
     if (nameError) {
       newErrors.name = nameError;
+    }
+
+    const phoneError = validatePhone(phone);
+    if (phoneError) {
+      newErrors.phone = phoneError;
     }
 
     // A further stay needs both days: half a stay is not a period anyone can
@@ -434,7 +476,7 @@ const PersonForm = memo(function PersonForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [extraStayRows, name, t, validateName]);
+  }, [extraStayRows, name, phone, t, validateName, validatePhone]);
 
   // ============================================================================
   // Event Handlers
@@ -496,7 +538,21 @@ const PersonForm = memo(function PersonForm({
 
   const handlePhoneChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setPhone(e.target.value);
+    setErrors((prev) => (prev.phone ? { ...prev, phone: undefined } : prev));
   }, []);
+
+  /**
+   * Leaving the phone field checks it, then lays a number it recognises out
+   * the way its country writes it ("0612345678" → "06 12 34 56 78").
+   */
+  const handlePhoneBlur = useCallback(() => {
+    const error = validatePhone(phone);
+    if (error) {
+      setErrors((prev) => ({ ...prev, phone: error }));
+      return;
+    }
+    setPhone((current) => formatPhone(current, phoneCountries));
+  }, [phone, phoneCountries, validatePhone]);
 
   /**
    * Fills the form from a contact picked in the name field's suggestions.
@@ -580,7 +636,9 @@ const PersonForm = memo(function PersonForm({
 
       try {
         const trimmedNotes = notes.trim();
-        const trimmedPhone = phone.trim();
+        // Formatted here too: a number picked from the contacts, or typed
+        // and submitted with Enter, never left the field.
+        const trimmedPhone = formatPhone(phone, phoneCountries).trim();
         await doSubmit({
           name: name.trim(),
           color: toHexColor(color),
@@ -611,6 +669,7 @@ const PersonForm = memo(function PersonForm({
       extraStayRows,
       notes,
       phone,
+      phoneCountries,
       headcount,
       childSeat,
       mealPlanner,
@@ -671,10 +730,17 @@ const PersonForm = memo(function PersonForm({
           maxLength={MAX_LENGTHS.personPhone}
           value={phone}
           onChange={handlePhoneChange}
+          onBlur={handlePhoneBlur}
           placeholder={t('persons.phonePlaceholder', '+33 6 12 34 56 78')}
-          aria-describedby="person-phone-hint"
+          aria-invalid={Boolean(errors.phone)}
+          aria-describedby={errors.phone ? 'person-phone-error person-phone-hint' : 'person-phone-hint'}
           disabled={isSubmitting}
         />
+        {errors.phone && (
+          <p id="person-phone-error" className="text-sm text-destructive" role="alert">
+            {errors.phone}
+          </p>
+        )}
         <p id="person-phone-hint" className="text-xs text-muted-foreground">
           {t(
             'persons.phoneHint',
@@ -767,11 +833,22 @@ const PersonForm = memo(function PersonForm({
           placeholder={t('persons.notesPlaceholder', 'e.g. allergic to cats, vegan…')}
           disabled={isSubmitting}
           rows={4}
-          className="min-h-24 resize-y"
+          // The same limit the save enforces: past it, a paste was clipped by
+          // nothing and the whole guest failed to save.
+          maxLength={MAX_LENGTHS.personNotes}
+          aria-describedby="person-notes-hint"
+          className="min-h-24 max-h-64 resize-y"
         />
-        <p className="text-xs text-muted-foreground">
-          {t('persons.notesHint', 'Diet, allergies, or anything hosts should know.')}
-        </p>
+        <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
+          <p id="person-notes-hint">
+            {t('persons.notesHint', 'Diet, allergies, or anything hosts should know.')}
+          </p>
+          {notes.length >= NOTES_COUNTER_FROM && (
+            <p className="shrink-0 tabular-nums" aria-live="polite">
+              {notes.length} / {MAX_LENGTHS.personNotes}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Collapsible extra details (headcount) */}

@@ -7,6 +7,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@/test/utils';
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import type { Person, PersonFormData, Trip } from '@/types';
 
 /**
@@ -186,6 +187,31 @@ describe('PersonForm', () => {
       { withProviders: false },
     );
     expect(screen.getByTestId('date-range-picker')).toBeInTheDocument();
+  });
+
+  describe('notes', () => {
+    it('stops at the length a guest can be saved with', () => {
+      render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+
+      expect(screen.getByLabelText(/persons\.notes/)).toHaveAttribute(
+        'maxLength',
+        String(MAX_LENGTHS.personNotes),
+      );
+    });
+
+    it('counts the characters only once the limit is near', () => {
+      render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, { withProviders: false });
+      const notes = screen.getByLabelText(/persons\.notes/);
+      const counter = `/ ${MAX_LENGTHS.personNotes}`;
+
+      fireEvent.change(notes, { target: { value: 'vegan' } });
+      expect(screen.queryByText(counter, { exact: false })).not.toBeInTheDocument();
+
+      fireEvent.change(notes, { target: { value: 'a'.repeat(MAX_LENGTHS.personNotes - 10) } });
+      expect(
+        screen.getByText(`${MAX_LENGTHS.personNotes - 10} ${counter}`),
+      ).toBeInTheDocument();
+    });
   });
 
   it('renders optional notes field', () => {
@@ -512,19 +538,82 @@ describe('PersonForm', () => {
       expect(screen.getByLabelText(/persons\.phone/)).toHaveValue('+33 6 12 34 56 78');
     });
 
-    it('submits the trimmed phone', async () => {
+    it('submits the phone trimmed and laid out', async () => {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
       const { user } = render(<PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />, {
         withProviders: false,
       });
 
       await user.type(screen.getByLabelText(/persons\.name/), 'Mary');
-      await user.type(screen.getByLabelText(/persons\.phone/), '  0612345678  ');
+      await user.type(screen.getByLabelText(/persons\.phone/), '  +33612345678  ');
       await user.click(screen.getByText('common.save'));
 
       expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Mary', phone: '0612345678' }),
+        expect.objectContaining({ name: 'Mary', phone: '+33 6 12 34 56 78' }),
       );
+    });
+
+    it('lays the number out when the field is left', async () => {
+      const { user } = render(<PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+      const phone = screen.getByLabelText(/persons\.phone/);
+
+      await user.type(phone, '+33612345678');
+      await user.tab();
+
+      expect(phone).toHaveValue('+33 6 12 34 56 78');
+    });
+
+    it('leaves a number it does not recognise as typed', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      const { user } = render(<PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.type(screen.getByLabelText(/persons\.name/), 'Mary');
+      await user.type(screen.getByLabelText(/persons\.phone/), '0123');
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ phone: '0123' }));
+    });
+
+    // The number from the bug report: 25 digits, which no phone can dial.
+    it('refuses more digits than any phone number has', async () => {
+      const onSubmit = vi.fn();
+      const { user } = render(<PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+      const phone = screen.getByLabelText(/persons\.phone/);
+
+      await user.type(screen.getByLabelText(/persons\.name/), 'Mary');
+      await user.type(phone, '6466464646464665656656565');
+      await user.tab();
+
+      expect(screen.getByRole('alert')).toHaveTextContent('persons.phoneTooLong');
+      expect(phone).toHaveAttribute('aria-invalid', 'true');
+      expect(phone).toHaveValue('6466464646464665656656565');
+
+      await user.click(screen.getByText('common.save'));
+      expect(onSubmit).not.toHaveBeenCalled();
+
+      // Typing again clears the complaint until the field is left again.
+      await user.type(phone, '{Backspace}');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('refuses letters', async () => {
+      const onSubmit = vi.fn();
+      const { user } = render(<PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await user.type(screen.getByLabelText(/persons\.name/), 'Mary');
+      await user.type(screen.getByLabelText(/persons\.phone/), 'call me');
+      await user.click(screen.getByText('common.save'));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('persons.phoneCharacters');
+      expect(onSubmit).not.toHaveBeenCalled();
     });
 
     it('submits no phone at all when the field is left empty', async () => {
@@ -674,7 +763,9 @@ describe('PersonForm', () => {
       await user.click(await screen.findByRole('option', { name: /Marie Curie/ }));
 
       expect(screen.getByLabelText(/persons\.name/)).toHaveValue('Marie Curie');
-      expect(screen.getByLabelText(/persons\.phone/)).toHaveValue('0612345678');
+      // Laid out when the field was left for the name; the test browser says
+      // en-US, so a French mobile reads as international.
+      expect(screen.getByLabelText(/persons\.phone/)).toHaveValue('+33 6 12 34 56 78');
     });
 
     it('clears the required-name error a pick has just satisfied', async () => {
