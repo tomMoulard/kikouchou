@@ -202,7 +202,13 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     void import('canvas-confetti')
       .then(({ default: confetti }) => {
         if (!cancelled) {
-          void confetti({ particleCount: 140, spread: 75, origin: { y: 0.65 } });
+          // Not the library's default cannon: that one hands its canvas to a
+          // worker through OffscreenCanvas, and WebKit (iOS Safari and the
+          // Capacitor shell) stops presenting that canvas after a few frames,
+          // leaving the pieces frozen over every page until a reload. Drawing
+          // on the main thread costs ~2s of animation frames and always ends.
+          const fire = confetti.create(undefined, { resize: true, useWorker: false });
+          void fire({ particleCount: 140, spread: 75, origin: { y: 0.65 } });
         }
       })
       .catch((error: unknown) => {

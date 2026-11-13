@@ -75,6 +75,7 @@ vi.mock('@/features/sharing/utils/pending-invite', () => ({
 }));
 
 const confetti = vi.fn();
+const confettiCreate = vi.fn();
 /** When set, reading the module's export fails the way a chunk that will not load does. */
 const confettiImport = vi.hoisted(() => ({ fails: false }));
 vi.mock('canvas-confetti', () => ({
@@ -82,7 +83,12 @@ vi.mock('canvas-confetti', () => ({
     if (confettiImport.fails) {
       throw new TypeError('Importing a module script failed.');
     }
-    return (...args: unknown[]) => confetti(...args);
+    return Object.assign((...args: unknown[]) => confetti(...args), {
+      create: (...args: unknown[]) => {
+        confettiCreate(...args);
+        return (...fireArgs: unknown[]) => confetti(...fireArgs);
+      },
+    });
   },
 }));
 
@@ -720,6 +726,18 @@ describe('TripCreateWizard invite screen', () => {
     expect(confetti).toHaveBeenCalledTimes(1);
   });
 
+  // The default cannon draws through a worker's OffscreenCanvas, which WebKit
+  // stops presenting mid-fall: the pieces froze over the trip until a reload.
+  it('draws the confetti on the main thread, not in a worker', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+
+    await waitFor(() => {
+      expect(confettiCreate).toHaveBeenCalledWith(undefined, { resize: true, useWorker: false });
+    });
+  });
+
   // A decoration: its chunk failing to arrive was an unhandled rejection,
   // which PostHog files as an error, over an invite screen that worked.
   it('lets the confetti go quietly when its chunk will not load', async () => {
@@ -810,7 +828,9 @@ describe('TripCreateWizard invite screen', () => {
     });
     vi.doMock('canvas-confetti', async () => {
       await gate;
-      return { default: (...args: unknown[]) => confetti(...args) };
+      return {
+        default: { create: () => (...args: unknown[]) => confetti(...args) },
+      };
     });
     try {
       const user = userEvent.setup();

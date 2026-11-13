@@ -46,7 +46,7 @@ vi.mock('@/features/sharing/utils/pending-invite', () => ({
   forgetPendingInvite: vi.fn(),
 }));
 
-vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
+vi.mock('canvas-confetti', () => ({ default: { create: () => vi.fn() } }));
 vi.mock('../../lib/create-trip-with-details', () => ({ createTripWithDetails: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn() }));
 vi.mock('@/lib/google-tag', () => ({ pushDataLayerEvent: vi.fn() }));
