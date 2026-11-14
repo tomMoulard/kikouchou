@@ -16,7 +16,10 @@ import {
   createTripId,
   updateTimestamp,
 } from '@/lib/db/utils';
-import { planTripDateShiftAssignmentUpdates } from '@/features/trips/utils/trip-date-shift';
+import {
+  planTripDateShiftAssignmentUpdates,
+  planTripDateShiftGuestUpdates,
+} from '@/features/trips/utils/trip-date-shift';
 import type { ISODateString, Trip, TripFormData, TripId } from '@/types';
 
 /** Maximum retry attempts for ID collision recovery */
@@ -277,7 +280,7 @@ export async function updateTrip(
     }).description;
   }
 
-  await db.transaction('rw', [db.trips, db.roomAssignments], async () => {
+  await db.transaction('rw', [db.trips, db.roomAssignments, db.persons], async () => {
     // Read before writing so the *old* dates are still available: a booking
     // that spanned exactly the old trip was a whole-trip booking, and that is
     // knowable only here. See `planTripDateShiftAssignmentUpdates`.
@@ -341,6 +344,24 @@ export async function updateTrip(
           startDate: shift.startDate,
           endDate: shift.endDate,
           ...updateTimestamp(),
+        }),
+      ),
+    );
+
+    // A guest whose own dates were the whole trip moves with it too, or they
+    // stay behind on the old days. See `planTripDateShiftGuestUpdates`.
+    const persons = await db.persons.where('tripId').equals(id).toArray();
+    const stays = planTripDateShiftGuestUpdates({
+      previous: { startDate: previous.startDate, endDate: previous.endDate },
+      next: { startDate: nextStartDate, endDate: nextEndDate },
+      persons,
+    });
+
+    await Promise.all(
+      stays.map((stay) =>
+        db.persons.update(stay.id, {
+          stayStartDate: stay.stayStartDate,
+          stayEndDate: stay.stayEndDate,
         }),
       ),
     );

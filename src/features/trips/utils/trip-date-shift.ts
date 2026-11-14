@@ -1,10 +1,11 @@
 /**
- * @fileoverview Keeps whole-trip room bookings whole when the trip's dates move.
+ * @fileoverview Keeps whole-trip room bookings, and whole-trip stays, whole
+ * when the trip's dates move.
  *
  * @module features/trips/utils/trip-date-shift
  */
 
-import type { ISODateString, RoomAssignment, RoomAssignmentId } from '@/types';
+import type { ISODateString, Person, PersonId, RoomAssignment, RoomAssignmentId } from '@/types';
 
 // ============================================================================
 // Types
@@ -14,6 +15,13 @@ import type { ISODateString, RoomAssignment, RoomAssignmentId } from '@/types';
 export interface TripDateWindow {
   readonly startDate: ISODateString;
   readonly endDate: ISODateString;
+}
+
+/** One guest's new stay. */
+export interface GuestStayShift {
+  readonly id: PersonId;
+  readonly stayStartDate: ISODateString;
+  readonly stayEndDate: ISODateString;
 }
 
 /** One assignment's new span. */
@@ -71,5 +79,47 @@ export function planTripDateShiftAssignmentUpdates(args: {
       id: assignment.id,
       startDate: next.startDate,
       endDate: next.endDate,
+    }));
+}
+
+/**
+ * Works out which guests' stays should follow the trip when its dates change.
+ *
+ * The same reasoning as {@link planTripDateShiftAssignmentUpdates}, for the
+ * guest's own dates. A guest with no dates is already read as staying for the
+ * whole trip, and follows it on their own. A guest whose dates were *exactly*
+ * the trip's meant the same thing, but wrote it down as two dates: when the
+ * trip moved they stayed behind on the old ones, shown on the wrong days and
+ * missing from the new ones.
+ *
+ * Only a single stay that matched the old trip exactly moves. A stay that
+ * differed by a day, or a guest who comes several times, was somebody's
+ * decision about particular days.
+ *
+ * @param args - The old and new trip windows, and the trip's guests
+ * @returns The guests to rewrite, empty when the dates did not move
+ */
+export function planTripDateShiftGuestUpdates(args: {
+  readonly previous: TripDateWindow;
+  readonly next: TripDateWindow;
+  readonly persons: readonly Pick<Person, 'id' | 'stayStartDate' | 'stayEndDate' | 'extraStays'>[];
+}): readonly GuestStayShift[] {
+  const { previous, next, persons } = args;
+
+  if (previous.startDate === next.startDate && previous.endDate === next.endDate) {
+    return [];
+  }
+
+  return persons
+    .filter(
+      (person) =>
+        person.stayStartDate === previous.startDate &&
+        person.stayEndDate === previous.endDate &&
+        (person.extraStays?.length ?? 0) === 0,
+    )
+    .map((person) => ({
+      id: person.id,
+      stayStartDate: next.startDate,
+      stayEndDate: next.endDate,
     }));
 }

@@ -373,6 +373,72 @@ describe('updateTrip', () => {
     expect(moved?.endDate).toBe('2024-07-22');
   });
 
+  // Reported from the app: a guest whose dates were the trip's stayed on the
+  // old days when the trip moved, while an undated guest followed it. Both
+  // meant "the whole trip".
+  it('moves a guest whose dates were exactly the trip, and the room with them', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
+    const whole = await createPerson(trip.id, {
+      name: 'Carol',
+      color: hexColor('#22c55e'),
+      stayStartDate: isoDate('2024-07-15'),
+      stayEndDate: isoDate('2024-07-22'),
+    });
+    const booking = await createAssignment(trip.id, {
+      roomId: room.id,
+      personId: whole.id,
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
+    });
+
+    await updateTrip(trip.id, {
+      startDate: isoDate('2024-07-12'),
+      endDate: isoDate('2024-07-30'),
+    });
+
+    expect(await db.persons.get(whole.id)).toMatchObject({
+      stayStartDate: '2024-07-12',
+      stayEndDate: '2024-07-30',
+    });
+    expect(await db.roomAssignments.get(booking.id)).toMatchObject({
+      startDate: '2024-07-12',
+      endDate: '2024-07-30',
+    });
+  });
+
+  it('leaves a guest who chose part of the trip, or several stays, on their days', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const partial = await createPerson(trip.id, {
+      name: 'Marc',
+      color: hexColor('#14b8a6'),
+      stayStartDate: isoDate('2024-07-15'),
+      stayEndDate: isoDate('2024-07-20'),
+    });
+    const returning = await createPerson(trip.id, {
+      name: 'Léa',
+      color: hexColor('#f97316'),
+      stayStartDate: isoDate('2024-07-15'),
+      stayEndDate: isoDate('2024-07-22'),
+      extraStays: [{ startDate: isoDate('2024-08-01'), endDate: isoDate('2024-08-03') }],
+    });
+
+    await updateTrip(trip.id, { startDate: isoDate('2024-07-12') });
+
+    expect(await db.persons.get(partial.id)).toMatchObject({
+      stayStartDate: '2024-07-15',
+      stayEndDate: '2024-07-20',
+    });
+    expect(await db.persons.get(returning.id)).toMatchObject({
+      stayStartDate: '2024-07-15',
+      stayEndDate: '2024-07-22',
+    });
+  });
+
   it('leaves a booking made for part of the trip where it is', async () => {
     const trip = await createTrip(
       createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),

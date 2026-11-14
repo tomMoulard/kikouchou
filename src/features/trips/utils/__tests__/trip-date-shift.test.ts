@@ -5,7 +5,10 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { planTripDateShiftAssignmentUpdates } from '../trip-date-shift';
+import {
+  planTripDateShiftAssignmentUpdates,
+  planTripDateShiftGuestUpdates,
+} from '../trip-date-shift';
 import type {
   ISODateString,
   PersonId,
@@ -111,5 +114,55 @@ describe('planTripDateShiftAssignmentUpdates', () => {
     expect(shifts).toEqual([
       { id: 'a1', startDate: '2026-04-03', endDate: '2026-04-08' },
     ]);
+  });
+});
+
+describe('planTripDateShiftGuestUpdates', () => {
+  const guest = (id: string, start?: string, end?: string, extra = 0) => ({
+    id: id as PersonId,
+    ...(start ? { stayStartDate: start as ISODateString } : {}),
+    ...(end ? { stayEndDate: end as ISODateString } : {}),
+    ...(extra > 0
+      ? {
+          extraStays: Array.from({ length: extra }, () => ({
+            startDate: '2024-08-01' as ISODateString,
+            endDate: '2024-08-03' as ISODateString,
+          })),
+        }
+      : {}),
+  });
+
+  it('moves a guest whose stay was exactly the old trip', () => {
+    expect(
+      planTripDateShiftGuestUpdates({
+        previous: window('2024-07-15', '2024-07-22'),
+        next: window('2024-07-12', '2024-07-30'),
+        persons: [guest('whole', '2024-07-15', '2024-07-22')],
+      }),
+    ).toEqual([{ id: 'whole', stayStartDate: '2024-07-12', stayEndDate: '2024-07-30' }]);
+  });
+
+  it('leaves a partial stay, an undated guest, and one who stays several times', () => {
+    expect(
+      planTripDateShiftGuestUpdates({
+        previous: window('2024-07-15', '2024-07-22'),
+        next: window('2024-07-12', '2024-07-30'),
+        persons: [
+          guest('partial', '2024-07-15', '2024-07-20'),
+          guest('undated'),
+          guest('returning', '2024-07-15', '2024-07-22', 1),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('moves nobody when the dates did not move', () => {
+    expect(
+      planTripDateShiftGuestUpdates({
+        previous: window('2024-07-15', '2024-07-22'),
+        next: window('2024-07-15', '2024-07-22'),
+        persons: [guest('whole', '2024-07-15', '2024-07-22')],
+      }),
+    ).toEqual([]);
   });
 });
