@@ -1,0 +1,7 @@
+Connexion avec une clé d'accès dans l'application.
+Un lien de connexion reçu par e-mail ouvre désormais l'application.
+Plusieurs invités peuvent partager un même train ou vol.
+Ouvrez la photo d'un voyage ou d'une chambre en plein écran, et l'adresse du voyage dans votre application de cartes.
+Les paramètres peuvent passer l'application à la dernière version.
+Le voyage d'exemple a de vraies photos.
+Et de nombreuses petites corrections.

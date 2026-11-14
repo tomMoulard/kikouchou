@@ -1,0 +1,7 @@
+Sign in with a passkey in the app.
+A sign-in link from an email now opens the app.
+Several guests can share one train or flight.
+Open a trip or room photo full screen, and open the trip address in your maps app.
+Settings can move the app onto the latest version.
+The sample trip has real pictures.
+And many smaller fixes.
