@@ -44,6 +44,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { useAuth } from '@/features/auth';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useVisibleViewportHeight } from '@/hooks/useVisibleViewportHeight';
 
 import { cn } from '@/lib/utils';
 
@@ -847,6 +848,7 @@ function AssistantPageComponent(): ReactElement {
 
   const isReady = status === 'ready' || status === 'generating';
   const isWide = useMediaQuery('(min-width: 640px)');
+  useVisibleViewportHeight();
   const queuedCount = useMemo(
     () => messages.reduce((count, msg) => (msg.queued ? count + 1 : count), 0),
     [messages],
@@ -856,11 +858,14 @@ function AssistantPageComponent(): ReactElement {
     <div
       className={cn(
         'container mx-auto flex min-h-0 max-w-3xl flex-col',
-        // Fills Layout's main exactly: the sticky header (3.5rem under the top
-        // inset), main's pt-4, and main's pb-nav-stack (the bottom bar, or
-        // nothing when it is switched off). A fixed 5rem here left empty space
-        // under the input whenever the bar was off.
-        'h-[calc(100dvh-3.5rem-var(--app-inset-top)-1rem-var(--nav-stack))]',
+        // Fills what is on screen: the visible height (the keyboard taken off,
+        // see useVisibleViewportHeight; 100dvh until it is measured), less the
+        // sticky header (3.5rem under the top inset), main's pt-4, and the
+        // bottom bar (--nav-stack) for whatever of it the keyboard does not
+        // already cover. Sized by 100dvh alone, the chat stayed as tall as the
+        // screen behind an open keyboard, and the browser scrolled it to keep
+        // the input in view: header gone, an empty band under the input.
+        'h-[calc(var(--visible-viewport-height,100dvh)-3.5rem-var(--app-inset-top)-1rem-max(0px,var(--nav-stack)-var(--keyboard-overlap,0px)))]',
       )}
     >
       {/* Compact on a phone: the chat is what the screen is for. The
