@@ -18,7 +18,7 @@ import { addDays } from 'date-fns';
 import { resolveGuestStayPeriods } from '@/features/persons/utils/guest-presence';
 import { isCalendarDayString } from '@/lib/db/sanitize';
 import { toLocalISODateString } from '@/lib/db/utils';
-import { parseLocalDayKey } from '@/lib/utils/trip-days';
+import { buildDayColumnsCovering, parseLocalDayKey } from '@/lib/utils/trip-days';
 import type { ISODateString, Person, RoomAssignment, Transport, Trip } from '@/types';
 
 // ============================================================================
@@ -209,6 +209,62 @@ export function resolveRoomPlanningWindow(
     return null;
   }
   return { startDate: first, endDate: last };
+}
+
+/**
+ * The days the rooms timeline shows: the planning window, widened to every
+ * guest's stay and every booking that reaches outside it.
+ *
+ * The planning window is the trip's dates when it has them, and that is the
+ * right answer for what a guest with no dates needs a bed for. It is the wrong
+ * answer for the axis: a guest who arrives two days before the trip, or a room
+ * booked past its end, was cut off at the trip's edge, with no column to draw
+ * those nights on. The axis now reaches them, up to
+ * `TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS` beyond either end, the limit the other
+ * timelines use so a date typed a year off does not draw hundreds of columns.
+ *
+ * @param window - The room planning window (`resolveRoomPlanningWindow`), or null
+ * @param persons - The trip's guests
+ * @param arrivals - Arrival transports of the trip
+ * @param departures - Departure transports of the trip
+ * @param assignments - The trip's room bookings
+ * @param today - The current day, for a trip with nothing dated at all
+ * @returns The first and last day of the axis, both inclusive
+ */
+export function resolveRoomTimelineRange(
+  window: DatedWindow | null,
+  persons: readonly Person[],
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+  assignments: readonly RoomAssignment[],
+  today: ISODateString,
+): DatedWindow {
+  if (!window) {
+    return resolveUndatedTimelineRange([], today);
+  }
+
+  const stayDays = persons.flatMap((person) =>
+    resolveGuestStayPeriods(person, arrivals, departures, window).flatMap((period) => [
+      period.arrival,
+      period.departure,
+    ]),
+  );
+  const bookingDays = assignments.flatMap((assignment) => [
+    assignment.startDate,
+    assignment.endDate,
+  ]);
+
+  const columns = buildDayColumnsCovering({
+    startKey: window.startDate,
+    endKey: window.endDate,
+    mustInclude: [...stayDays, ...bookingDays],
+  });
+  const first = columns[0];
+  const last = columns[columns.length - 1];
+  if (!first || !last) {
+    return window;
+  }
+  return { startDate: toLocalISODateString(first), endDate: toLocalISODateString(last) };
 }
 
 /**

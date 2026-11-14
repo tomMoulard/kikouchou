@@ -98,7 +98,7 @@ import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import {
   resolveRoomPlanningWindow,
-  resolveUndatedTimelineRange,
+  resolveRoomTimelineRange,
 } from '@/features/trips/utils/trip-window';
 import { notify } from '@/lib/notifications';
 import { reportFailure } from '@/lib/errors/report-failure';
@@ -369,12 +369,20 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    todayStr = useMemo(() => formatToISODate(todayDate), [todayDate]),
 
   // The timeline's axis: the trip, else the guests' stays and the bookings,
-  // else one week from today. Never empty, so a trip without dates still
-  // shows a calendar.
+  // else one week from today, then widened to any stay or booking reaching
+  // past it, so a guest who comes early or leaves late is drawn on their own
+  // days. Never empty, so a trip without dates still shows a calendar.
    timelineRange = useMemo(
     () =>
-      roomPlanningWindow ?? resolveUndatedTimelineRange([], todayStr as ISODateString),
-    [roomPlanningWindow, todayStr],
+      resolveRoomTimelineRange(
+        roomPlanningWindow,
+        persons,
+        arrivals,
+        departures,
+        assignments,
+        todayStr as ISODateString,
+      ),
+    [roomPlanningWindow, persons, arrivals, departures, assignments, todayStr],
   ),
 
   // Calculate rooms with occupancy data

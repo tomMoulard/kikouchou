@@ -10,6 +10,7 @@ import {
   getTripDates,
   inferGuestStayWindow,
   resolveRoomPlanningWindow,
+  resolveRoomTimelineRange,
   resolveTripWorkingWindow,
   resolveUndatedTimelineRange,
   tripHasDates,
@@ -275,5 +276,64 @@ describe('resolveUndatedTimelineRange', () => {
     expect(buildDayColumns(range.startDate, range.endDate)).toHaveLength(
       UNDATED_TIMELINE_DEFAULT_DAYS,
     );
+  });
+});
+
+describe('resolveRoomTimelineRange', () => {
+  const TRIP = { startDate: isoDate('2026-08-05'), endDate: isoDate('2026-08-12') };
+  const TODAY = isoDate('2026-06-01');
+
+  it('is the trip when nobody and nothing reaches past it', () => {
+    expect(
+      resolveRoomTimelineRange(TRIP, [person('undated')], [], [], [booking('b', 'undated', '2026-08-05', '2026-08-12')], TODAY),
+    ).toEqual(TRIP);
+  });
+
+  // Reported from the app: the axis stopped at the trip's dates, so a guest
+  // there before or after had no column for those nights.
+  it('widens to a guest who comes early and a booking that runs late', () => {
+    expect(
+      resolveRoomTimelineRange(
+        TRIP,
+        [person('early', { stayStartDate: isoDate('2026-08-03'), stayEndDate: isoDate('2026-08-10') })],
+        [],
+        [],
+        [booking('late', 'other', '2026-08-10', '2026-08-14')],
+        TODAY,
+      ),
+    ).toEqual({ startDate: '2026-08-03', endDate: '2026-08-14' });
+  });
+
+  it('widens to a stay read from travel', () => {
+    expect(
+      resolveRoomTimelineRange(
+        TRIP,
+        [person('flyer')],
+        [transport('in', 'flyer', 'arrival', '2026-08-02T10:00:00')],
+        [transport('out', 'flyer', 'departure', '2026-08-13T18:00:00')],
+        [],
+        TODAY,
+      ),
+    ).toEqual({ startDate: '2026-08-02', endDate: '2026-08-13' });
+  });
+
+  it('does not follow a date typed far off the trip', () => {
+    expect(
+      resolveRoomTimelineRange(
+        TRIP,
+        [person('typo', { stayStartDate: isoDate('2025-08-05'), stayEndDate: isoDate('2026-08-10') })],
+        [],
+        [],
+        [],
+        TODAY,
+      ),
+    ).toEqual(TRIP);
+  });
+
+  it('falls back to a week from today when nothing is dated', () => {
+    expect(resolveRoomTimelineRange(null, [], [], [], [], TODAY)).toEqual({
+      startDate: '2026-06-01',
+      endDate: '2026-06-07',
+    });
   });
 });
