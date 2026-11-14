@@ -21,6 +21,7 @@ import { useOfflineAwareNotify } from '@/hooks';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
+import { stayFollowingTravel } from '@/features/persons/utils/stay-from-travel';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
@@ -144,7 +145,7 @@ import { type AssistantView, isAssistantView } from '../views';
 export interface ActionExecutionResult {
   /** Number of actions that ran successfully */
   readonly count: number;
-  /** One human-readable line per successful action */
+  /** One human-readable line per successful action, and one per side effect it had (a stay moved to match a journey) */
   readonly summaries: readonly string[];
 }
 
@@ -1113,6 +1114,26 @@ async function executeActionBatch(
                 'Added {{type}} for {{person}} at {{location}}',
             }),
           );
+
+          // A pasted booking added the trains but left the traveller on the
+          // calendar on their old days: stated stay dates win over travel.
+          // Read afresh, because the previous action of the same booking
+          // (its outbound leg) may just have moved the stay.
+          const traveller = await getPersonById(transportPerson.id);
+          const stay = traveller
+            ? stayFollowingTravel(traveller, d.type as TransportType, d.datetime as string)
+            : null;
+          if (stay) {
+            await updatePersonWithOwnershipCheck(transportPerson.id, tid, stay);
+            summaries.push(
+              t('assistant.actionDetails.stayFollowsTravel', {
+                name: transportPerson.name,
+                start: stay.stayStartDate,
+                end: stay.stayEndDate,
+                defaultValue: "Moved {{name}}'s stay to match: {{start}} to {{end}}",
+              }),
+            );
+          }
           break;
         }
 

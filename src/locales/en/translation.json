@@ -1492,6 +1492,7 @@
       "assignRoom": "Assigned {{person}} → {{room}} ({{start}} to {{end}})",
       "removeAssignment": "Removed assignment: {{person}} ↔ {{room}}",
       "addTransport": "Added {{type}} for {{person}} at {{location}}",
+      "stayFollowsTravel": "Moved {{name}}'s stay to match: {{start}} to {{end}}",
       "removeTransport": "Removed transport: {{label}}",
       "addActivity": "Added activity: {{title}}",
       "updateActivity": "Updated activity {{title}} ({{fields}})",

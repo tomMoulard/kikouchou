@@ -868,6 +868,54 @@ describe('useTripActions — cross-trip references', () => {
     expect(await db.transports.where('tripId').equals(tripId).count()).toBe(0);
   });
 
+  // A booking pasted into the chat: the trains went on the trip, and the
+  // traveller stayed on the calendar on their old days, because stated stay
+  // dates win over travel.
+  it('moves the traveller’s stay to match a booking’s outbound and return', async () => {
+    const { tripId, personId } = await seedTrip();
+    await db.persons.update(personId, {
+      stayStartDate: isoDate('2024-07-15'),
+      stayEndDate: isoDate('2024-07-18'),
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      [
+        actionBlock({
+          action: 'addTransport',
+          data: { personId, type: 'arrival', datetime: '2024-07-20T11:10:00', location: 'Toulon' },
+        }),
+        actionBlock({
+          action: 'addTransport',
+          data: { personId, type: 'departure', datetime: '2024-07-28T18:50:00', location: 'Toulon' },
+        }),
+      ].join('\n'),
+    );
+
+    expect(outcome.count).toBe(2);
+    const traveller = await db.persons.get(personId);
+    expect(traveller).toMatchObject({ stayStartDate: '2024-07-20', stayEndDate: '2024-07-28' });
+    expect(outcome.summaries).toContain('assistant.actionDetails.stayFollowsTravel');
+  });
+
+  it('leaves a guest with no stay dates to be read from their travel', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addTransport',
+        data: { personId, type: 'arrival', datetime: '2024-07-20T11:10:00', location: 'Toulon' },
+      }),
+    );
+
+    const traveller = await db.persons.get(personId);
+    expect(traveller?.stayStartDate).toBeUndefined();
+    expect(traveller?.stayEndDate).toBeUndefined();
+  });
+
   it('still allows a guest and room from the active trip', async () => {
     const { tripId, personId } = await seedTrip();
     const room = await createRoom(tripId, { name: 'Blue', capacity: 2 });
