@@ -58,6 +58,15 @@ describe('runNativeOAuth', () => {
     expect(browser.close).toHaveBeenCalled();
   });
 
+  it('counts an email link that arrives meanwhile as a sign-in, not a refusal', async () => {
+    const result = runNativeOAuth(AUTHORIZE);
+    deliverAuthCallbackUrl(
+      'https://app.kikouchou.app/auth/native?token_hash=0123456789abcdef&type=email',
+    );
+
+    await expect(result).resolves.toEqual({ status: 'returned' });
+  });
+
   it("reports the provider's refusal with its own words", async () => {
     const result = runNativeOAuth(AUTHORIZE);
     deliverAuthCallbackUrl(

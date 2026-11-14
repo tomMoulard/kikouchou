@@ -21,6 +21,7 @@ import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
 import {
   consumeAuthCode,
+  consumeEmailLinkToken,
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -64,6 +65,7 @@ vi.mock('@/lib/supabase/auth-callback', async (importOriginal) => ({
   isMissingCodeVerifier: (await importOriginal<typeof import('@/lib/supabase/auth-callback')>())
     .isMissingCodeVerifier,
   consumeAuthCode: vi.fn(() => null),
+  consumeEmailLinkToken: vi.fn(() => null),
   getCapturedAuthError: vi.fn(() => null),
   onAuthCallback: vi.fn(() => () => undefined),
 }));
@@ -81,6 +83,7 @@ const mockedReportError = vi.mocked(reportError);
 const mockedGetClient = vi.mocked(getSupabaseClient);
 const mockedIsConfigured = vi.mocked(isSupabaseConfigured);
 const mockedCapturedCode = vi.mocked(consumeAuthCode);
+const mockedCapturedEmailLink = vi.mocked(consumeEmailLinkToken);
 const mockedCapturedError = vi.mocked(getCapturedAuthError);
 
 type AuthChangeHandler = (event: string, session: unknown) => void;
@@ -96,6 +99,7 @@ interface FakeClient {
     signOut: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
     exchangeCodeForSession: ReturnType<typeof vi.fn>;
+    verifyOtp: ReturnType<typeof vi.fn>;
   };
   readonly unsubscribe: ReturnType<typeof vi.fn>;
   /** Drives the subscribed handler the way supabase-js would. */
@@ -129,6 +133,7 @@ function makeFakeClient(): FakeClient {
         data: { session: null },
         error: null,
       })),
+      verifyOtp: vi.fn(async () => ({ data: { session: null }, error: null })),
     },
     unsubscribe,
     emit: (event, session) => {
@@ -248,6 +253,8 @@ beforeEach(() => {
   mockedIsConfigured.mockReset();
   mockedCapturedCode.mockReset();
   mockedCapturedCode.mockReturnValue(null);
+  mockedCapturedEmailLink.mockReset();
+  mockedCapturedEmailLink.mockReturnValue(null);
   mockedCapturedError.mockReset();
   mockedCapturedError.mockReturnValue(null);
 });
@@ -941,6 +948,44 @@ describe('AuthProvider — returning from the provider', () => {
     await waitFor(() => {
       expect(client.auth.exchangeCodeForSession).toHaveBeenCalledWith('auth-code-123');
     });
+  });
+
+  it('redeems the token hash an email link landed with, before reading any session', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+    mockedCapturedEmailLink.mockReturnValue({ tokenHash: 'pkce_abc', type: 'email' });
+
+    renderHook(() => useAuth(), { wrapper });
+
+    // An email link points at the app itself and carries a token hash, not a
+    // code: it needs no PKCE verifier, so it works in any browser.
+    await waitFor(() => {
+      expect(client.auth.verifyOtp).toHaveBeenCalledWith({ token_hash: 'pkce_abc', type: 'email' });
+    });
+    expect(client.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(client.auth.getSession).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an expired email link as an error the user can read', async () => {
+    const client = makeFakeClient();
+    client.auth.verifyOtp.mockResolvedValue({
+      data: { session: null },
+      error: { message: 'Email link is invalid or has expired' },
+    });
+    withBackend(client);
+    mockedCapturedEmailLink.mockReturnValue({ tokenHash: 'pkce_spent', type: 'email' });
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.lastAuthError).toBe('Email link is invalid or has expired');
+    });
+    expect(mockCapture).toHaveBeenCalledWith('sign_in_failed', {
+      method: 'email-link',
+      reason: 'error',
+    });
+    consoleWarn.mockRestore();
   });
 
   it('subscribes before exchanging, so the resulting event is not missed', async () => {

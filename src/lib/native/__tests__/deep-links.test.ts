@@ -69,6 +69,10 @@ describe('resolveDeepLink', () => {
       kind: 'auth',
       then: '/trips',
     });
+    // The same page, reached by an email link that carries a token hash.
+    expect(
+      resolveDeepLink('https://app.kikouchou.app/auth/native?token_hash=abc&type=email', ORIGINS),
+    ).toEqual({ kind: 'auth', then: '/trips' });
   });
 
   it('ignores the app scheme without an answer, and every other host', () => {

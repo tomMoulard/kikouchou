@@ -172,8 +172,73 @@ describe('auth-callback capture', () => {
     expect(module.consumeAuthCode()).toBeNull();
     expect(module.consumeAuthCode()).toBeNull();
   });
+});
 
+// ============================================================================
+// Email links that carry a token hash
+// ============================================================================
 
+describe('auth-callback email link capture', () => {
+  const HASH = 'pkce_0123456789abcdef0123456789abcdef';
+
+  it('captures the token hash an email link lands with, once', async () => {
+    atUrl(`https://app.kikouchou.app/?token_hash=${HASH}&type=email`);
+
+    const module = await importFresh();
+
+    // The link points at the app itself rather than at supabase.co, so the
+    // store app can claim it. No PKCE verifier is needed to redeem it.
+    expect(module.consumeEmailLinkToken()).toEqual({ tokenHash: HASH, type: 'email' });
+    expect(module.consumeEmailLinkToken()).toBeNull();
+    expect(module.consumeAuthCode()).toBeNull();
+  });
+
+  it('strips the token hash and its type, and keeps the rest', async () => {
+    atUrl(`https://app.kikouchou.app/auth/native?token_hash=${HASH}&type=magiclink&lng=fr#x`);
+
+    await importFresh();
+
+    expect(String(replaceState.mock.calls[0]?.[2])).toBe('/auth/native?lng=fr#x');
+  });
+
+  it('leaves a `type` parameter alone when no token hash comes with it', async () => {
+    atUrl('https://app.kikouchou.app/trips?type=train');
+
+    const module = await importFresh();
+
+    expect(module.consumeEmailLinkToken()).toBeNull();
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+
+  it('refuses a link type the app never sends, or a malformed hash', async () => {
+    atUrl(`https://app.kikouchou.app/?token_hash=${HASH}&type=recovery`);
+    expect((await importFresh()).consumeEmailLinkToken()).toBeNull();
+
+    atUrl('https://app.kikouchou.app/?token_hash=%3Cscript%3E&type=email');
+    expect((await importFresh()).consumeEmailLinkToken()).toBeNull();
+
+    atUrl(`https://app.kikouchou.app/?token_hash=${'a'.repeat(300)}&type=email`);
+    expect((await importFresh()).consumeEmailLinkToken()).toBeNull();
+  });
+
+  it('reads and delivers a token hash that arrives as a link, once', async () => {
+    atUrl('capacitor://localhost/trips');
+    const { readAuthCallbackUrl, deliverAuthCallbackUrl, onAuthCallback } = await importFresh();
+    const url = `https://app.kikouchou.app/auth/native?token_hash=${HASH}&type=email`;
+
+    expect(readAuthCallbackUrl(url)).toEqual({
+      code: null,
+      error: null,
+      emailLink: { tokenHash: HASH, type: 'email' },
+    });
+    expect(readAuthCallbackUrl(`https://app.kikouchou.app/auth/native?token_hash=${HASH}&type=nope`)).toBeNull();
+
+    const listener = vi.fn();
+    onAuthCallback(listener);
+    expect(deliverAuthCallbackUrl(url)).toBe(true);
+    expect(deliverAuthCallbackUrl(url)).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('isMissingCodeVerifier', () => {
@@ -209,10 +274,11 @@ describe('deliverAuthCallbackUrl', () => {
     expect(readAuthCallbackUrl('app.kikouchou://auth/callback?code=abc')).toEqual({
       code: 'abc',
       error: null,
+      emailLink: null,
     });
     expect(
       readAuthCallbackUrl('app.kikouchou://auth/callback?error=x&error_description=Refused'),
-    ).toEqual({ code: null, error: 'Refused' });
+    ).toEqual({ code: null, error: 'Refused', emailLink: null });
     expect(readAuthCallbackUrl('https://app.kikouchou.app/trips')).toBeNull();
     expect(readAuthCallbackUrl('not a url')).toBeNull();
   });
@@ -226,8 +292,8 @@ describe('deliverAuthCallbackUrl', () => {
 
     expect(deliverAuthCallbackUrl('app.kikouchou://auth/callback?code=abc')).toBe(true);
 
-    expect(first).toHaveBeenCalledWith({ code: 'abc', error: null });
-    expect(second).toHaveBeenCalledWith({ code: 'abc', error: null });
+    expect(first).toHaveBeenCalledWith({ code: 'abc', error: null, emailLink: null });
+    expect(second).toHaveBeenCalledWith({ code: 'abc', error: null, emailLink: null });
   });
 
   it('keeps an answer that arrives before anybody subscribed', async () => {
@@ -237,7 +303,7 @@ describe('deliverAuthCallbackUrl', () => {
     const listener = vi.fn();
     onAuthCallback(listener);
 
-    expect(listener).toHaveBeenCalledWith({ code: 'cold-start', error: null });
+    expect(listener).toHaveBeenCalledWith({ code: 'cold-start', error: null, emailLink: null });
   });
 
   it('hands a code out once, however often the link arrives', async () => {

@@ -16,13 +16,19 @@ import { renderHook, waitFor } from '@testing-library/react';
 // Test doubles
 // ============================================================================
 
+interface DeliveredCallback {
+  code: string | null;
+  error: string | null;
+  emailLink?: { tokenHash: string; type: string } | null;
+}
+
 const doubles = vi.hoisted(() => ({
   platform: 'ios' as string,
   capture: vi.fn(),
   reportError: vi.fn(),
   runNativeOAuth: vi.fn(async () => ({ status: 'returned' as string, message: null as string | null })),
   forgetAccountTrips: vi.fn(async () => undefined),
-  callbackListener: undefined as ((callback: { code: string | null; error: string | null }) => void) | undefined,
+  callbackListener: undefined as ((callback: DeliveredCallback) => void) | undefined,
   getClient: vi.fn(),
 }));
 
@@ -42,7 +48,8 @@ vi.mock('@/lib/supabase/client', () => ({
 vi.mock('@/lib/supabase/auth-callback', () => ({
   consumeAuthCode: () => null,
   getCapturedAuthError: () => null,
-  onAuthCallback: (listener: (callback: { code: string | null; error: string | null }) => void) => {
+  consumeEmailLinkToken: () => null,
+  onAuthCallback: (listener: (callback: DeliveredCallback) => void) => {
     doubles.callbackListener = listener;
     return () => {
       doubles.callbackListener = undefined;
@@ -84,6 +91,7 @@ function makeClient() {
       signOut: vi.fn(async () => ({ error: null })),
       getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
       exchangeCodeForSession: vi.fn(async () => ({ data: { session: null }, error: null as { message: string } | null })),
+      verifyOtp: vi.fn(async () => ({ data: { session: null }, error: null as { message: string } | null })),
     },
     rpc: vi.fn(async () => ({ data: null, error: null as { message: string } | null })),
     emit: (event: string, session: unknown) => handler(event, session),
@@ -185,6 +193,41 @@ describe('signing in from a store app', () => {
     await waitFor(() =>
       expect(client.auth.exchangeCodeForSession).toHaveBeenCalledWith('from-the-sheet'),
     );
+  });
+
+  it('redeems the token hash an email link opened the app with', async () => {
+    const client = makeClient();
+    const { result } = await mount(client);
+
+    doubles.callbackListener?.({
+      code: null,
+      error: null,
+      emailLink: { tokenHash: 'pkce_abc', type: 'email' },
+    });
+
+    await waitFor(() =>
+      expect(client.auth.verifyOtp).toHaveBeenCalledWith({ token_hash: 'pkce_abc', type: 'email' }),
+    );
+    expect(client.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(result.current.lastAuthError).toBeNull();
+
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    client.auth.verifyOtp.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: 'Email link is invalid or has expired' },
+    });
+    doubles.callbackListener?.({
+      code: null,
+      error: null,
+      emailLink: { tokenHash: 'pkce_spent', type: 'email' },
+    });
+    await waitFor(() =>
+      expect(result.current.lastAuthError).toBe('Email link is invalid or has expired'),
+    );
+    expect(doubles.capture).toHaveBeenCalledWith('sign_in_failed', {
+      method: 'email-link',
+      reason: 'error',
+    });
   });
 
   it('shows the error a link brought back, and one the exchange raised', async () => {
