@@ -225,6 +225,23 @@ function isFocusedFormPath(pathname: string): boolean {
 }
 
 /**
+ * Pages that fill the window and scroll inside themselves: the assistant's
+ * chat, whose input has to sit right above the bottom bar.
+ *
+ * Every other page pads its bottom by `--bottom-stack`, which keeps 5.5rem for
+ * the floating add button under phone widths. The chat has no such button,
+ * and that band was empty space under its input: about 90px on a small phone,
+ * more with the bottom bar switched off. These pages pad by `--nav-stack`
+ * instead, the bar alone.
+ */
+const FILL_SCREEN_PATHS: readonly string[] = ['/assistant'] as const;
+
+/** Whether this path is one of {@link FILL_SCREEN_PATHS}. */
+function isFillScreenPath(pathname: string): boolean {
+  return FILL_SCREEN_PATHS.includes(normalizePathname(pathname));
+}
+
+/**
  * A path as the navigation compares it: no trailing slash, lower case.
  *
  * The router matches case-insensitively and treats a trailing slash as the
@@ -1313,7 +1330,13 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
             // four pages had each pasted their own compensation on top of it.
             // With the shell gone there is no nav bar and no FAB to clear, and
             // the padding that cleared them is the height the form needs back.
-            showFocusedForm ? 'pt-2 pb-4' : hideNavigation ? 'pt-4 pb-6' : 'pb-bottom-stack pt-4',
+            showFocusedForm
+              ? 'pt-2 pb-4'
+              : hideNavigation
+                ? 'pt-4 pb-6'
+                : isFillScreenPath(location.pathname)
+                  ? 'pb-nav-stack pt-4'
+                  : 'pb-bottom-stack pt-4',
             'transition-all duration-300',
             // Adjust left margin based on sidebar state (desktop only)
             hideNavigation ? '' : isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',

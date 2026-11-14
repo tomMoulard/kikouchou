@@ -43,6 +43,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useAuth } from '@/features/auth';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 import { cn } from '@/lib/utils';
 
@@ -285,7 +286,9 @@ const ChatInput = memo(function ChatInput({
   );
 
   return (
-    <div className="shrink-0 border-t bg-background p-3">
+    // No side padding on a phone: the page's own gutter is already there, and
+    // twice the gutter was what wrapped the placeholder onto two lines.
+    <div className="shrink-0 border-t bg-background py-2 sm:p-3">
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
         {queuedCount > 0 ? (
           <div
@@ -318,14 +321,8 @@ const ChatInput = memo(function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={
               isGenerating
-                ? t(
-                    'assistant.placeholderQueue',
-                    'Send another request. It will be answered next...',
-                  )
-                : t(
-                    'assistant.placeholder',
-                    'Ask about your trip or request changes...',
-                  )
+                ? t('assistant.placeholderQueue', 'Your next request…')
+                : t('assistant.placeholder', 'Ask or change anything…')
             }
             disabled={disabled}
             className="min-h-10 max-h-32 resize-none"
@@ -849,6 +846,7 @@ function AssistantPageComponent(): ReactElement {
   }, [interrupt, t]);
 
   const isReady = status === 'ready' || status === 'generating';
+  const isWide = useMediaQuery('(min-width: 640px)');
   const queuedCount = useMemo(
     () => messages.reduce((count, msg) => (msg.queued ? count + 1 : count), 0),
     [messages],
@@ -858,31 +856,42 @@ function AssistantPageComponent(): ReactElement {
     <div
       className={cn(
         'container mx-auto flex min-h-0 max-w-3xl flex-col',
-        /* Fits in Layout main: sticky header (h-14) + main pt-4 + main pb (pb-20 mobile, pb-4 md) */
-        'h-[calc(100dvh-3.5rem-var(--app-inset-top)-1rem-5rem)] md:h-[calc(100dvh-3.5rem-var(--app-inset-top)-1rem-1rem)]',
+        // Fills Layout's main exactly: the sticky header (3.5rem under the top
+        // inset), main's pt-4, and main's pb-nav-stack (the bottom bar, or
+        // nothing when it is switched off). A fixed 5rem here left empty space
+        // under the input whenever the bar was off.
+        'h-[calc(100dvh-3.5rem-var(--app-inset-top)-1rem-var(--nav-stack))]',
       )}
     >
+      {/* Compact on a phone: the chat is what the screen is for. The
+          description is left to wider screens, and the clear button sits in
+          the title row rather than on a row of its own under it. */}
       <PageHeader
+        className="pb-2 md:pb-6"
         title={t('assistant.title', 'AI Assistant')}
-        description={t(
-          'assistant.pageDescription',
-          'Ask questions or modify your trip using natural language',
-        )}
-        action={
+        description={
+          isWide
+            ? t(
+                'assistant.pageDescription',
+                'Ask questions or modify your trip using natural language',
+              )
+            : undefined
+        }
+        titleAccessory={
           isReady && messages.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  aria-label={t('assistant.clearConversation')}
-                  onClick={handleClearConversation}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                  <span className="hidden sm:inline">
-                    {t('assistant.clearConversation')}
-                  </span>
-                </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto gap-1.5"
+              aria-label={t('assistant.clearConversation')}
+              onClick={handleClearConversation}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              <span className="hidden sm:inline">
+                {t('assistant.clearConversation')}
+              </span>
+            </Button>
           ) : undefined
         }
       />

@@ -37,13 +37,16 @@ vi.mock('@/components/shared/PageHeader', () => ({
     title,
     description,
     action,
+    titleAccessory,
   }: {
     readonly title: string;
     readonly description?: string;
     readonly action?: ReactNode;
+    readonly titleAccessory?: ReactNode;
   }) => (
     <div>
       <h1>{title}</h1>
+      {titleAccessory}
       {description ? <p>{description}</p> : null}
       {action}
     </div>

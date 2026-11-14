@@ -112,4 +112,52 @@ test.describe('Assistant arm', () => {
       await page.evaluate(() => localStorage.getItem('kikouchou-assistant-pending-prompt')),
     ).toBeNull();
   });
+
+  // A phone under 360px wide trades the bottom bar for the menu button, and
+  // the chat still kept room for the bar and for the add button's band: a
+  // wide empty strip under the input, the messages squeezed above it.
+  for (const width of [355, 393]) {
+    test(`the chat fills a ${width}px phone, its input on the bottom edge`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 770 });
+      const stub = new SupabaseStub();
+      await stub.install(page);
+      await stub.signIn(page, VISITOR);
+      await page.addInitScript(() => {
+        localStorage.setItem('kikouchou-sample-trip', 'on');
+        localStorage.setItem('i18nextLng', 'en');
+      });
+      await page.route(API_URL, (route) =>
+        route.fulfill({
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+          body: `${delta('Six people.')}data: [DONE]\n\n`,
+        }),
+      );
+
+      await page.goto('/assistant');
+      const input = page.getByRole('textbox');
+      await input.fill('How many people are coming?');
+      await input.press('Enter');
+      await expect(page.getByText('Six people.')).toBeVisible({ timeout: 15_000 });
+
+      const layout = await page.evaluate(() => {
+        const box = document.querySelector('textarea')?.getBoundingClientRect();
+        const bar = document.querySelector('.fixed.bottom-0')?.getBoundingClientRect();
+        return {
+          window: window.innerHeight,
+          page: document.documentElement.scrollHeight,
+          inputBottom: box?.bottom ?? 0,
+          inputHeight: box?.height ?? 0,
+          barTop: bar && bar.height > 0 ? bar.top : window.innerHeight,
+        };
+      });
+      // Nothing to scroll: the messages are the only thing that does.
+      expect(layout.page).toBeLessThanOrEqual(layout.window);
+      // The input sits within a row's padding of the bar, or of the bottom
+      // edge when the bar is off, rather than 90px above either.
+      expect(layout.barTop - layout.inputBottom).toBeLessThanOrEqual(16);
+      // One line: the placeholder fits, and does not grow the field.
+      expect(layout.inputHeight).toBeLessThanOrEqual(44);
+    });
+  }
 });

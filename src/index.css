@@ -720,6 +720,12 @@
 :root {
   --nav-bar-height: 4rem;
   --bottom-stack: calc(var(--nav-bar-height) + 5.5rem + env(safe-area-inset-bottom, 0px));
+  /*
+   * The bottom bar alone, without the add button's band: what a page that
+   * fills the window (the assistant's chat) keeps clear under its last row.
+   * See `FILL_SCREEN_PATHS` in `Layout`.
+   */
+  --nav-stack: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
 }
 
 :root[data-nav-bar='hidden'] {
@@ -735,6 +741,7 @@
 @media (width >= theme(--breakpoint-md)) {
   :root {
     --bottom-stack: calc(1rem + env(safe-area-inset-bottom, 0px));
+    --nav-stack: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -748,6 +755,11 @@
  */
 @utility pb-bottom-stack {
   padding-bottom: var(--bottom-stack);
+}
+
+/** The bar alone: see `--nav-stack`. */
+@utility pb-nav-stack {
+  padding-bottom: var(--nav-stack);
 }
 
 /**
