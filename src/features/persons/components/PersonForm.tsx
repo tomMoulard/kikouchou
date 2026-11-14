@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, Plus, X } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
+import { usePhoneCountries } from '@/hooks/usePhoneCountries';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,10 +33,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker } from '@/components/shared/ColorPicker';
 import { DEFAULT_COLORS } from '@/components/shared/color-palette';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
+import { NotesTextarea } from '@/components/shared/NotesTextarea';
+import { PhoneInput } from '@/components/shared/PhoneInput';
 import { ContactNameInput } from '@/features/persons/components/ContactNameInput';
 import { DietaryTagPicker } from '@/features/persons/components/DietaryTagPicker';
 import { useTripContext } from '@/contexts/TripContext';
@@ -43,7 +45,7 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
 import type { ContactSuggestion } from '@/lib/contacts';
 import { MAX_EXTRA_STAYS, MAX_LENGTHS, normalizeExtraStays } from '@/lib/db/sanitize';
-import { formatPhone, phoneCountriesFor, phoneProblem } from '@/lib/phone';
+import { formatPhone, phoneErrorMessage } from '@/lib/phone';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
@@ -103,12 +105,6 @@ interface ExtraStayRow {
  * submit maps it back to `undefined`, which is what the guest stores.
  */
 const NO_CHILD_SEAT = 'none';
-
-/**
- * How close to the notes' limit the counter appears. Below it, a count is
- * noise; past it, the person needs to see the wall coming.
- */
-const NOTES_COUNTER_FROM = Math.floor(MAX_LENGTHS.personNotes * 0.8);
 
 /** Whether a guest already carries a diet, so the details open on it. */
 function hasDiet(person: Person | undefined): boolean {
@@ -196,16 +192,8 @@ const PersonForm = memo(function PersonForm({
   onCancel,
   onDirtyChange,
 }: PersonFormProps) {
-  const { t, i18n } = useTranslation();
-  // Where a number typed without a "+" may be from, likeliest first.
-  const phoneCountries = useMemo(
-    () =>
-      phoneCountriesFor(
-        typeof navigator === 'undefined' ? undefined : navigator.language,
-        i18n.language,
-      ),
-    [i18n.language],
-  );
+  const { t } = useTranslation();
+  const phoneCountries = usePhoneCountries();
   const { currentTrip } = useTripContext();
   const { persons } = usePersonContext();
 
@@ -428,24 +416,6 @@ const PersonForm = memo(function PersonForm({
     [t],
   );
 
-  /**
-   * Validates the phone field: only what no phone could dial is refused.
-   */
-  const validatePhone = useCallback(
-    (value: string): string | undefined => {
-      switch (phoneProblem(value)) {
-        case 'characters':
-          return t('persons.phoneCharacters', 'Only digits, spaces and + ( ) - . can go in a phone number');
-        case 'tooShort':
-          return t('persons.phoneTooShort', 'This number is too short to call');
-        case 'tooLong':
-          return t('persons.phoneTooLong', 'A phone number has 15 digits at most');
-        default:
-          return undefined;
-      }
-    },
-    [t],
-  );
 
   /**
    * Validates all form fields.
@@ -460,7 +430,7 @@ const PersonForm = memo(function PersonForm({
       newErrors.name = nameError;
     }
 
-    const phoneError = validatePhone(phone);
+    const phoneError = phoneErrorMessage(t, phone);
     if (phoneError) {
       newErrors.phone = phoneError;
     }
@@ -476,7 +446,7 @@ const PersonForm = memo(function PersonForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [extraStayRows, name, phone, t, validateName, validatePhone]);
+  }, [extraStayRows, name, phone, t, validateName]);
 
   // ============================================================================
   // Event Handlers
@@ -532,27 +502,9 @@ const PersonForm = memo(function PersonForm({
     setErrors((prev) => (prev.extraStays ? { ...prev, extraStays: undefined } : prev));
   }, []);
 
-  const handleNotesChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
-    setNotes(e.target.value);
+  const handlePhoneError = useCallback((error: string | undefined) => {
+    setErrors((prev) => (prev.phone === error ? prev : { ...prev, phone: error }));
   }, []);
-
-  const handlePhoneChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    setPhone(e.target.value);
-    setErrors((prev) => (prev.phone ? { ...prev, phone: undefined } : prev));
-  }, []);
-
-  /**
-   * Leaving the phone field checks it, then lays a number it recognises out
-   * the way its country writes it ("0612345678" → "06 12 34 56 78").
-   */
-  const handlePhoneBlur = useCallback(() => {
-    const error = validatePhone(phone);
-    if (error) {
-      setErrors((prev) => ({ ...prev, phone: error }));
-      return;
-    }
-    setPhone((current) => formatPhone(current, phoneCountries));
-  }, [phone, phoneCountries, validatePhone]);
 
   /**
    * Fills the form from a contact picked in the name field's suggestions.
@@ -722,25 +674,15 @@ const PersonForm = memo(function PersonForm({
           {t('persons.phone', 'Phone')}{' '}
           <span className="text-muted-foreground text-xs">({t('common.optional', 'optional')})</span>
         </Label>
-        <Input
+        <PhoneInput
           id="person-phone"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          maxLength={MAX_LENGTHS.personPhone}
           value={phone}
-          onChange={handlePhoneChange}
-          onBlur={handlePhoneBlur}
-          placeholder={t('persons.phonePlaceholder', '+33 6 12 34 56 78')}
-          aria-invalid={Boolean(errors.phone)}
-          aria-describedby={errors.phone ? 'person-phone-error person-phone-hint' : 'person-phone-hint'}
+          onValueChange={setPhone}
+          error={errors.phone}
+          onErrorChange={handlePhoneError}
+          aria-describedby="person-phone-hint"
           disabled={isSubmitting}
         />
-        {errors.phone && (
-          <p id="person-phone-error" className="text-sm text-destructive" role="alert">
-            {errors.phone}
-          </p>
-        )}
         <p id="person-phone-hint" className="text-xs text-muted-foreground">
           {t(
             'persons.phoneHint',
@@ -826,29 +768,16 @@ const PersonForm = memo(function PersonForm({
           {t('persons.notes', 'Notes')}{' '}
           <span className="text-muted-foreground text-xs">({t('common.optional', 'optional')})</span>
         </Label>
-        <Textarea
+        <NotesTextarea
           id="person-notes"
           value={notes}
-          onChange={handleNotesChange}
+          onValueChange={setNotes}
           placeholder={t('persons.notesPlaceholder', 'e.g. allergic to cats, vegan…')}
           disabled={isSubmitting}
           rows={4}
-          // The same limit the save enforces: past it, a paste was clipped by
-          // nothing and the whole guest failed to save.
-          maxLength={MAX_LENGTHS.personNotes}
-          aria-describedby="person-notes-hint"
-          className="min-h-24 max-h-64 resize-y"
+          className="min-h-24"
+          hint={t('persons.notesHint', 'Diet, allergies, or anything hosts should know.')}
         />
-        <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
-          <p id="person-notes-hint">
-            {t('persons.notesHint', 'Diet, allergies, or anything hosts should know.')}
-          </p>
-          {notes.length >= NOTES_COUNTER_FROM && (
-            <p className="shrink-0 tabular-nums" aria-live="polite">
-              {notes.length} / {MAX_LENGTHS.personNotes}
-            </p>
-          )}
-        </div>
       </div>
 
       {/* Collapsible extra details (headcount) */}

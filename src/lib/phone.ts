@@ -10,6 +10,7 @@
  * @module lib/phone
  */
 
+import { type TFunction } from 'i18next';
 import { type CountryCode, parsePhoneNumberFromString } from 'libphonenumber-js/min';
 
 // ============================================================================
@@ -85,6 +86,26 @@ export function phoneProblem(raw: string): PhoneProblem | null {
     return 'tooLong';
   }
   return null;
+}
+
+/**
+ * Why a phone number cannot be right, worded for the person who typed it, or
+ * `undefined` when nothing visibly is.
+ *
+ * @param t - The translation function
+ * @param value - The number as typed
+ */
+export function phoneErrorMessage(t: TFunction, value: string): string | undefined {
+  switch (phoneProblem(value)) {
+    case 'characters':
+      return t('persons.phoneCharacters', 'Only digits, spaces and + ( ) - . can go in a phone number');
+    case 'tooShort':
+      return t('persons.phoneTooShort', 'This number is too short to call');
+    case 'tooLong':
+      return t('persons.phoneTooLong', 'A phone number has 15 digits at most');
+    default:
+      return undefined;
+  }
 }
 
 /**

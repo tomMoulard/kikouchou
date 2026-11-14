@@ -147,6 +147,77 @@ describe('GuestGroupForm', () => {
     });
   });
 
+  // The same field as the guest form's, so a number is checked and laid out
+  // the same way wherever it is typed: a group copies its members into trips.
+  describe('phone', () => {
+    it('lays a member’s number out when the field is left, and saves it so', async () => {
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined);
+
+      render(<GuestGroupForm group={familyGroup} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      const phone = screen.getAllByLabelText('persons.phone')[1];
+      if (!phone) throw new Error('No phone field for Alice');
+      await user.type(phone, '+33612345678');
+      await user.tab();
+      expect(phone).toHaveValue('+33 6 12 34 56 78');
+
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+      expect(onSubmit.mock.calls[0]?.[0].members[1]).toMatchObject({
+        name: 'Alice',
+        phone: '+33 6 12 34 56 78',
+      });
+    });
+
+    it('refuses a member’s number no phone could dial', async () => {
+      const user = userEvent.setup(),
+        onSubmit = vi.fn();
+
+      render(<GuestGroupForm group={familyGroup} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      const phone = screen.getAllByLabelText('persons.phone')[0];
+      if (!phone) throw new Error('No phone field for Tom + Léa');
+      await user.type(phone, '6466464646464665656656565');
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('persons.phoneTooLong');
+      expect(phone).toHaveAttribute('aria-invalid', 'true');
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('forgets a removed member’s complaint', async () => {
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined);
+
+      render(<GuestGroupForm group={familyGroup} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      const phone = screen.getAllByLabelText('persons.phone')[1];
+      if (!phone) throw new Error('No phone field for Alice');
+      await user.type(phone, 'call me');
+      await user.tab();
+      expect(screen.getByRole('alert')).toHaveTextContent('persons.phoneCharacters');
+
+      await user.click(screen.getAllByRole('button', { name: 'guestGroups.removeMember' })[1]!);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  it('stops a member’s notes at the length a guest can be saved with', () => {
+    render(<GuestGroupForm group={familyGroup} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    for (const notes of screen.getAllByLabelText('persons.notes')) {
+      expect(notes).toHaveAttribute('maxLength', '2000');
+    }
+  });
+
   it('keeps a member’s child seat through a save that touches nothing else', async () => {
     // The form rebuilds every member from its draft rows, so a field it does
     // not read back is a field the next save silently deletes — which would

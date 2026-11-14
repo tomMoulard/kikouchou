@@ -32,14 +32,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker } from '@/components/shared/ColorPicker';
 import { DEFAULT_COLORS } from '@/components/shared/color-palette';
+import { NotesTextarea } from '@/components/shared/NotesTextarea';
+import { PhoneInput } from '@/components/shared/PhoneInput';
 import { DietaryTagPicker } from '@/features/persons/components/DietaryTagPicker';
 import { useFormSubmission } from '@/hooks';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
+import { usePhoneCountries } from '@/hooks/usePhoneCountries';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor } from '@/lib/db/utils';
+import { formatPhone, phoneErrorMessage } from '@/lib/phone';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
   CHILD_SEAT_KINDS,
@@ -90,6 +93,8 @@ interface MemberDraft {
 interface FormErrors {
   name?: string;
   members?: string;
+  /** A phone number no phone could dial, by member row key. */
+  phones?: Readonly<Record<string, string>>;
 }
 
 // ============================================================================
@@ -199,6 +204,7 @@ const GuestGroupForm = memo(function GuestGroupForm({
   // They are carried through the save either way: the drafts hold the stored
   // values, so a device with the flag off never clears a diet.
   const mealPlanner = useMealPlannerEnabled();
+  const phoneCountries = usePhoneCountries();
 
   const [name, setName] = useState(group?.name ?? '');
   const [drafts, setDrafts] = useState<MemberDraft[]>(() => toDrafts(group));
@@ -247,9 +253,24 @@ const GuestGroupForm = memo(function GuestGroupForm({
     setErrors((prev) => (prev.members ? { ...prev, members: undefined } : prev));
   }, []);
 
+  const handlePhoneError = useCallback((key: string, error: string | undefined) => {
+    setErrors((prev) => {
+      if (prev.phones?.[key] === error) {
+        return prev;
+      }
+      const phones = Object.fromEntries(
+        Object.entries(prev.phones ?? {}).filter(([rowKey]) => rowKey !== key),
+      );
+      return { ...prev, phones: error ? { ...phones, [key]: error } : phones };
+    });
+  }, []);
+
   const handleRemoveMember = useCallback((key: string) => {
     setDrafts((prev) => prev.filter((draft) => draft.key !== key));
-  }, []);
+    // Its complaint goes with it, or the form would show an error for a
+    // row that is no longer there.
+    handlePhoneError(key, undefined);
+  }, [handlePhoneError]);
 
   const handleMemberChange = useCallback(
     (key: string, patch: Partial<Omit<MemberDraft, 'key'>>) => {
@@ -277,6 +298,16 @@ const GuestGroupForm = memo(function GuestGroupForm({
           'Add at least one person to the group',
         );
       }
+      // Checked here too: a number saved with Enter never left its field.
+      const phones = Object.fromEntries(
+        named.flatMap((draft) => {
+          const error = phoneErrorMessage(t, draft.phone);
+          return error ? [[draft.key, error] as const] : [];
+        }),
+      );
+      if (Object.keys(phones).length > 0) {
+        nextErrors.phones = phones;
+      }
 
       setErrors(nextErrors);
       if (Object.keys(nextErrors).length > 0) {
@@ -293,7 +324,7 @@ const GuestGroupForm = memo(function GuestGroupForm({
                 Number.parseInt(draft.headcount, 10),
               ),
               notes = draft.notes.trim(),
-              phone = draft.phone.trim(),
+              phone = formatPhone(draft.phone, phoneCountries).trim(),
               dietaryNote = draft.dietaryNote.trim();
 
             return {
@@ -318,7 +349,7 @@ const GuestGroupForm = memo(function GuestGroupForm({
         // Reported through `submitError` by useFormSubmission.
       }
     },
-    [doSubmit, drafts, name, t],
+    [doSubmit, drafts, name, phoneCountries, t],
   );
 
   // ============================================================================
@@ -444,17 +475,12 @@ const GuestGroupForm = memo(function GuestGroupForm({
                 <Label htmlFor={`guest-group-phone-${draft.key}`} className="sr-only">
                   {t('persons.phone', 'Phone')}
                 </Label>
-                <Input
+                <PhoneInput
                   id={`guest-group-phone-${draft.key}`}
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  maxLength={MAX_LENGTHS.personPhone}
                   value={draft.phone}
-                  onChange={(event) =>
-                    handleMemberChange(draft.key, { phone: event.target.value })
-                  }
-                  placeholder={t('persons.phonePlaceholder', '+33 6 12 34 56 78')}
+                  onValueChange={(phone) => handleMemberChange(draft.key, { phone })}
+                  error={errors.phones?.[draft.key]}
+                  onErrorChange={(error) => handlePhoneError(draft.key, error)}
                   disabled={isSubmitting}
                 />
               </div>
@@ -493,16 +519,13 @@ const GuestGroupForm = memo(function GuestGroupForm({
                 <Label htmlFor={`guest-group-notes-${draft.key}`} className="sr-only">
                   {t('persons.notes', 'Notes')}
                 </Label>
-                <Textarea
+                <NotesTextarea
                   id={`guest-group-notes-${draft.key}`}
                   value={draft.notes}
-                  onChange={(event) =>
-                    handleMemberChange(draft.key, { notes: event.target.value })
-                  }
+                  onValueChange={(notes) => handleMemberChange(draft.key, { notes })}
                   placeholder={t('persons.notesPlaceholder', 'e.g. allergic to cats, vegan…')}
                   disabled={isSubmitting}
                   rows={2}
-                  className="resize-y"
                 />
               </div>
 
