@@ -74,13 +74,37 @@ function stripTripId<T extends { tripId?: unknown }>(
  * Tagging the result with the trip it was read for is what closes that window: a
  * stale value can then be recognised as stale rather than merely looking like a
  * plausible one.
+ *
+ * ## Saved rows only
+ *
+ * The read runs in an explicit read transaction, and that is load-bearing.
+ * Dexie 4 answers a live query from its cache with a write applied *before*
+ * the write's transaction commits (optimistic updates); a query inside an
+ * explicit transaction skips that cache and reads the database as it is. Read
+ * the optimistic way, a vehicle whose `add` was still queued went into the
+ * document at once. A projection (`syncDocToDexie`) running then, with write
+ * access to every table, read the document, found the vehicle and wrote it
+ * first, and the `add` failed on its own key: "Failed to create vehicle" for a
+ * car that was in fact saved. Caught in `ride-sync-round-trip`, about one run
+ * in twenty: the row the `add` hit had the projection's field order, not the
+ * repository's. Publishing only saved rows also keeps a write that then fails
+ * from ever reaching the other members. The transaction still subscribes the
+ * live query, so a commit re-runs it as before.
+ *
+ * @param tripId - The trip whose rows to read
+ * @param table - The table `read` reads, for the read transaction's scope
+ * @param read - The query, given the trip id
  */
 function useTripScopedRows<T>(
   tripId: TripId,
+  table: Dexie.Table,
   read: (tripId: TripId) => Promise<T[]>,
 ): readonly T[] | null {
   const result = useLiveQuery(
-    async () => ({ tripId, rows: await read(tripId) }),
+    async () => ({
+      tripId,
+      rows: await db.transaction('r', table, () => read(tripId)),
+    }),
     [tripId],
   );
 
@@ -151,43 +175,43 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       console.error('[YjsTripSync] Failed to populate Y.Doc from Dexie:', error);
     });
   }, [readOnly, trip, tripId, yjs?.doc, yjs?.loaded]);
-  const persons = useTripScopedRows<Person>(tripId, (id) =>
+  const persons = useTripScopedRows<Person>(tripId, db.persons, (id) =>
     db.persons.where('tripId').equals(id).toArray(),
   );
-  const rooms = useTripScopedRows<Room>(tripId, (id) =>
+  const rooms = useTripScopedRows<Room>(tripId, db.rooms, (id) =>
     db.rooms
       .where('[tripId+order]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
-  const roomAssignments = useTripScopedRows<RoomAssignment>(tripId, (id) =>
+  const roomAssignments = useTripScopedRows<RoomAssignment>(tripId, db.roomAssignments, (id) =>
     db.roomAssignments
       .where('[tripId+startDate]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
-  const transports = useTripScopedRows<Transport>(tripId, (id) =>
+  const transports = useTripScopedRows<Transport>(tripId, db.transports, (id) =>
     db.transports
       .where('[tripId+datetime]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
-  const rides = useTripScopedRows<Ride>(tripId, (id) =>
+  const rides = useTripScopedRows<Ride>(tripId, db.rides, (id) =>
     db.rides
       .where('[tripId+meetDatetime]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
-  const vehicles = useTripScopedRows<Vehicle>(tripId, (id) =>
+  const vehicles = useTripScopedRows<Vehicle>(tripId, db.vehicles, (id) =>
     db.vehicles.where('tripId').equals(id).toArray(),
   );
-  const activities = useTripScopedRows<Activity>(tripId, (id) =>
+  const activities = useTripScopedRows<Activity>(tripId, db.activities, (id) =>
     db.activities
       .where('[tripId+startDatetime]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
-  const expenses = useTripScopedRows<Expense>(tripId, (id) =>
+  const expenses = useTripScopedRows<Expense>(tripId, db.expenses, (id) =>
     db.expenses
       .where('[tripId+date]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
@@ -196,10 +220,10 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
   // Through the plain `tripId` index: the meal planner is behind a flag, but
   // its rows are published by every device, flag on or off. A device that
   // held them back would let the projection read their absence as deletions.
-  const meals = useTripScopedRows<Meal>(tripId, (id) =>
+  const meals = useTripScopedRows<Meal>(tripId, db.meals, (id) =>
     db.meals.where('tripId').equals(id).toArray(),
   );
-  const shoppingItems = useTripScopedRows<ShoppingItem>(tripId, (id) =>
+  const shoppingItems = useTripScopedRows<ShoppingItem>(tripId, db.shoppingItems, (id) =>
     db.shoppingItems.where('tripId').equals(id).toArray(),
   );
 
