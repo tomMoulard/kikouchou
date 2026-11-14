@@ -10,6 +10,7 @@ const capture = vi.hoisted(() => vi.fn());
 const native = vi.hoisted(() => ({
   plugin: false,
   ready: vi.fn(async () => ({ currentBundleId: null, previousBundleId: null, rollback: false })),
+  reload: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/lib/posthog', () => ({ captureEvent: capture }));
@@ -17,9 +18,17 @@ vi.mock('@/lib/platform', () => ({
   hasNativePlugin: () => native.plugin,
   getPublicAppOrigin: () => 'https://app.kikouchou.app',
 }));
-vi.mock('@capawesome/capacitor-live-update', () => ({ LiveUpdate: { ready: native.ready } }));
+vi.mock('@capawesome/capacitor-live-update', () => ({
+  LiveUpdate: {
+    ready: native.ready,
+    getVersionCode: vi.fn(async () => ({ versionCode: '1001' })),
+    getCurrentBundle: vi.fn(async () => ({ bundleId: null })),
+    reload: native.reload,
+  },
+}));
 
 import {
+  checkLiveUpdateNow,
   parseLiveUpdateManifest,
   runLiveUpdate,
   type LiveUpdateApi,
@@ -50,6 +59,8 @@ function api(current: string | null, overrides: Partial<LiveUpdateApi> = {}) {
     getDownloadedBundles: vi.fn(async () => ({ bundleIds: [] as string[] })),
     downloadBundle: vi.fn(async () => undefined),
     setNextBundle: vi.fn(async () => undefined),
+    getCurrentBundle: vi.fn(async () => ({ bundleId: current })),
+    reload: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -267,6 +278,102 @@ describe('runLiveUpdate', () => {
   });
 });
 
+describe('checkLiveUpdateNow', () => {
+  it('reloads at once onto a bundle the launch already staged', async () => {
+    const plugin = api(OLDER_SHA);
+    const fetchManifest = respond(200);
+
+    const outcome = await checkLiveUpdateNow(deps({ api: plugin, fetch: fetchManifest }), 'staged');
+
+    expect(outcome).toBe('reloading');
+    expect(plugin.reload).toHaveBeenCalledTimes(1);
+    expect(fetchManifest).not.toHaveBeenCalled();
+  });
+
+  it('reloads after a reset, so the store build bundle runs now', async () => {
+    const plugin = api(OLDER_SHA);
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin }), 'reset')).resolves.toBe('reloading');
+    expect(plugin.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('stages a bundle deployed since the launch, then reloads onto it', async () => {
+    const plugin = api(OLDER_SHA);
+
+    const outcome = await checkLiveUpdateNow(deps({ api: plugin }), 'current');
+
+    expect(outcome).toBe('reloading');
+    expect(plugin.downloadBundle).toHaveBeenCalledWith({
+      url: MANIFEST.url,
+      bundleId: SHA,
+      signature: SIGNATURE,
+    });
+    expect(plugin.setNextBundle).toHaveBeenCalledWith({ bundleId: SHA });
+    expect(vi.mocked(plugin.setNextBundle).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(plugin.reload).mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('answers current, and does not reload, when the deployed bundle is running', async () => {
+    const plugin = api(SHA);
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin }), 'current')).resolves.toBe('current');
+    expect(plugin.reload).not.toHaveBeenCalled();
+  });
+
+  it('answers current when no bundle exists for this native layer', async () => {
+    const plugin = api(null);
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin, fetch: respond(404) }), 'no-bundle')).resolves.toBe(
+      'current',
+    );
+    expect(plugin.reload).not.toHaveBeenCalled();
+  });
+
+  it('retries after a launch that failed', async () => {
+    const plugin = api(null);
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin }), 'failed')).resolves.toBe('reloading');
+  });
+
+  it('refuses a bundle that was rolled back', async () => {
+    const plugin = api(null, { getBlockedBundles: vi.fn(async () => ({ bundleIds: [SHA] })) });
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin }), 'current')).resolves.toBe('blocked');
+    expect(plugin.reload).not.toHaveBeenCalled();
+  });
+
+  it('answers failed on a server error', async () => {
+    const plugin = api(null);
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin, fetch: respond(503) }), 'current')).resolves.toBe(
+      'failed',
+    );
+    expect(plugin.reload).not.toHaveBeenCalled();
+  });
+
+  it('reports a thrown error by its kind, as a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const plugin = api(null, {
+      getCurrentBundle: vi.fn(async () => {
+        throw new Error('Unable to resolve host');
+      }),
+    });
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin }), 'current')).resolves.toBe('failed');
+    expect(capture).toHaveBeenCalledWith('live_update_failed', { reason: 'network' });
+    expect(warn).toHaveBeenCalledWith('Live update check failed:', expect.any(Error));
+    warn.mockRestore();
+  });
+
+  it('does nothing in a build without a fingerprint', async () => {
+    const plugin = api(null);
+
+    await expect(checkLiveUpdateNow(deps({ api: plugin }), 'unavailable')).resolves.toBe('unavailable');
+    expect(plugin.getCurrentBundle).not.toHaveBeenCalled();
+  });
+});
+
 describe('parseLiveUpdateManifest', () => {
   it('accepts what the deploy writes', () => {
     expect(parseLiveUpdateManifest(MANIFEST, ORIGIN)).toEqual(MANIFEST);
@@ -307,5 +414,33 @@ describe('startLiveUpdate', () => {
     startLiveUpdate();
     startLiveUpdate();
     await vi.waitFor(() => expect(native.ready).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('applyLiveUpdateNow', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    native.ready.mockClear();
+    native.reload.mockClear();
+  });
+
+  it('answers unavailable without the plugin, and starts nothing', async () => {
+    native.plugin = false;
+    const { applyLiveUpdateNow, canLiveUpdate } = await import('../live-update');
+
+    expect(canLiveUpdate()).toBe(false);
+    await expect(applyLiveUpdateNow()).resolves.toBe('unavailable');
+    expect(native.ready).not.toHaveBeenCalled();
+  });
+
+  it('waits for the launch run instead of starting a second one', async () => {
+    native.plugin = true;
+    const { applyLiveUpdateNow, startLiveUpdate } = await import('../live-update');
+
+    startLiveUpdate();
+    // This test build has no fingerprint, so the launch answers `unavailable`.
+    await expect(applyLiveUpdateNow()).resolves.toBe('unavailable');
+    expect(native.ready).toHaveBeenCalledTimes(1);
+    expect(native.reload).not.toHaveBeenCalled();
   });
 });

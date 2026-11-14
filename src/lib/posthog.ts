@@ -1056,6 +1056,9 @@ export type AnalyticsEvent =
   | 'live_update_downloaded'
   | 'live_update_failed'
   | 'live_update_reset'
+  // The "Check for updates" button in Settings (lib/pwa/app-update)
+  | 'app_reloaded_from_server'
+  | 'app_update_checked'
   // TEMPORARY: the page's geometry in the Android app (lib/native/layout-probe)
   | 'layout_probed'
   // Preferences

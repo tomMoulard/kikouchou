@@ -1640,6 +1640,17 @@
     "about": "About",
     "aboutDescription": "Application information",
     "version": "Version",
+    "update": {
+      "check": "Check for updates",
+      "description": "Get the latest version of the app.",
+      "current": "You have the latest version.",
+      "installing": "A new version is installing. The app restarts when it is ready.",
+      "offline": "You are offline. Connect to the internet to update the app.",
+      "failed": "Could not check for updates. Try again later.",
+      "reloading": "Updating the app...",
+      "reload": "Reload from the server",
+      "reloadDescription": "Still on an old version? Download the whole app again. Your trips stay on this device."
+    },
     "dataManagement": "Data Management",
     "dataManagementDescription": "Manage your app data",
     "clearData": "Clear All Data",

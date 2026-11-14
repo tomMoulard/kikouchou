@@ -869,6 +869,69 @@ test.describe('App Updates', () => {
   });
 });
 
+test.describe('The update button in Settings', () => {
+  /**
+   * The real worker, the real preview build: the check asks the server, finds
+   * the same build, and says so. Only then is the hard reload offered.
+   */
+  test('says the app is current, then reloads it from the server', async ({ page }) => {
+    await page.goto('/settings');
+    await page.waitForLoadState('load');
+    await waitForActivatedServiceWorker(page);
+    await expect
+      .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null), {
+        timeout: SW_READY_TIMEOUT,
+      })
+      .toBe(true);
+
+    const reloadButton = page.getByRole('button', {
+      name: /^(reload from the server|recharger depuis le serveur)$/i,
+    });
+    await expect(reloadButton).toHaveCount(0);
+
+    await page
+      .getByRole('button', { name: /^(check for updates|rechercher une mise à jour)$/i })
+      .click();
+
+    await expect(page.getByRole('status').filter({ hasText: /latest version|dernière version/i }))
+      .toBeVisible({ timeout: SW_READY_TIMEOUT });
+
+    // Both survive the hard reload: it drops the worker and Cache Storage only.
+    await page.evaluate(() => {
+      (window as unknown as Record<string, string>).__updateSession = 'before';
+      localStorage.setItem('e2e-update-probe', 'kept');
+    });
+    expect(await page.evaluate(async () => (await caches.keys()).length)).toBeGreaterThan(0);
+
+    await reloadButton.click();
+
+    await expect
+      .poll(
+        async () => {
+          try {
+            return await page.evaluate(
+              () => (window as unknown as Record<string, string | undefined>).__updateSession ?? 'gone',
+            );
+          } catch {
+            return 'navigating';
+          }
+        },
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toBe('gone');
+
+    expect(await page.evaluate(() => localStorage.getItem('e2e-update-probe'))).toBe('kept');
+
+    // The fresh load registers the worker again, and it takes control.
+    await expect
+      .poll(
+        () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? null),
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toContain('sw.js');
+  });
+});
+
 // ============================================================================
 // Test Suite: Precaching
 // ============================================================================

@@ -61,6 +61,8 @@ export type LiveUpdateApi = Pick<
   | 'getDownloadedBundles'
   | 'downloadBundle'
   | 'setNextBundle'
+  | 'getCurrentBundle'
+  | 'reload'
 >;
 
 /** Everything {@link startLiveUpdate} reads from outside. */
@@ -82,6 +84,12 @@ export type LiveUpdateOutcome =
   | 'staged'
   | 'failed';
 
+/**
+ * How a check from the Settings button ended. `reloading` means the web view
+ * is being replaced by the newer bundle.
+ */
+export type LiveUpdateCheckOutcome = 'unavailable' | 'current' | 'blocked' | 'reloading' | 'failed';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -101,8 +109,8 @@ const FINGERPRINT_PATTERN = /^[0-9a-f]{16}$/;
 /** A 2048-bit RSA signature in base64 is 344 characters. */
 const SIGNATURE_PATTERN = /^[A-Za-z0-9+/]{16,1024}={0,2}$/;
 
-/** Set once the first call ran, so a remount does not download twice. */
-let started = false;
+/** The launch's run, kept so a remount does not download twice. */
+let launch: Promise<LiveUpdateOutcome> | null = null;
 
 // ============================================================================
 // Helpers
@@ -157,6 +165,54 @@ function failureReason(error: unknown): string {
 // ============================================================================
 
 /**
+ * Reads the deployed manifest for this native layer and stages its bundle for
+ * the next start, downloading it when it is not on the device yet. Throws on a
+ * plugin or network error: both callers report it.
+ *
+ * @param deps - The plugin and the inputs
+ * @param current - The bundle running now, `null` for the store build's own
+ * @returns `staged` when a newer bundle is next
+ */
+async function stageLatestBundle(
+  deps: LiveUpdateDeps,
+  current: string | null,
+): Promise<Extract<LiveUpdateOutcome, 'no-bundle' | 'failed' | 'current' | 'blocked' | 'staged'>> {
+  const { api, fingerprint, origin } = deps;
+  const response = await deps.fetch(`${origin}/live/${fingerprint}.json`, { cache: 'no-store' });
+  if (response.status === 404) {
+    return 'no-bundle';
+  }
+  if (!response.ok) {
+    captureEvent('live_update_failed', { reason: `http_${response.status}` });
+    return 'failed';
+  }
+  const manifest = parseLiveUpdateManifest(await response.json(), origin);
+  if (!manifest) {
+    captureEvent('live_update_failed', { reason: 'invalid_manifest' });
+    return 'failed';
+  }
+  if (manifest.bundleId === current) {
+    return 'current';
+  }
+
+  const { bundleIds: blocked } = await api.getBlockedBundles();
+  if (blocked.includes(manifest.bundleId)) {
+    return 'blocked';
+  }
+  const { bundleIds: downloaded } = await api.getDownloadedBundles();
+  if (!downloaded.includes(manifest.bundleId)) {
+    await api.downloadBundle({
+      url: manifest.url,
+      bundleId: manifest.bundleId,
+      signature: manifest.signature,
+    });
+    captureEvent('live_update_downloaded', { bundle: manifest.bundleId.slice(0, 7) });
+  }
+  await api.setNextBundle({ bundleId: manifest.bundleId });
+  return 'staged';
+}
+
+/**
  * Tells the plugin this bundle started, then stages a newer one for the next
  * launch when the deploy has one for this native layer. Never throws.
  *
@@ -164,7 +220,7 @@ function failureReason(error: unknown): string {
  * @returns How this launch ended
  */
 export async function runLiveUpdate(deps: LiveUpdateDeps): Promise<LiveUpdateOutcome> {
-  const { api, fingerprint, origin, storage } = deps;
+  const { api, fingerprint, storage } = deps;
   try {
     // First, always: without it the plugin rolls this bundle back.
     const ready = await api.ready();
@@ -192,38 +248,7 @@ export async function runLiveUpdate(deps: LiveUpdateDeps): Promise<LiveUpdateOut
       }
     }
 
-    const response = await deps.fetch(`${origin}/live/${fingerprint}.json`, { cache: 'no-store' });
-    if (response.status === 404) {
-      return 'no-bundle';
-    }
-    if (!response.ok) {
-      captureEvent('live_update_failed', { reason: `http_${response.status}` });
-      return 'failed';
-    }
-    const manifest = parseLiveUpdateManifest(await response.json(), origin);
-    if (!manifest) {
-      captureEvent('live_update_failed', { reason: 'invalid_manifest' });
-      return 'failed';
-    }
-    if (manifest.bundleId === current) {
-      return 'current';
-    }
-
-    const { bundleIds: blocked } = await api.getBlockedBundles();
-    if (blocked.includes(manifest.bundleId)) {
-      return 'blocked';
-    }
-    const { bundleIds: downloaded } = await api.getDownloadedBundles();
-    if (!downloaded.includes(manifest.bundleId)) {
-      await api.downloadBundle({
-        url: manifest.url,
-        bundleId: manifest.bundleId,
-        signature: manifest.signature,
-      });
-      captureEvent('live_update_downloaded', { bundle: manifest.bundleId.slice(0, 7) });
-    }
-    await api.setNextBundle({ bundleId: manifest.bundleId });
-    return 'staged';
+    return await stageLatestBundle(deps, current);
   } catch (error) {
     // A warning: the event below reports it, and the next launch tries again.
     console.warn('Live update failed:', error);
@@ -232,20 +257,94 @@ export async function runLiveUpdate(deps: LiveUpdateDeps): Promise<LiveUpdateOut
   }
 }
 
-/**
- * Runs {@link runLiveUpdate} once per launch, in a store app that has the
- * plugin. Called by `NativeShell` after the first paint.
- */
-export function startLiveUpdate(): void {
-  if (started || !hasNativePlugin(PLUGIN_NAME)) {
-    return;
-  }
-  started = true;
-  void runLiveUpdate({
+/** The real plugin and inputs. */
+function realDeps(): LiveUpdateDeps {
+  return {
     api: LiveUpdate,
     fingerprint: import.meta.env.VITE_NATIVE_FINGERPRINT ?? '',
     origin: getPublicAppOrigin(),
     storage: window.localStorage,
     fetch: window.fetch.bind(window),
-  });
+  };
+}
+
+/** The launch's run, started on the first call and shared after it. */
+function launchLiveUpdate(): Promise<LiveUpdateOutcome> {
+  launch ??= runLiveUpdate(realDeps());
+  return launch;
+}
+
+/**
+ * Runs {@link runLiveUpdate} once per launch, in a store app that has the
+ * plugin. Called by `NativeShell` after the first paint.
+ */
+export function startLiveUpdate(): void {
+  if (!hasNativePlugin(PLUGIN_NAME)) {
+    return;
+  }
+  void launchLiveUpdate();
+}
+
+/** Whether this app can take a live update at all. False on the web and in the F-Droid build. */
+export function canLiveUpdate(): boolean {
+  return hasNativePlugin(PLUGIN_NAME);
+}
+
+/**
+ * Looks for a newer bundle now, and switches to it at once.
+ *
+ * The launch's own run never reloads, because nobody asked it to. A tap on the
+ * Settings button is that request, so this reloads the web view onto a bundle
+ * the launch already staged, or onto one it stages itself. IndexedDB survives
+ * the reload: Dexie keeps it open across the plugin's `reload()`.
+ *
+ * @param deps - The plugin and the inputs
+ * @param launched - How the launch's run ended; it must be over first, because
+ *   it is the one that checks the bundle against the native layer
+ * @returns How the check ended
+ */
+export async function checkLiveUpdateNow(
+  deps: LiveUpdateDeps,
+  launched: LiveUpdateOutcome,
+): Promise<LiveUpdateCheckOutcome> {
+  if (launched === 'unavailable') {
+    return 'unavailable';
+  }
+  const { api } = deps;
+  try {
+    // `staged`: a newer bundle is already next. `reset`: the store build's
+    // own bundle is next, and the next launch looks for a newer one on top.
+    if (launched !== 'staged' && launched !== 'reset') {
+      const { bundleId } = await api.getCurrentBundle();
+      const staged = await stageLatestBundle(deps, bundleId);
+      if (staged === 'failed') {
+        return 'failed';
+      }
+      if (staged === 'blocked') {
+        return 'blocked';
+      }
+      // `no-bundle` means no web update exists for this native layer yet.
+      if (staged !== 'staged') {
+        return 'current';
+      }
+    }
+    await api.reload();
+    return 'reloading';
+  } catch (error) {
+    console.warn('Live update check failed:', error);
+    captureEvent('live_update_failed', { reason: failureReason(error) });
+    return 'failed';
+  }
+}
+
+/**
+ * {@link checkLiveUpdateNow} with the real plugin, after the launch's run.
+ *
+ * @returns How the check ended
+ */
+export async function applyLiveUpdateNow(): Promise<LiveUpdateCheckOutcome> {
+  if (!canLiveUpdate()) {
+    return 'unavailable';
+  }
+  return checkLiveUpdateNow(realDeps(), await launchLiveUpdate());
 }

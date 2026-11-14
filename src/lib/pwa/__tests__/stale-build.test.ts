@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  moveToNewerBuild,
   recoverFromStaleBuild,
   STALE_BUILD_TIMEOUT_MS,
   type StaleBuildContainer,
@@ -139,5 +140,74 @@ describe('recoverFromStaleBuild', () => {
 
     await expect(recovery).resolves.toBe(false);
     expect(vi.mocked(reload)).not.toHaveBeenCalled();
+  });
+});
+
+describe('moveToNewerBuild', () => {
+  let reload: () => void;
+
+  beforeEach(() => {
+    reload = vi.fn<() => void>();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('says no-worker when no worker controls the page', async () => {
+    await expect(moveToNewerBuild({ container: createContainer({ controlled: false }), reload })).resolves.toBe(
+      'no-worker',
+    );
+    await expect(moveToNewerBuild({ container: createContainer({ registration: null }), reload })).resolves.toBe(
+      'no-worker',
+    );
+  });
+
+  it('says failed when the check is refused', async () => {
+    const registration: StaleBuildRegistration = {
+      update: vi.fn(() => Promise.reject(new Error('offline'))),
+      installing: null,
+      waiting: null,
+    };
+
+    await expect(moveToNewerBuild({ container: createContainer({ registration }), reload })).resolves.toBe(
+      'failed',
+    );
+  });
+
+  it('says current when the server has nothing newer', async () => {
+    const container = createContainer({ registration: createRegistration(false) });
+
+    await expect(moveToNewerBuild({ container, reload })).resolves.toBe('current');
+  });
+
+  it('says timeout when a newer worker does not take over in time', async () => {
+    vi.useFakeTimers();
+    const container = createContainer({ registration: createRegistration(true) });
+
+    const outcome = moveToNewerBuild({ container, reload });
+    await vi.advanceTimersByTimeAsync(STALE_BUILD_TIMEOUT_MS + 1);
+
+    await expect(outcome).resolves.toBe('timeout');
+    expect(vi.mocked(reload)).not.toHaveBeenCalled();
+  });
+
+  it('counts a waiting worker as newer', async () => {
+    const registration: StaleBuildRegistration = {
+      update: vi.fn(() => Promise.resolve()),
+      installing: null,
+      waiting: {},
+    };
+    const container = createContainer({ registration });
+
+    const outcome = moveToNewerBuild({ container, reload });
+    await vi.waitFor(() => {
+      expect(registration.update).toHaveBeenCalled();
+    });
+    await Promise.resolve();
+    container.takeOver();
+
+    await expect(outcome).resolves.toBe('reloading');
+    expect(vi.mocked(reload)).toHaveBeenCalledTimes(1);
   });
 });

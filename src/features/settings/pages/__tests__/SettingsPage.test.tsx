@@ -178,6 +178,11 @@ describe('SettingsPage', () => {
     expect(screen.getByText('settings.version')).toBeInTheDocument();
   });
 
+  it('offers to check for updates under the version', () => {
+    render(<SettingsPage />, { withProviders: false });
+    expect(screen.getByRole('button', { name: 'settings.update.check' })).toBeInTheDocument();
+  });
+
   it('renders clear data button', () => {
     render(<SettingsPage />, { withProviders: false });
     expect(screen.getByText('settings.clearData')).toBeInTheDocument();

@@ -97,14 +97,25 @@ function browserContainer(): StaleBuildContainer | null {
 // ============================================================================
 
 /**
- * Asks whether the route that just missed belongs to a newer build, and moves
- * onto that build when it does.
+ * How {@link moveToNewerBuild} ended.
+ *
+ * - `no-worker`: no worker controls the page, so the network served this build.
+ * - `failed`: the check itself failed, offline or refused by the browser.
+ * - `current`: the server has no newer build.
+ * - `timeout`: a newer worker was found but did not take over in time.
+ * - `reloading`: a newer worker took over and the page is being replaced.
+ */
+export type NewerBuildOutcome = 'no-worker' | 'failed' | 'current' | 'timeout' | 'reloading';
+
+/**
+ * Asks the server for a newer service worker, and moves onto it when there is
+ * one. The stale-route recovery below and the "Check for updates" button in
+ * Settings both go through this one function.
  *
  * @param options - The browser pieces to use, for tests that have none
- * @returns Whether a reload was started, in which case the caller should render
- *   nothing final: the page is about to be replaced
+ * @returns How it ended; only `reloading` replaces the page
  */
-export async function recoverFromStaleBuild(options: StaleBuildOptions = {}): Promise<boolean> {
+export async function moveToNewerBuild(options: StaleBuildOptions = {}): Promise<NewerBuildOutcome> {
   const {
     container = browserContainer(),
     reload = () => {
@@ -114,34 +125,33 @@ export async function recoverFromStaleBuild(options: StaleBuildOptions = {}): Pr
   } = options;
 
   // No worker answered this navigation, so the origin itself served the build
-  // that is running. The route really does not exist.
+  // that is running.
   if (container === null || container.controller === null || container.controller === undefined) {
-    return false;
+    return 'no-worker';
   }
 
   let registration: StaleBuildRegistration | null | undefined;
   try {
     registration = await container.getRegistration();
     if (registration === null || registration === undefined) {
-      return false;
+      return 'no-worker';
     }
     await registration.update();
   } catch {
-    // Offline, or a worker the browser refuses to re-fetch. Either way there is
-    // no newer build to be had, and the error page is the honest answer.
-    return false;
+    // Offline, or a worker the browser refuses to re-fetch.
+    return 'failed';
   }
 
   const hasNewer =
     (registration.installing !== null && registration.installing !== undefined) ||
     (registration.waiting !== null && registration.waiting !== undefined);
   if (!hasNewer) {
-    return false;
+    return 'current';
   }
 
   // Only a worker that has actually taken over is worth reloading onto.
   //
-  // The timeout resolves `false` rather than reloading anyway, and that is the
+  // The timeout gives up rather than reloading anyway, and that is the
   // difference between a recovery and a reload loop: the old worker would
   // answer the reload from the same precache, land on the same missing route,
   // find the same worker still installing, and do it all again.
@@ -161,9 +171,24 @@ export async function recoverFromStaleBuild(options: StaleBuildOptions = {}): Pr
   });
 
   if (!tookOver) {
-    return false;
+    return 'timeout';
   }
 
   reload();
-  return true;
+  return 'reloading';
+}
+
+/**
+ * Asks whether the route that just missed belongs to a newer build, and moves
+ * onto that build when it does.
+ *
+ * A path that is genuinely wrong finds no newer build, and the error page is
+ * the honest answer.
+ *
+ * @param options - The browser pieces to use, for tests that have none
+ * @returns Whether a reload was started, in which case the caller should render
+ *   nothing final: the page is about to be replaced
+ */
+export async function recoverFromStaleBuild(options: StaleBuildOptions = {}): Promise<boolean> {
+  return (await moveToNewerBuild(options)) === 'reloading';
 }

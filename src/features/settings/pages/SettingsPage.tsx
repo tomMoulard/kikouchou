@@ -37,6 +37,7 @@ import { Separator } from '@/components/ui/separator';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { AppUpdateControl } from '@/features/settings/components/AppUpdateControl';
 import { NavBarSettings } from '@/features/settings/components/NavBarSettings';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
@@ -192,6 +193,8 @@ const AboutSection = memo(function AboutSection(): ReactElement {
           <span className="text-sm text-muted-foreground">{t('settings.version', 'Version')}</span>
           <span className="text-sm font-mono">{APP_VERSION}</span>
         </div>
+        <Separator />
+        <AppUpdateControl />
       </CardContent>
     </Card>
   );
@@ -296,7 +299,7 @@ const DataSection = memo(function DataSection(): ReactElement {
  * - Theme selector (light/dark/system)
  * - Pet: an optional companion that walks around the app
  * - Ride alerts: opt in to OS notifications for the cars you drive
- * - App version display
+ * - App version display, and a button that moves onto the latest build
  * - Clear data option with confirmation
  * - About section
  *
