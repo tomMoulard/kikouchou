@@ -340,7 +340,6 @@ const MAP_SERVICE_HOSTS: readonly string[] = [
   'nominatim.openstreetmap.org',
   '*.tile.openstreetmap.org',
   'tile.openstreetmap.org',
-  '*.basemaps.cartocdn.com',
 ];
 
 /**

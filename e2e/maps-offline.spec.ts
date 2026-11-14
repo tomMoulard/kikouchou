@@ -64,13 +64,12 @@ test.describe('Offline Map Tiles', () => {
   });
 
   /**
-   * The dark basemap is a different host from the OSM one above, so it needs
-   * its own rule. Without it a dark-mode user's map is blank offline while the
-   * same map works in light mode — and nothing else would notice, because
-   * every existing map assertion runs in the default light theme.
+   * Dark mode darkens the same OSM tiles rather than asking another host, so
+   * the OSM cache above covers both themes. A second tile host would need its
+   * own rule, or a dark-mode map would be blank offline.
    */
-  test('the service worker declares the dark basemap tile cache', async ({ page }) => {
-    expect(await fetchServiceWorkerSource(page)).toContain('carto-dark-tiles');
+  test('the service worker caches no tile host besides OSM', async ({ page }) => {
+    expect(await fetchServiceWorkerSource(page)).not.toContain('cartocdn');
   });
 
   test('the service worker declares the Nominatim geocoding cache', async ({ page }) => {

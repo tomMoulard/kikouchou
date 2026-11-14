@@ -124,8 +124,8 @@ function sanitizeColor(color: string | undefined): string | undefined {
  * Shape, ring and shadow shared by every marker, whatever colours it wears.
  *
  * `border-background` rather than the literal white it replaces: a white ring
- * around a pin is invisible against the CartoDB dark tiles the map switches to
- * in dark mode.
+ * around a pin is invisible against the darkened tiles the map switches to in
+ * dark mode.
  */
 const MARKER_BASE_CLASSES =
   'map-marker-container flex size-8 cursor-pointer items-center justify-center ' +

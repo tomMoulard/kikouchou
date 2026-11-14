@@ -821,6 +821,16 @@
 }
 
 /*
+ * Dark-mode map tiles: the light OpenStreetMap tile, inverted and turned back
+ * to its own hues, so water stays blue-ish and parks green-ish on a dark
+ * ground. Set by `MapView` on its tile layer only, so markers and popups keep
+ * their own colours.
+ */
+.map-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6);
+}
+
+/*
  * Do not shrink the page for a scrollbar a phone does not have.
  *
  * Every Radix overlay, the trip card's "..." menu included, locks the page

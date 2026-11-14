@@ -77,7 +77,7 @@ interface CollectedErrors {
  * body on purpose, and the favicon is not part of any contract here.
  */
 const IGNORABLE_CONSOLE_ERROR =
-  /Failed to load resource|net::ERR_|tile\.openstreetmap\.org|basemaps\.cartocdn\.com|favicon/i;
+  /Failed to load resource|net::ERR_|tile\.openstreetmap\.org|favicon/i;
 
 /**
  * Presses Enter the way a browser does, including the `keypress` a real key
@@ -504,9 +504,6 @@ test.describe('Transport Map Legend', () => {
     await clearIndexedDB(page);
 
     await page.route('**/tile.openstreetmap.org/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
-    );
-    await page.route('**/basemaps.cartocdn.com/**', (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
     );
 

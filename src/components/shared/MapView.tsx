@@ -100,20 +100,21 @@ const DEFAULT_MIN_ZOOM = 3;
 const DEFAULT_MAX_ZOOM = 19;
 
 /**
- * OpenStreetMap tile layer URLs.
- * Standard OSM tiles for light mode, CartoDB dark tiles for dark mode.
+ * One tile source for both themes: standard OpenStreetMap tiles.
+ *
+ * Dark mode used CARTO's `dark_all` basemap, until CARTO began answering
+ * keyless requests with a tile reading "API KEY REQUIRED": every dark-mode map
+ * turned into that watermark. The dark look is now the same OSM tile run
+ * through {@link DARK_TILE_CLASS}, which needs no key, no third party, and
+ * shares the light theme's offline tile cache.
  */
-const TILE_LAYERS = {
-  light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-};
+const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-const TILE_ATTRIBUTION = {
-  light:
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  dark:
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-};
+const TILE_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+/** Darkens the OSM tiles in dark mode; the filter lives in `src/index.css`. */
+const DARK_TILE_CLASS = 'map-tiles-dark';
 
 // ============================================================================
 // Internal Components
@@ -234,7 +235,7 @@ function KeyboardNavigation({
 }
 
 /**
- * Component to detect theme and switch tile layers.
+ * The map's tiles, darkened while the dark theme is on.
  *
  * @remarks
  * Reads the `.dark` class off `<html>` rather than `useTheme()` so the map
@@ -248,9 +249,7 @@ function ThemeAwareTileLayer({ showAttribution }: { showAttribution: boolean }) 
   // Read synchronously rather than starting `false` and correcting in the
   // effect below. The effect runs after the first commit, so a map opened
   // while dark mode is already on would request a light OSM tile, paint it,
-  // and only then swap to the dark one — a visible flash, and a wasted tile
-  // fetch that the service worker caches. Harmless while nothing ever wrote
-  // `.dark`; user-visible now that something does.
+  // and only then darken it: a visible flash.
   const [isDark, setIsDark] = useState(() =>
     document.documentElement.classList.contains('dark'),
   );
@@ -280,12 +279,14 @@ function ThemeAwareTileLayer({ showAttribution }: { showAttribution: boolean }) 
     };
   }, []);
 
-  const theme = isDark ? 'dark' : 'light';
-
   return (
     <TileLayer
-      url={TILE_LAYERS[theme]}
-      attribution={showAttribution ? TILE_ATTRIBUTION[theme] : undefined}
+      // Leaflet reads `className` once, when the layer is created: the key
+      // remounts the layer so a theme flip repaints a map already on screen.
+      key={isDark ? 'dark' : 'light'}
+      url={TILE_URL}
+      className={isDark ? DARK_TILE_CLASS : undefined}
+      attribution={showAttribution ? TILE_ATTRIBUTION : undefined}
     />
   );
 }

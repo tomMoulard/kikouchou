@@ -54,6 +54,7 @@ let boundsContain = true;
  * service worker before the dark one replaces it.
  */
 const tileUrls: string[] = [];
+const tileClasses: string[] = [];
 
 // Mock map instance
 const mockMapInstance = {
@@ -107,13 +108,23 @@ vi.mock('react-leaflet', () => ({
       {children}
     </div>
   ),
-  TileLayer: ({ url, attribution }: { url: string; attribution?: string }) => {
+  TileLayer: ({
+    url,
+    attribution,
+    className,
+  }: {
+    url: string;
+    attribution?: string;
+    className?: string;
+  }) => {
     tileUrls.push(url);
+    tileClasses.push(className ?? '');
     return (
       <div
         data-testid="mock-tile-layer"
         data-url={url}
         data-attribution={attribution ?? ''}
+        data-class={className ?? ''}
       />
     );
   },
@@ -188,6 +199,7 @@ function pressOnMap(key: string): void {
 beforeEach(() => {
   boundsContain = true;
   tileUrls.length = 0;
+  tileClasses.length = 0;
   document.documentElement.classList.remove('dark');
 });
 
@@ -201,25 +213,27 @@ afterEach(() => {
 // ============================================================================
 
 describe('MapView load-time tables', () => {
-  it('asks for OSM tiles with their credit on a light page, and CARTO dark tiles with both credits on a dark one', () => {
+  // CARTO's dark basemap began answering keyless requests with an "API KEY
+  // REQUIRED" tile, so both themes ask OpenStreetMap, and dark mode only
+  // darkens the tiles.
+  it('asks for OSM tiles with their credit on both themes, darkened on a dark one', () => {
+    const OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const CREDIT =
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
     const { unmount } = render(<MapView center={[0, 0]} />);
     const light = screen.getByTestId('mock-tile-layer');
-    expect(light).toHaveAttribute('data-url', 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-    expect(light).toHaveAttribute(
-      'data-attribution',
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    );
+    expect(light).toHaveAttribute('data-url', OSM);
+    expect(light).toHaveAttribute('data-attribution', CREDIT);
+    expect(light).toHaveAttribute('data-class', '');
     unmount();
 
     document.documentElement.classList.add('dark');
     try {
       render(<MapView center={[0, 0]} />);
       const dark = screen.getByTestId('mock-tile-layer');
-      expect(dark).toHaveAttribute('data-url', 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
-      expect(dark).toHaveAttribute(
-        'data-attribution',
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      );
+      expect(dark).toHaveAttribute('data-url', OSM);
+      expect(dark).toHaveAttribute('data-attribution', CREDIT);
+      expect(dark).toHaveAttribute('data-class', 'map-tiles-dark');
     } finally {
       document.documentElement.classList.remove('dark');
     }
@@ -319,25 +333,20 @@ describe('MapView tile layer', () => {
     );
   });
 
-  it('asks for the dark tiles on the first paint, not after a flash of light ones', () => {
+  it('darkens the tiles on the first paint, not after a flash of light ones', () => {
     // The state is seeded from the class synchronously for exactly this reason:
-    // correcting it in an effect requests a light tile, paints it, caches it in
-    // the service worker, and only then swaps. Asserting the rendered DOM would
-    // not notice — by the time the effect has run, the URL is right either way.
+    // correcting it in an effect paints a light map first, then darkens it.
     document.documentElement.classList.add('dark');
 
     render(<MapView center={[0, 0]} />);
 
-    expect(tileUrls[0]).toContain('dark_all');
-    expect(tileUrls).not.toContain(
-      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    );
+    expect(tileClasses).toEqual(['map-tiles-dark']);
   });
 
-  it('never asks for a dark tile on a light page', () => {
+  it('never darkens the tiles on a light page', () => {
     render(<MapView center={[0, 0]} />);
 
-    expect(tileUrls.every((url) => !url.includes('dark_all'))).toBe(true);
+    expect(tileClasses.every((className) => className === '')).toBe(true);
   });
 
   it('repaints a map that is already on screen when the theme flips', async () => {
@@ -347,21 +356,22 @@ describe('MapView tile layer', () => {
 
     // The MutationObserver is what makes the toggle reach a mounted map.
     await waitFor(() => {
-      expect(screen.getByTestId('mock-tile-layer').getAttribute('data-url')).toContain(
-        'dark_all',
+      expect(screen.getByTestId('mock-tile-layer')).toHaveAttribute(
+        'data-class',
+        'map-tiles-dark',
       );
     });
   });
 
-  it('credits CARTO as well as OSM on the dark tiles', () => {
+  it('asks no third party for the dark tiles', () => {
     document.documentElement.classList.add('dark');
 
     render(<MapView center={[0, 0]} />);
 
-    const attribution = screen.getByTestId('mock-tile-layer').getAttribute('data-attribution');
-    expect(attribution).toContain('openstreetmap.org/copyright');
-    // CARTO's terms require the credit; OSM's alone is not enough for their tiles.
-    expect(attribution).toContain('carto.com/attributions');
+    expect(tileUrls.every((url) => url.includes('tile.openstreetmap.org'))).toBe(true);
+    expect(
+      screen.getByTestId('mock-tile-layer').getAttribute('data-attribution'),
+    ).not.toContain('carto.com');
   });
 
   it('credits OSM on the light tiles', () => {
