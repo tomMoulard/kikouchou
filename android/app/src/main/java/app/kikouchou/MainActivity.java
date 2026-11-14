@@ -25,6 +25,11 @@ public class MainActivity extends BridgeActivity {
         // bars (`capacitor.config.ts`, `lib/native/viewport`).
         // The app's own plugins register before the bridge starts.
         registerPlugin(ContactSearchPlugin.class);
+        // Left out where no passkey provider can answer, so the page offers
+        // no passkey there (`hasNativePlugin('Passkeys')`).
+        if (PasskeyPlugin.isSupported()) {
+            registerPlugin(PasskeyPlugin.class);
+        }
         super.onCreate(savedInstanceState);
         publishStatusBarInset();
     }

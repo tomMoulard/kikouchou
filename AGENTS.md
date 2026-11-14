@@ -1386,8 +1386,8 @@ what the website did before.
   the code back on `app.kikouchou://auth/callback`; a magic link returns to
   `/auth/native`, which the app claims as a universal link. The code exchange
   happens in one place, `AuthProvider`'s `onAuthCallback` subscription.
-  Exchanging it anywhere else spends a single-use code twice. Passkeys and
-  wallets are not offered in the apps: a passkey is bound to the website.
+  Exchanging it anywhere else spends a single-use code twice. Wallets are
+  not offered in the apps, and the iPhone app offers no passkey.
 - **The hosted allow-list must hold the app's callback.** A `redirect_to`
   missing from it is not an error: Supabase sends the user to the Site URL,
   so the browser sheet loaded the website, never closed, and the app stayed
@@ -1402,6 +1402,22 @@ what the website did before.
   same link works in another browser or on another device. The client must
   ship before a template that sends it: a hosted template ahead of the
   deployed client sends links that nothing redeems.
+- **A passkey in the Android app goes through Credential Manager, not the
+  web view.** A passkey is bound to the rpId `app.kikouchou.app`. Chromium
+  refuses that rpId from the page origin `https://localhost`, also in the
+  web view's app mode. Do not change `server.hostname` to fix it: a new
+  origin leaves every trip in IndexedDB and the session behind.
+  `main.tsx` calls `installNativePasskeys()` (`lib/native/passkeys`) before
+  the first render. It replaces `navigator.credentials` and sends each
+  `publicKey` request to `PasskeyPlugin.java` as WebAuthn JSON. auth-js does
+  the Supabase side unchanged. `assetlinks.json` gives the app the website's
+  passkeys (`get_login_creds`). The signed answer carries the origin
+  `android:apk-key-hash:<signing key>`. Each key in `ANDROID_CERT_SHA256`
+  needs its entry in `webauthn_rp_origins` (`supabase/config.toml`), or the
+  server refuses the passkeys of the APKs it signs. Below Android 14, only
+  Google Play services can answer. The F-Droid build therefore registers
+  the plugin from Android 14 on, and the page asks
+  `hasNativePlugin('Passkeys')`.
 - **A link opens the app.** `app-links.ts` lists the website paths the apps
   claim, `vite.config.ts` writes the `.well-known` files from it, and a unit
   test holds `AndroidManifest.xml` to the same list. The root is never claimed:

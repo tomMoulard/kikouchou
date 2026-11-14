@@ -34,6 +34,7 @@ import {
 import { ensureSettings } from '@/lib/db';
 import { prepareDatabase } from '@/lib/db/boot';
 import { startLiveUpdate } from '@/lib/native/live-update';
+import { installNativePasskeys } from '@/lib/native/passkeys';
 import { fitAndroidViewport } from '@/lib/native/viewport';
 import { isNativeApp } from '@/lib/platform';
 import '@/lib/posthog';
@@ -57,6 +58,10 @@ import './index.css';
 // then, and without `viewport-fit=cover` the page starts below the status bar.
 // See lib/native/viewport.
 fitAndroidViewport();
+
+// In the Android app, before the first render: the sign-in screen decides on
+// its first render whether to offer a passkey. See lib/native/passkeys.
+installNativePasskeys();
 
 /**
  * Get and validate the application root element.

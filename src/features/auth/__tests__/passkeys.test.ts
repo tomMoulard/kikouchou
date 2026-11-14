@@ -91,18 +91,37 @@ describe('isPasskeySupported', () => {
 });
 
 describe('isPasskeySupported in a store app', () => {
-  it('is false: a passkey is bound to the website, and the web view is not it', async () => {
+  /** The module as a store app on `platform` loads it, WebAuthn present. */
+  async function loadInApp(platform: 'ios' | 'android', hasPlugin: boolean): Promise<() => boolean> {
     vi.resetModules();
     vi.doMock('@capacitor/core', () => ({
-      Capacitor: { getPlatform: () => 'ios', isPluginAvailable: () => true },
+      Capacitor: { getPlatform: () => platform, isPluginAvailable: (name: string) => hasPlugin && name === 'Passkeys' },
+      registerPlugin: () => ({}),
     }));
-    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
-    Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: function PublicKeyCredential() {} });
+    installWebAuthn();
+    setSecureContext(true);
 
-    const { isPasskeySupported: inApp } = await import('@/features/auth/passkeys');
+    const module = await import('@/features/auth/passkeys');
+    vi.doUnmock('@capacitor/core');
+    return module.isPasskeySupported;
+  }
+
+  it('is false in the iPhone app: a passkey is bound to the website, and the web view is not it', async () => {
+    const inApp = await loadInApp('ios', true);
 
     expect(inApp()).toBe(false);
-    vi.doUnmock('@capacitor/core');
-    Reflect.deleteProperty(window, 'PublicKeyCredential');
+  });
+
+  it('is true in the Android app, which asks Credential Manager instead of the web view', async () => {
+    const inApp = await loadInApp('android', true);
+
+    expect(inApp()).toBe(true);
+  });
+
+  it('is false in an Android build that left the passkey plugin out', async () => {
+    // The F-Droid app below Android 14: no provider can answer there.
+    const inApp = await loadInApp('android', false);
+
+    expect(inApp()).toBe(false);
   });
 });

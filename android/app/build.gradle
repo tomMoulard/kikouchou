@@ -69,14 +69,25 @@ android {
     // the same app without it: F-Droid ships free software only, and the web
     // layer reports push as unsupported there (`KIKOUCHOU_ANDROID_FLAVOR` in
     // capacitor.config.ts leaves the plugin out of `cap sync`).
+    //
+    // Passkeys go through Credential Manager (PasskeyPlugin). Android 14 and
+    // later answer it from the system. Before that only Google Play services
+    // does, which `play` carries and `fdroid` does not, so the F-Droid app
+    // offers passkeys from Android 14 on.
     flavorDimensions = ['distribution']
     productFlavors {
         play {
             dimension 'distribution'
+            buildConfigField 'boolean', 'PASSKEYS_BELOW_ANDROID_14', 'true'
         }
         fdroid {
             dimension 'distribution'
+            buildConfigField 'boolean', 'PASSKEYS_BELOW_ANDROID_14', 'false'
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     // R8 shrinks and renames the release code. Google Play rates an app whose
@@ -115,6 +126,8 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation "androidx.core:core:$androidxCoreVersion"
+    implementation "androidx.credentials:credentials:$androidxCredentialsVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
@@ -133,4 +146,14 @@ if (distributionFlavor != 'fdroid' && servicesJson.exists() && servicesJson.text
     apply plugin: 'com.google.gms.google-services'
 } else {
     logger.info("google-services.json not applied: this build has no push notifications")
+}
+
+// Passkeys below Android 14 come from Google Play services, for the Play build
+// only. Resolved only when the flavor is not F-Droid, like the Firebase plugin
+// above: the F-Droid scanner refuses a build that resolves Google's
+// proprietary libraries, whichever variant uses them.
+if (distributionFlavor != 'fdroid') {
+    dependencies {
+        playImplementation "androidx.credentials:credentials-play-services-auth:$androidxCredentialsVersion"
+    }
 }

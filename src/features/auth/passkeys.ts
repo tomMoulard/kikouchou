@@ -24,6 +24,7 @@
  * @module features/auth/passkeys
  */
 
+import { hasNativePasskeys } from '@/lib/native/passkeys';
 import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
@@ -47,10 +48,12 @@ export function isPasskeySupported(): boolean {
     return false;
   }
   // A passkey is bound to `app.kikouchou.app` (`rp_id` in `supabase/config.toml`),
-  // and a store app's web view runs on `localhost`. The browser API is there and
-  // every ceremony fails, so the option is not offered at all.
+  // and a store app's web view runs on `localhost`. The WebView's own API is
+  // there and every ceremony fails. The Android app asks Credential Manager
+  // instead (`lib/native/passkeys`), so it offers a passkey when that plugin is
+  // in the build. The iPhone app has no such route yet and offers none.
   if (isNativeApp()) {
-    return false;
+    return hasNativePasskeys();
   }
   if (!window.isSecureContext) {
     return false;

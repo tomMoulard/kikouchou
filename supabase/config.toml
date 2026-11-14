@@ -556,7 +556,21 @@ additional_redirect_urls = [
   "app.kikouchou://auth/callback",
 ]
 
+# The Android app signs in through Credential Manager (lib/native/passkeys),
+# and Android writes the app's signing key into the signed answer as its
+# origin: `android:apk-key-hash:` and the base64url, unpadded, of the 32 bytes
+# of the certificate's SHA-256. One entry per key in `assetlinks.json`
+# (`ANDROID_CERT_SHA256`): Play App Signing, the upload key, and F-Droid's.
+# A key missing here fails every passkey from the APKs it signs, with an
+# origin error from the server. To derive one from a fingerprint:
+#   echo "$SHA256" | tr -d : | xxd -r -p | base64 | tr '+/' '-_' | tr -d '='
 [remotes.production.auth.webauthn]
 rp_display_name = "Kikouchou"
 rp_id = "app.kikouchou.app"
-rp_origins = ["https://app.kikouchou.app"]
+rp_origins = [
+  "https://app.kikouchou.app",
+  "android:apk-key-hash:5aA64og7dPpg424UyNXHbP4Cci7saHb5LnMwGgN6aq4",
+  "android:apk-key-hash:bgIvJXTGAeHeVJnMlBfKVYxW1UfZ1ldk4gIg6358Gos",
+  "android:apk-key-hash:pluc9oQqXCh5vQ3AcRTbsqdYraBr5cGczGVUv50Z4LI",
+  "android:apk-key-hash:wwXeg6x74GA4sxu81uTLXyn4Owcki4NFg_pMpzRV8II",
+]

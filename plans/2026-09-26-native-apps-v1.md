@@ -274,6 +274,8 @@ the sign-in leaves the WebView and comes back.
    the WebView fails. Hide the passkey button in native builds for v1. A
    later version can add the `webcredentials:app.kikouchou.app` associated
    domain and a native passkey plugin.
+   Done for Android on 2026-11-15: `PasskeyPlugin.java` and
+   `lib/native/passkeys` (see AGENTS.md, "A passkey in the Android app").
 8. Web3 sign-in. A WebView has no `window.ethereum`. Hide it in native builds.
 
 ### A4. Deep links
