@@ -636,11 +636,20 @@ export async function waitForDb(ms = 10): Promise<void> {
  * ```
  */
 export async function waitForTripDoc(tripId: string): Promise<void> {
-  await waitFor(async () => {
-    expect(await db.yjsUpdates.where('tripId').equals(tripId).count()).toBeGreaterThan(
-      0,
-    );
-  });
+  await waitFor(
+    async () => {
+      expect(await db.yjsUpdates.where('tripId').equals(tripId).count()).toBeGreaterThan(
+        0,
+      );
+    },
+    // Testing Library's default is 1s. Seeding is a mount, a Dexie read, a
+    // document build and a persisted update, and under `test:coverage` on a
+    // loaded CI runner it has taken longer than that: the wait timed out, and
+    // a ride test that went on writing raced the projection it exists to wait
+    // for. A wait that ends as soon as the update lands costs nothing when
+    // the runner is fast.
+    { timeout: 5000 },
+  );
 }
 
 /**
