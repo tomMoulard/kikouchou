@@ -1415,9 +1415,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       </p>
 
       {currentView === 'card' ? (
-        // Calendar grid wrapper with horizontal scroll on mobile
+        // Calendar grid wrapper with horizontal scroll on mobile.
+        //
+        // `relative` is load-bearing: each day carries an `sr-only` label,
+        // which is `position: absolute`. With no positioned ancestor inside
+        // this scroller, its containing block was the page, so the labels of
+        // the days scrolled out of view escaped the clip and stretched the
+        // whole document to the grid's width. On a phone the page then panned
+        // and zoomed sideways, cutting off the grid and the bottom bar.
         <div
-          className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
+          className="relative overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
           role="region"
           aria-label={t('calendar.scrollableCalendar', 'Scrollable calendar')}
         >
