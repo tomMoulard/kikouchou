@@ -181,10 +181,26 @@ describe('ExpenseForm — the lines it refuses', () => {
     const { user, onSubmit } = renderForm();
 
     await user.type(screen.getByLabelText(/money.expense.title_field/), 'Shopping');
-    await user.type(screen.getByLabelText(/money.expense.amount/), '2000000');
+    await user.type(screen.getByLabelText(/money.expense.amount/), '2000000000000');
     await user.click(screen.getByRole('button', { name: 'common.save' }));
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // The bound is one for every currency: at 1 000 000 it stopped a house
+  // rented in yen, or a week's shopping in rupiah.
+  it('takes an amount in the millions, as a yen or rupiah trip needs', async () => {
+    const { user, onSubmit } = renderForm();
+
+    await user.type(screen.getByLabelText(/money.expense.title_field/), 'Ryokan');
+    await user.type(screen.getByLabelText(/money.expense.amount/), '25000000');
+    await chooseFrom(user, /money.expense.paidBy/, /Bob/);
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalled();
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ amount: 25_000_000 });
   });
 
   it('refuses a line nobody is on', async () => {

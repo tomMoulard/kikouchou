@@ -2531,23 +2531,30 @@ export function getPersonHeadcount(person: { readonly headcount?: number }): num
 export const MAX_ACTIVITY_PARTICIPANTS = 999;
 
 /**
- * Largest amount a single money line may carry.
+ * Largest amount a single money line may carry, in any currency.
  *
- * A holiday house, not a mortgage. The bound is a guard rather than a product
- * limit: the amount is multiplied by a share and summed, and a line arriving
- * from a peer with `1e308` on it turns every balance on the page into
- * `Infinity`, which no arithmetic below recovers from.
+ * The bound is a guard rather than a product limit: the amount is multiplied
+ * by a share and summed, and a line arriving from a peer with `1e308` on it
+ * turns every balance on the page into `Infinity`, which no arithmetic below
+ * recovers from.
+ *
+ * One bound for every currency, so it has to fit the smallest units: it was
+ * 1 000 000, which is a holiday house in euros but six thousand euros in yen
+ * and a week's groceries in rupiah. 10^12 covers a house in Iranian rials,
+ * and a trip's totals stay below 2^53 / 100, where a double still counts
+ * every cent exactly.
  */
-export const MAX_EXPENSE_AMOUNT = 1_000_000;
+export const MAX_EXPENSE_AMOUNT = 1_000_000_000_000;
 
 /**
- * Largest value one {@link ExpenseSplit} may carry — parts, or money.
+ * Largest value one {@link ExpenseSplit} may carry — parts, or money. The
+ * same as a line's amount, since a share in money is at most the line.
  *
  * Bounded for the same reason as {@link MAX_EXPENSE_AMOUNT}: a weight is a
  * divisor, and an unbounded one from a peer makes every other share round to
  * zero.
  */
-export const MAX_EXPENSE_SPLIT_VALUE = 1_000_000;
+export const MAX_EXPENSE_SPLIT_VALUE = MAX_EXPENSE_AMOUNT;
 
 /**
  * Largest number of shares a single money line may carry.

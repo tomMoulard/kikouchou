@@ -446,7 +446,7 @@ const ExpenseForm = memo(function ExpenseForm({
       newErrors.amount = t('money.expense.errors.amountAboveZero');
     } else if (typedAmount > MAX_EXPENSE_AMOUNT) {
       newErrors.amount = t('money.expense.errors.amountTooLarge', {
-        max: MAX_EXPENSE_AMOUNT,
+        max: formatMoney(MAX_EXPENSE_AMOUNT),
       });
     }
 
@@ -482,7 +482,7 @@ const ExpenseForm = memo(function ExpenseForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [amountsMatch, effectiveValues, formState, isTransfer, personNights, t]);
+  }, [amountsMatch, effectiveValues, formatMoney, formState, isTransfer, personNights, t]);
 
   // ==========================================================================
   // Event Handlers
