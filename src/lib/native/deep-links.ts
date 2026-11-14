@@ -13,8 +13,9 @@
  *   link. In a browser that page redirects to `/join/<token>`
  *   (`server/share-preview/src/page.rs`); the app skips the page and goes
  *   straight to the route the redirect would reach.
- * - A link with `?code=` or `?error=` is a sign-in coming back, from the
- *   OAuth browser sheet (`app.kikouchou://auth/callback`) or a magic link.
+ * - A link with `?code=`, `?error=` or `?token_hash=` is a sign-in coming
+ *   back, from the OAuth browser sheet (`app.kikouchou://auth/callback`) or a
+ *   magic link (`/auth/native?token_hash=…`).
  *
  * Pure: every origin comes in as a parameter, so nothing here reads
  * `window.location`.
@@ -72,7 +73,7 @@ function originOf(value: string): string | null {
 }
 
 function hasAuthAnswer(url: URL): boolean {
-  return url.searchParams.has('code') || url.searchParams.has('error');
+  return ['code', 'error', 'token_hash'].some((key) => url.searchParams.has(key));
 }
 
 /**

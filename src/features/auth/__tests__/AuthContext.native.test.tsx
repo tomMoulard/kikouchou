@@ -19,7 +19,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 interface DeliveredCallback {
   code: string | null;
   error: string | null;
-  emailLink?: { tokenHash: string; type: string } | null;
+  emailLink: { tokenHash: string; type: string } | null;
 }
 
 const doubles = vi.hoisted(() => ({
@@ -188,7 +188,7 @@ describe('signing in from a store app', () => {
     const client = makeClient();
     await mount(client);
 
-    doubles.callbackListener?.({ code: 'from-the-sheet', error: null });
+    doubles.callbackListener?.({ code: 'from-the-sheet', error: null, emailLink: null });
 
     await waitFor(() =>
       expect(client.auth.exchangeCodeForSession).toHaveBeenCalledWith('from-the-sheet'),
@@ -234,7 +234,7 @@ describe('signing in from a store app', () => {
     const client = makeClient();
     const { result } = await mount(client);
 
-    doubles.callbackListener?.({ code: null, error: 'access_denied' });
+    doubles.callbackListener?.({ code: null, error: 'access_denied', emailLink: null });
     await waitFor(() => expect(result.current.lastAuthError).toBe('access_denied'));
 
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -242,7 +242,7 @@ describe('signing in from a store app', () => {
       data: { session: null },
       error: { message: 'code verifier not found' },
     });
-    doubles.callbackListener?.({ code: 'spent', error: null });
+    doubles.callbackListener?.({ code: 'spent', error: null, emailLink: null });
     await waitFor(() => expect(result.current.lastAuthError).toBe('code verifier not found'));
   });
 

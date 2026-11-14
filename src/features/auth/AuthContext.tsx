@@ -53,7 +53,9 @@ import { runNativeOAuth } from '@/lib/native/oauth';
 import { forgetAccountTrips } from '@/lib/sync/remote-trip';
 import { NATIVE_AUTH_CALLBACK_URL, getPublicAppOrigin, isNativeApp } from '@/lib/platform';
 import {
+  type EmailLinkToken,
   consumeAuthCode,
+  consumeEmailLinkToken,
   getCapturedAuthError,
   isMissingCodeVerifier,
   onAuthCallback,
@@ -253,9 +255,11 @@ const REGISTRATION_STORAGE_PREFIX = 'kikouchou_registered_';
  * The path a magic link sends a store app's user back to.
  *
  * A universal link (iOS) and a verified app link (Android) claim it, so the
- * email opens the app rather than Safari or Chrome, where the PKCE verifier is
- * not. The website serves the same path, for somebody who opens the email on
- * another device. The root is left to the website on purpose: a web sign-in
+ * email opens the app rather than Safari or Chrome. The email links to this
+ * path directly, with a token hash (`supabase/templates/magic_link.html`):
+ * a link to supabase.co would open the browser first, and Android does not
+ * hand a redirect inside the browser to the app. The website serves the same
+ * path, for somebody who opens the email on another device. The root is left to the website on purpose: a web sign-in
  * returns there, and a phone with the app installed must not hand that code to
  * the app, which never started it.
  */
@@ -285,6 +289,28 @@ function resolveRedirectTo(kind: 'oauth' | 'email' = 'oauth'): string {
   const { origin } = window.location;
   const base = import.meta.env.BASE_URL || '/';
   return `${origin}${base.endsWith('/') ? base : `${base}/`}`;
+}
+
+/**
+ * Signs in with the token hash an email link carried.
+ *
+ * No PKCE verifier is involved, so this works whichever browser or device
+ * opens the link. A spent or expired link is the person's situation, not a
+ * bug: a warning and a count, and the message goes on screen.
+ *
+ * @returns GoTrue's error message, or null once the session is on its way
+ */
+async function redeemEmailLink(
+  client: SupabaseClient,
+  link: EmailLinkToken,
+): Promise<string | null> {
+  const { error } = await client.auth.verifyOtp({ token_hash: link.tokenHash, type: link.type });
+  if (!error) {
+    return null;
+  }
+  console.warn('[auth] email link refused:', error.message);
+  captureEvent('sign_in_failed', { method: 'email-link', reason: 'error' });
+  return error.message;
 }
 
 function toMessage(error: unknown): string {
@@ -499,7 +525,8 @@ export function AuthProvider({
     }
     return onAuthCallback((callback) => {
       void (async () => {
-        if (callback.code === null) {
+        const { code, emailLink } = callback;
+        if (code === null && emailLink === null) {
           if (isMountedRef.current) {
             setExchangeError(callback.error);
           }
@@ -510,7 +537,14 @@ export function AuthProvider({
           if (!activeClient) {
             return;
           }
-          const { error } = await activeClient.auth.exchangeCodeForSession(callback.code);
+          if (code === null) {
+            const message = emailLink === null ? null : await redeemEmailLink(activeClient, emailLink);
+            if (message !== null && isMountedRef.current) {
+              setExchangeError(message);
+            }
+            return;
+          }
+          const { error } = await activeClient.auth.exchangeCodeForSession(code);
           if (error && isMountedRef.current) {
             console.error('[auth] code exchange failed:', error.message);
             setExchangeError(error.message);
@@ -641,6 +675,17 @@ export function AuthProvider({
           setExchangeError(error.message);
         }
         // Either way the subscription above has the outcome; nothing else to do.
+        return;
+      }
+
+      // An email link lands with a token hash instead of a code. Taken once,
+      // for the same StrictMode reason.
+      const emailLink = consumeEmailLinkToken();
+      if (emailLink !== null) {
+        const message = await redeemEmailLink(resolvedClient, emailLink);
+        if (message !== null && isMountedRef.current) {
+          setExchangeError(message);
+        }
         return;
       }
 

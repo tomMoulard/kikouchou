@@ -78,8 +78,9 @@ export async function runNativeOAuth(authorizeUrl: string): Promise<NativeOAuthR
     const unsubscribe = onAuthCallback((callback) => {
       // Closing an already closed sheet is a no-op on both platforms.
       void Browser.close().catch(() => undefined);
+      // An email link that lands meanwhile signs in too; it is no refusal.
       finish(
-        callback.code !== null
+        callback.code !== null || callback.emailLink !== null
           ? { status: 'returned' }
           : { status: 'refused', message: callback.error },
       );

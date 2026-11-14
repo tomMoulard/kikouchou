@@ -38,10 +38,10 @@ const SignInPage = lazy(() =>
  *
  * - `/auth/native`: where a magic link asked for in a store app returns.
  *   The app claims the path as a universal link, so on the phone that asked
- *   the app opens and exchanges the code itself. Reaching this route means the
- *   website opened instead, on another device or with no app installed:
- *   `lib/supabase/auth-callback` has already taken the code off the URL at
- *   import, and the exchange runs as for any web sign-in.
+ *   the app opens and redeems the link's token hash itself. Reaching this
+ *   route means the website opened instead, on another device or with no app
+ *   installed: `lib/supabase/auth-callback` has already taken the token hash
+ *   off the URL at import, and `verifyOtp` runs as for any web sign-in.
  */
 export const authRoutes: RouteObject[] = [
   {

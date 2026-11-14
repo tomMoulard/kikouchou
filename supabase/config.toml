@@ -266,6 +266,22 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# The two sign-in emails link to the page that asked for them, with the token
+# hash, and never to `{{ .ConfirmationURL }}` on supabase.co. Android opens a
+# link in the store app only when the first URL it sees is one the app claims
+# (`/auth/native`, see app-links.ts). The Supabase address opened Chrome, and
+# the redirect after it stayed there. `lib/supabase/auth-callback` reads
+# `token_hash` and `type`, and the client calls `verifyOtp`. `RedirectTo` is
+# the `emailRedirectTo` the client sent, checked against the allow-list, and it
+# never carries its own query string.
+[auth.email.template.magic_link]
+subject = "Your sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm your email address"
+content_path = "./supabase/templates/confirmation.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

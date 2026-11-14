@@ -36,8 +36,35 @@
  * subscribed with {@link onAuthCallback}. The PKCE verifier is in this web
  * view's storage, where the sign-in started, so the exchange works the same.
  *
+ * ## Email links
+ *
+ * A magic link does not carry a code. The email template points it straight
+ * at the page that asked for it, `{{ .RedirectTo }}?token_hash=…&type=email`
+ * (`supabase/templates/`), and the client redeems the hash with `verifyOtp`.
+ * Two reasons. Android hands a link to the store app only when the first URL
+ * it opens is one the app claims: Supabase's own `/auth/v1/verify` address
+ * opened Chrome, and the redirect to `/auth/native` then stayed in Chrome. And
+ * a token hash needs no PKCE verifier, so the link also works in another
+ * browser or on another device.
+ *
  * @module lib/supabase/auth-callback
  */
+
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+/** The email link types the templates send. Anything else is refused. */
+const EMAIL_LINK_TYPES = ['email', 'magiclink', 'signup'] as const;
+
+/** One of {@link EMAIL_LINK_TYPES}. */
+export type EmailLinkType = (typeof EMAIL_LINK_TYPES)[number];
+
+/** What an email link carries, to redeem with `verifyOtp`. */
+export interface EmailLinkToken {
+  readonly tokenHash: string;
+  readonly type: EmailLinkType;
+}
 
 // ============================================================================
 // Captured state
@@ -48,7 +75,25 @@ interface CapturedCallback {
   readonly code: string | null;
   /** Error the provider reported instead, e.g. the user cancelled. */
   readonly error: string | null;
+  /** The token hash of an email link. */
+  readonly emailLink: EmailLinkToken | null;
 }
+
+/**
+ * A token hash GoTrue writes: hex, with a `pkce_` prefix in the PKCE flow.
+ * The URL is remote input, so anything else is dropped before it reaches the
+ * server.
+ */
+const TOKEN_HASH_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+
+/** The auth parameters taken off a URL once read. */
+const AUTH_PARAMS = ['code', 'error', 'error_description', 'error_code', 'state'] as const;
+
+/** The parameters an email link adds. `type` alone belongs to whoever set it. */
+const EMAIL_LINK_PARAMS = ['token_hash', 'type'] as const;
+
+/** A page load or a link that carries no auth answer. */
+const NOTHING: CapturedCallback = { code: null, error: null, emailLink: null };
 
 /**
  * Whether this document load looks like a return from the provider.
@@ -72,34 +117,62 @@ const captured: CapturedCallback = captureFromUrl();
  */
 let codeConsumed = false;
 
+/** Whether the email link's token hash has been handed out. Same reason. */
+let emailLinkConsumed = false;
+
 // ============================================================================
 // Capture
 // ============================================================================
 
+function isEmailLinkType(value: string | null): value is EmailLinkType {
+  return value !== null && (EMAIL_LINK_TYPES as readonly string[]).includes(value);
+}
+
+/** The email link's token, when the parameters carry a well-formed one. */
+function readEmailLink(params: URLSearchParams): EmailLinkToken | null {
+  const tokenHash = params.get('token_hash');
+  const type = params.get('type');
+  if (tokenHash === null || !TOKEN_HASH_PATTERN.test(tokenHash) || !isEmailLinkType(type)) {
+    return null;
+  }
+  return { tokenHash, type };
+}
+
+/** Reads every auth answer a query string can carry. */
+function readParams(params: URLSearchParams): CapturedCallback {
+  return {
+    code: params.get('code'),
+    // Supabase sends `error` plus `error_description`; the latter is the
+    // readable one, so prefer it and fall back to the code.
+    error: params.get('error_description') ?? params.get('error'),
+    emailLink: readEmailLink(params),
+  };
+}
+
+function isEmpty(callback: CapturedCallback): boolean {
+  return callback.code === null && callback.error === null && callback.emailLink === null;
+}
+
 function captureFromUrl(): CapturedCallback {
   if (typeof window === 'undefined') {
-    return { code: null, error: null };
+    return NOTHING;
   }
 
   let params: URLSearchParams;
   try {
     params = new URLSearchParams(window.location.search);
   } catch {
-    return { code: null, error: null };
+    return NOTHING;
   }
 
-  const code = params.get('code');
-  // Supabase sends `error` plus `error_description`; the latter is the readable
-  // one, so prefer it and fall back to the code.
-  const error = params.get('error_description') ?? params.get('error');
-
-  if (code === null && error === null) {
-    return { code: null, error: null };
+  const callback = readParams(params);
+  if (isEmpty(callback)) {
+    return NOTHING;
   }
 
-  stripAuthParams(params);
+  stripAuthParams(params, callback.emailLink !== null);
 
-  return { code, error };
+  return callback;
 }
 
 /**
@@ -108,8 +181,8 @@ function captureFromUrl(): CapturedCallback {
  * A share or deep link may legitimately carry its own query string, and
  * discarding the whole thing would break navigating straight to a filtered view.
  */
-function stripAuthParams(params: URLSearchParams): void {
-  for (const key of ['code', 'error', 'error_description', 'error_code', 'state']) {
+function stripAuthParams(params: URLSearchParams, withEmailLink: boolean): void {
+  for (const key of withEmailLink ? [...AUTH_PARAMS, ...EMAIL_LINK_PARAMS] : AUTH_PARAMS) {
     params.delete(key);
   }
 
@@ -144,6 +217,19 @@ export function consumeAuthCode(): string | null {
   return captured.code;
 }
 
+/**
+ * Takes the email link's token hash, once.
+ *
+ * Single-use on the server, like a code, so a StrictMode remount must not
+ * redeem it a second time and report the spent link as a failure.
+ */
+export function consumeEmailLinkToken(): EmailLinkToken | null {
+  if (emailLinkConsumed || captured.emailLink === null) {
+    return null;
+  }
+  emailLinkConsumed = true;
+  return captured.emailLink;
+}
 
 
 /**
@@ -174,6 +260,7 @@ export function getCapturedAuthError(): string | null {
 export interface DeliveredAuthCallback {
   readonly code: string | null;
   readonly error: string | null;
+  readonly emailLink: EmailLinkToken | null;
 }
 
 type AuthCallbackListener = (callback: DeliveredAuthCallback) => void;
@@ -181,10 +268,11 @@ type AuthCallbackListener = (callback: DeliveredAuthCallback) => void;
 const listeners = new Set<AuthCallbackListener>();
 
 /**
- * Codes already handed to a listener. The same link can arrive twice: once
- * from `App.getLaunchUrl()` on a cold start and once as `appUrlOpen`.
+ * Codes and token hashes already handed to a listener. The same link can
+ * arrive twice: once from `App.getLaunchUrl()` on a cold start and once as
+ * `appUrlOpen`.
  */
-const deliveredCodes = new Set<string>();
+const deliveredCredentials = new Set<string>();
 
 /**
  * Answers that arrived before anybody subscribed. A cold start from a sign-in
@@ -204,12 +292,8 @@ export function readAuthCallbackUrl(url: string): DeliveredAuthCallback | null {
   } catch {
     return null;
   }
-  const code = params.get('code');
-  const error = params.get('error_description') ?? params.get('error');
-  if (code === null && error === null) {
-    return null;
-  }
-  return { code, error };
+  const callback = readParams(params);
+  return isEmpty(callback) ? null : callback;
 }
 
 /**
@@ -223,11 +307,12 @@ export function deliverAuthCallbackUrl(url: string): boolean {
   if (callback === null) {
     return false;
   }
-  if (callback.code !== null) {
-    if (deliveredCodes.has(callback.code)) {
+  const credential = callback.code ?? callback.emailLink?.tokenHash ?? null;
+  if (credential !== null) {
+    if (deliveredCredentials.has(credential)) {
       return true;
     }
-    deliveredCodes.add(callback.code);
+    deliveredCredentials.add(credential);
   }
   if (listeners.size === 0) {
     pending.push(callback);

@@ -1388,6 +1388,20 @@ what the website did before.
   happens in one place, `AuthProvider`'s `onAuthCallback` subscription.
   Exchanging it anywhere else spends a single-use code twice. Passkeys and
   wallets are not offered in the apps: a passkey is bound to the website.
+- **The hosted allow-list must hold the app's callback.** A `redirect_to`
+  missing from it is not an error: Supabase sends the user to the Site URL,
+  so the browser sheet loaded the website, never closed, and the app stayed
+  signed out. `app.kikouchou://auth/callback` sat in `config.toml` and not in
+  the hosted project until 2026-11-15. Read the hosted value back with the
+  Management API (`GET /v1/projects/<ref>/config/auth`, `uri_allow_list`).
+- **A sign-in email links to the app, not to supabase.co.** Android opens the
+  store app only for the first URL a tap opens, and a redirect inside Chrome
+  stays in Chrome. So the templates (`supabase/templates/`) link to
+  `{{ .RedirectTo }}?token_hash=…&type=email`, and `lib/supabase/auth-callback`
+  hands the hash to `verifyOtp`. A token hash needs no PKCE verifier, so the
+  same link works in another browser or on another device. The client must
+  ship before a template that sends it: a hosted template ahead of the
+  deployed client sends links that nothing redeems.
 - **A link opens the app.** `app-links.ts` lists the website paths the apps
   claim, `vite.config.ts` writes the `.well-known` files from it, and a unit
   test holds `AndroidManifest.xml` to the same list. The root is never claimed:
