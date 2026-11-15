@@ -1,0 +1,7 @@
+Kikouchou works without an account. On the first launch, the app opens a sample trip that shows every feature: rooms, guests, travel, activities, meals and money.
+
+An account is needed only to share a trip and to use the assistant. To test sharing, sign in with Sign in with Apple from Settings, then open a trip and choose Share.
+
+The account can be deleted inside the app: Settings, then Account, then Delete my account.
+
+The assistant sends questions through the project's server to OpenRouter. The app shows this before the first question.
