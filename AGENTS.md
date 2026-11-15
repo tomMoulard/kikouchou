@@ -1502,6 +1502,14 @@ what the website did before.
   the page: Dexie keeps IndexedDB open across the plugin's `reload()`. The
   F-Droid build has no live updates, because f-droid.org builds every release
   from source.
+- **Store images are rendered at the largest size each store accepts.**
+  The sample trip, in English and French, at: iPhone 6.9" 1320 x 2868 and
+  6.3" 1206 x 2622, iPad 13" 2064 x 2752 (`fastlane/screenshots/<locale>/`);
+  the App Store product page header and search results asset 5244 x 2950
+  (`fastlane/metadata/ios/<locale>/`); Android phone 2160 x 3840, Play's
+  3840px limit (`fastlane/metadata/android/<locale>/images/phoneScreenshots/`).
+  Play's feature graphic has one size, 1024 x 500. A store that adds a larger
+  size gets the larger render, not a scaled copy.
 - **No ad tracker in an app.** The Meta pixel and the Google tags return before
   loading in a store app: that would be cross-app tracking, which needs Apple's
   tracking prompt. PostHog runs, with a `platform` super property.
