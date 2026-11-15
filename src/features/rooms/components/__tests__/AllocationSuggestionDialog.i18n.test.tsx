@@ -89,7 +89,7 @@ describe('AllocationSuggestionDialog wording', () => {
 
     expect(screen.getByText(/· 2 nights$/)).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Room for Alice' })).toHaveTextContent(
-      'Attic · 3 beds',
+      'Attic · Sleeps 3',
     );
     expect(screen.getByText('Room for Alice', { selector: 'label' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply 1 stay' })).toBeInTheDocument();

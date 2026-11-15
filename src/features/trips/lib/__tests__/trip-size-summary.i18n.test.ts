@@ -57,13 +57,13 @@ describe('the create form summary line, in words', () => {
   it('says what the reported trip adds up to, in English', async () => {
     await i18n.changeLanguage('en');
 
-    expect(line(REPORTED_TRIP)).toBe('7 beds for 6 guests, 7 nights');
+    expect(line(REPORTED_TRIP)).toBe('7 places to sleep for 6 guests, 7 nights');
   });
 
   it('says it in French', async () => {
     await i18n.changeLanguage('fr');
 
-    expect(line(REPORTED_TRIP)).toBe('7 lits pour 6 invités, 7 nuits');
+    expect(line(REPORTED_TRIP)).toBe('7 couchages pour 6 invités, 7 nuits');
   });
 
   it('keeps every count singular where the count is one', async () => {
@@ -76,7 +76,7 @@ describe('the create form summary line, in words', () => {
         startDate: '2026-07-11',
         endDate: '2026-07-12',
       }),
-    ).toBe('1 bed for 1 guest, 1 night');
+    ).toBe('1 place to sleep for 1 guest, 1 night');
   });
 
   it('drops the nights while the dates do not answer', async () => {
@@ -84,7 +84,7 @@ describe('the create form summary line, in words', () => {
 
     expect(
       line({ rooms: [{ capacity: 4 }], guests: [{}, {}], startDate: '', endDate: '' }),
-    ).toBe('4 beds for 2 guests');
+    ).toBe('4 places to sleep for 2 guests');
   });
 
   it('names the shortfall in words, not only in amber', async () => {
@@ -97,6 +97,6 @@ describe('the create form summary line, in words', () => {
         startDate: '2026-07-11',
         endDate: '2026-07-18',
       }),
-    ).toBe('5 beds for 6 guests, 7 nights · not enough beds');
+    ).toBe('5 places to sleep for 6 guests, 7 nights · not enough places to sleep');
   });
 });

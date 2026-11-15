@@ -112,7 +112,7 @@ export function summarizeTripSize(input: TripSizeInput): TripSizeSummary {
  *
  * @example
  * ```typescript
- * // "7 beds for 6 guests, 7 nights"
+ * // "7 places to sleep for 6 guests, 7 nights"
  * formatTripSizeSummary({ beds: 7, guests: 6, nights: 7, bedsShort: false }, t);
  * ```
  */
@@ -121,7 +121,7 @@ export function formatTripSizeSummary(
   translate: TranslateFn,
 ): string {
   const parts = {
-    beds: translate('rooms.beds', { count: summary.beds }),
+    beds: translate('trips.sleepCount', { count: summary.beds }),
     guests: translate('trips.guestCount', { count: summary.guests }),
   };
 

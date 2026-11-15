@@ -48,7 +48,7 @@ describe('TripForm in French', () => {
     expect(within(rooms).getByText('(facultatif)')).toBeInTheDocument();
     expect(
       within(rooms).getByText(
-        'Nommez chaque chambre et indiquez son nombre de lits. Vous pourrez en ajouter plus tard.',
+        'Nommez chaque chambre et indiquez son nombre de couchages. Vous pourrez en ajouter plus tard.',
       ),
     ).toBeInTheDocument();
     const second = within(rooms).getByRole('textbox', { name: 'Chambre 2' });
@@ -57,12 +57,12 @@ describe('TripForm in French', () => {
     expect(
       within(rooms).getByRole('button', { name: 'Icône de la chambre 2' }),
     ).toBeInTheDocument();
-    expect(within(rooms).getByLabelText('Lits dans la chambre 2')).toBeInTheDocument();
+    expect(within(rooms).getByLabelText('Nombre de couchages de la chambre 2')).toBeInTheDocument();
     expect(
-      within(rooms).getByRole('button', { name: 'Retirer un lit de la chambre 2' }),
+      within(rooms).getByRole('button', { name: 'Une personne de moins dans la chambre 2' }),
     ).toBeInTheDocument();
     expect(
-      within(rooms).getByRole('button', { name: 'Ajouter un lit à la chambre 2' }),
+      within(rooms).getByRole('button', { name: 'Une personne de plus dans la chambre 2' }),
     ).toBeInTheDocument();
     expect(within(rooms).getByRole('button', { name: 'Retirer la chambre 2' })).toBeInTheDocument();
   });

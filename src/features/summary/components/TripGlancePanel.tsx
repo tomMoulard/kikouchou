@@ -251,8 +251,8 @@ export const TripGlancePanel = memo(function TripGlancePanel({
               {t('glance.beds.taken', {
                 count: glance.bedsTaken,
                 total: glance.bedsTotal,
-                defaultValue_one: '{{count}} of {{total}} beds taken',
-                defaultValue_other: '{{count}} of {{total}} beds taken',
+                defaultValue_one: '{{count}} of {{total}} places taken',
+                defaultValue_other: '{{count}} of {{total}} places taken',
               })}
             </p>
             {glance.night === 'firstNight' && glance.nightKey !== null ? (

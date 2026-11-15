@@ -1,5 +1,5 @@
 /**
- * @fileoverview Renders the two `rooms.beds` call sites through a real i18next.
+ * @fileoverview Renders the timeline's room labels through a real i18next.
  *
  * Every other test in this repo runs against the setup-wide `react-i18next`
  * mock, which returns the key verbatim — so a call site naming a key that does
@@ -9,7 +9,8 @@
  * carried the dead i18next-v3 suffix.
  *
  * These tests unmock i18next, load the shipped catalogues, and read the strings
- * off the DOM at count 1 and count 4.
+ * off the DOM at count 1 and count 4. The label says how many people a room
+ * sleeps (`rooms.sleeps`), since the number is people and not beds.
  *
  * @module features/rooms/components/__tests__/RoomOccupancyTimeline.i18n.test
  */
@@ -150,25 +151,26 @@ function renderTimeline(rooms: readonly Room[]) {
 // Tests
 // ============================================================================
 
-describe('rooms.beds renders through i18next, not as a raw key', () => {
-  it('labels a four-bed room "4 beds" on the timeline', async () => {
+describe('the room label renders through i18next, not as a raw key', () => {
+  it('labels a room for four "Sleeps 4" on the timeline', async () => {
     await i18n.changeLanguage('en');
     renderTimeline([FOUR_BED]);
 
-    expect(screen.getByTitle('Master Bedroom · 4 beds')).toBeInTheDocument();
+    expect(screen.getByTitle('Master Bedroom · Sleeps 4')).toBeInTheDocument();
   });
 
-  it('labels a one-bed room "1 bed" on the timeline', async () => {
+  it('labels a room for one "Sleeps 1" on the timeline', async () => {
     await i18n.changeLanguage('en');
     renderTimeline([ONE_BED]);
 
-    expect(screen.getByTitle('Box Room · 1 bed')).toBeInTheDocument();
+    expect(screen.getByTitle('Box Room · Sleeps 1')).toBeInTheDocument();
   });
 
-  it('never leaks a rooms.beds key into the timeline DOM', async () => {
+  it('never leaks a rooms key into the timeline DOM', async () => {
     await i18n.changeLanguage('en');
     const { container } = renderTimeline([FOUR_BED, ONE_BED]);
 
+    expect(container.innerHTML).not.toContain('rooms.sleeps');
     expect(container.innerHTML).not.toContain('rooms.beds');
   });
 
@@ -176,8 +178,8 @@ describe('rooms.beds renders through i18next, not as a raw key', () => {
     await i18n.changeLanguage('fr');
     renderTimeline([FOUR_BED, ONE_BED]);
 
-    expect(screen.getByTitle('Master Bedroom · 4 lits')).toBeInTheDocument();
-    expect(screen.getByTitle('Box Room · 1 lit')).toBeInTheDocument();
+    expect(screen.getByTitle('Master Bedroom · 4 couchages')).toBeInTheDocument();
+    expect(screen.getByTitle('Box Room · 1 couchage')).toBeInTheDocument();
     // No reset here: every test sets its own language before rendering, and
     // switching it while a component is still mounted trips React's act warning.
   });

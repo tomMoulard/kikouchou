@@ -85,7 +85,7 @@ test.describe('Rooms in bulk', () => {
 
     // The second room sleeps two; the beds stepper says so per row.
     await page
-      .getByRole('button', { name: 'Add a bed to room 2', exact: true })
+      .getByRole('button', { name: 'One person more in room 2', exact: true })
       .click();
 
     await page.getByRole('button', { name: /^save$/iu }).click();

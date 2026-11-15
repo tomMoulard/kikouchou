@@ -401,7 +401,7 @@ const AllocationSuggestionDialog = memo(function AllocationSuggestionDialog(
                               </SelectItem>
                               {rooms.map((room) => (
                                 <SelectItem key={room.id} value={room.id}>
-                                  {`${room.name} · ${t('rooms.beds', { count: room.capacity })}`}
+                                  {`${room.name} · ${t('rooms.sleeps', { count: room.capacity })}`}
                                 </SelectItem>
                               ))}
                             </SelectContent>

@@ -1411,7 +1411,7 @@ const TripForm = memo(function TripForm({
             and setting it later means opening six dialogs.
           */}
           <p id="trip-rooms-hint" className="text-xs text-muted-foreground">
-            {t('trips.roomsHint', 'Name each room and say how many beds it has. You can add rooms later.')}
+            {t('trips.roomsHint', 'Name each room and say how many people it sleeps. You can add rooms later.')}
           </p>
 
           <ul className="space-y-2">
@@ -1465,7 +1465,7 @@ const TripForm = memo(function TripForm({
                     className="min-w-0 flex-1"
                   />
                   <Label htmlFor={bedsId} className="sr-only">
-                    {t('trips.roomBedsLabel', 'Beds in room {{number}}', {
+                    {t('trips.roomBedsLabel', 'How many people room {{number}} sleeps', {
                       number: index + 1,
                     })}
                   </Label>
@@ -1474,10 +1474,10 @@ const TripForm = memo(function TripForm({
                     value={room.capacity}
                     onValueChange={(value) => handleRoomCapacityChange(room.id, value)}
                     min={MIN_ROOM_CAPACITY}
-                    decrementLabel={t('trips.roomBedsDecrease', 'Remove a bed from room {{number}}', {
+                    decrementLabel={t('trips.roomBedsDecrease', 'One person fewer in room {{number}}', {
                       number: index + 1,
                     })}
-                    incrementLabel={t('trips.roomBedsIncrease', 'Add a bed to room {{number}}', {
+                    incrementLabel={t('trips.roomBedsIncrease', 'One person more in room {{number}}', {
                       number: index + 1,
                     })}
                     className="w-14"

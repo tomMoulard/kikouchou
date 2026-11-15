@@ -52,7 +52,7 @@ import type {
  * Which night the bed figures describe.
  *
  * The distinction is the whole reason the panel is readable before a trip
- * starts: "4 of 9 beds taken" means something different on a night three weeks
+ * starts: "4 of 9 places taken" means something different on a night three weeks
  * away, so the label has to say which night it counted.
  */
 export type GlanceNight =

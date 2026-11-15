@@ -413,7 +413,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                 // in a few places, and promising an editor there is a lie.
                 const labelTitle = [
                   row.room.name,
-                  t('rooms.beds', { count: row.room.capacity }),
+                  t('rooms.sleeps', { count: row.room.capacity }),
                   ...(onEditRoom ? [t('common.clickToEdit')] : []),
                 ].join(' · ');
 
