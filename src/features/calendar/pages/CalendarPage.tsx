@@ -48,6 +48,7 @@ import {
 } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
 
+import { TripDescriptionCard } from '@/features/trips/components/TripDescriptionCard';
 import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
 import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
@@ -65,6 +66,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
 import { isZeroNightWindow } from '@/features/rooms/utils/capacity-utils';
+import { updateTrip } from '@/lib/db';
 import { listSharedLegMates } from '@/lib/db/shared-legs';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
@@ -122,7 +124,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { tripHasDates } from '@/features/trips/utils/trip-window';
-import { captureDeletion, captureEvent } from '@/lib/posthog';
+import { captureDeletion, captureEvent, captureUsage } from '@/lib/posthog';
 
 // Import types and utilities
 import type {
@@ -1177,6 +1179,20 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
   }, []);
 
+  // The description card under the planning saves the description alone, the
+  // way the settings page does. TripContext reads the trip live, so the card
+  // shows the saved text without a local copy of the trip.
+  const currentTripId = currentTrip?.id;
+  const handleDescriptionSave = useCallback(
+    async (description: string): Promise<void> => {
+      if (currentTripId === undefined) return;
+      await updateTrip(currentTripId, { description });
+      captureUsage('trip_updated');
+      notifySuccess(t('trips.descriptionEdit.saved', 'Description saved'));
+    },
+    [currentTripId, notifySuccess, t],
+  );
+
   const handlePersonClick = useCallback((person: Person) => {
     setEditingPersonId(person.id);
     setIsPersonDialogOpen(true);
@@ -1546,6 +1562,21 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
               }
             : {})}
         />
+      )}
+
+      {/* The trip's description (door codes, the Tricount link, what to
+          bring), under the planning and the activity agenda, because the
+          calendar is the page the group opens most. A member edits it in
+          place. A viewer reads it, and sees no card while it is empty: a
+          "nothing here" card it cannot fill is noise. */}
+      {(canEdit || (currentTrip.description ?? '').trim() !== '') && (
+        <section className="mt-6" data-testid="calendar-trip-description">
+          <TripDescriptionCard
+            description={currentTrip.description}
+            canEdit={canEdit}
+            onSave={handleDescriptionSave}
+          />
+        </section>
       )}
 
       {/* Event Detail Dialog */}

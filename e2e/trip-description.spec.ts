@@ -1,6 +1,7 @@
 /**
- * @fileoverview The trip description on the trip settings page: shown
- * formatted, edited in place with a Markdown editor, saved on its own.
+ * @fileoverview The trip description on the trip settings page and under the
+ * calendar's planning: shown formatted, edited in place with a Markdown
+ * editor, saved on its own.
  *
  * @module e2e/trip-description
  */
@@ -85,5 +86,32 @@ test.describe('Trip description', () => {
     await expect(card.locator('#trip-description-editor')).toHaveCount(0);
     await expect(page.getByText('Not kept')).toHaveCount(0);
     await expect(card.getByText(/no description yet|pas encore de description/i)).toBeVisible();
+  });
+
+  test('is edited under the calendar planning and shown on the settings page', async ({
+    page,
+  }) => {
+    const { tripId } = await seedTrip(page, {
+      name: 'Cabin weekend',
+      startDate: fixtureDate(5),
+      endDate: fixtureDate(8),
+    });
+
+    await page.goto(`/trips/${tripId}/calendar`);
+    await waitForRoute(page);
+
+    const card = descriptionCard(page);
+    await expect(card.getByText(/no description yet|pas encore de description/i)).toBeVisible();
+    await card.getByRole('button', { name: /edit the description|modifier la description/i }).click();
+    await card.locator('#trip-description-editor').fill('Gate code 9876');
+    await card.getByRole('button', { name: /^(save|enregistrer)$/i }).click();
+
+    await expect(card.locator('#trip-description-editor')).toHaveCount(0);
+    await expect(card.getByText('Gate code 9876')).toBeVisible();
+
+    // One description: the settings page shows what the calendar saved.
+    await page.goto(`/trips/${tripId}/edit`);
+    await waitForRoute(page);
+    await expect(descriptionCard(page).getByText('Gate code 9876')).toBeVisible();
   });
 });

@@ -1,6 +1,6 @@
 /**
- * @fileoverview The trip's description on its settings page: rendered by
- * default, edited in place.
+ * @fileoverview The trip's description, on its settings page and under the
+ * calendar's planning: rendered by default, edited in place.
  *
  * The description is the trip's long-form note (door codes, the Tricount link,
  * what to bring) and it is read far more often than it is written. So the card
