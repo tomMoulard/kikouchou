@@ -912,11 +912,23 @@ export interface Trip extends Identifiable, WithTimestamps {
    * reads as an ordinary one, so `archived === true` is the only state the
    * list treats as put away.
    *
-   * Shared, not device-local: it rides in the document's `meta` map beside the
-   * name and the dates, so a trip archived on one device is archived on every
-   * device and for every member of the trip.
+   * Personal, not shared: it belongs to the account, not to the trip. A trip
+   * archived on the phone is archived on the laptop of the same account, and
+   * stays in the active list of every other member. It travels in
+   * `public.trip_archives` (`lib/sync/trip-archives`), never in the trip
+   * document. Older builds wrote it into the document's `meta` map, and the
+   * projection no longer reads that key.
    */
   archived?: boolean;
+
+  /**
+   * When this device last set {@link archived}, or adopted it from the account.
+   *
+   * The last-write-wins input of `lib/sync/trip-archives`. Absent on a trip that
+   * nobody archived, and on one archived before the flag synced per account.
+   * Device-local, like `remoteTripId`: it never travels in the document.
+   */
+  archivedUpdatedAt?: UnixTimestamp;
 
   /**
    * The cover photo, by id.

@@ -18,6 +18,7 @@ import { MealProvider } from '@/contexts/MealContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { PhotoUploadSync } from '@/lib/photos/PhotoUploadSync';
 import { AccountTripSync } from '@/lib/sync/AccountTripSync';
+import { TripArchiveSync } from '@/lib/sync/TripArchiveSync';
 import { GuestGroupSync } from '@/lib/sync/GuestGroupSync';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
@@ -47,6 +48,9 @@ interface AppProvidersProps {
  * 0b. AccountTripSync - Not a provider and not in the chain. Renders nothing;
  *    it reconciles this device's trips with the signed-in account's, so the
  *    same trips show up on the phone and the laptop.
+ * 0b'. TripArchiveSync - A sibling like AccountTripSync. Archiving is per
+ *    account, so it syncs the archived flag of every trip through
+ *    `trip_archives` rather than through the trip document.
  * 0c. GuestGroupSync - Reconciles the account's guest groups. Above the trip
  *    providers because groups are global: they outlive the selected trip and
  *    are read on `/groups` where no trip is selected at all. Renders nothing
@@ -127,6 +131,9 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
 
       {/* A sibling for the same reason: it sends the photos this device holds alone. */}
       <PhotoUploadSync />
+
+      {/* A sibling too: it keeps each trip's archived flag in step with the account. */}
+      <TripArchiveSync />
 
       {/*
         A wrapper rather than a sibling, unlike `AccountTripSync` directly above,

@@ -506,9 +506,10 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
               <Share2 className="mr-2 size-4" aria-hidden="true" />
               {t('nav.share')}
             </Button>
-            {/* Members only. Archiving writes the flag into the shared
-                document, and a device reading the trip through an invite link
-                has nothing to write with — the same rule the form follows. */}
+            {/* Members only. The flag syncs to the account through
+                `trip_archives`, which takes a row for a trip the account
+                belongs to, and a device reading the trip through an invite
+                link belongs to none: the same rule the form follows. */}
             {canEdit && (
               <Button
                 type="button"

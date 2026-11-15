@@ -913,6 +913,17 @@ defensive:
   in `localStorage['kikouchou-guest-group-deletions']`, and `syncGuestGroups`
   deletes those rows on the server before it pulls.
 
+The archived flag of a trip has the same shape, and the same reason. Archiving
+is personal: the account's phone and laptop agree, and the other members keep
+the trip in their active list. So `Trip.archived` travels in
+`public.trip_archives`, one private row per (account, trip).
+`lib/sync/trip-archives` reconciles it last-write-wins on the device-local
+`archivedUpdatedAt`, and `TripArchiveSync` runs it. It used to ride in the
+document's `meta`, which hid the trip for the whole group and moved only for
+the open trip. The projection now ignores that key and carries the local flag
+across `put`. `setTripArchived` does not touch `updatedAt`, because
+`updatedAt` is shared.
+
 ### A projection writes what changed, not everything it read
 
 `replaceTripScopedRows` bulk-put unconditionally, so one guest's name arriving

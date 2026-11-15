@@ -1219,3 +1219,74 @@ test.describe('guest groups on the server', () => {
     expect(stub.guestGroups[0]?.name).toBe('Family');
   });
 });
+
+// ============================================================================
+// Archive: the account's own flag on a trip
+// ============================================================================
+
+/**
+ * Archiving is per account. The trip document syncs only for the open trip,
+ * so a trip archived from the list used to stay on the device that archived
+ * it. This test archives from the list, with no trip open, and checks that the
+ * other device of the same account follows in both directions.
+ */
+test.describe('archiving a trip on one device', () => {
+  /** Opens the menu of the first trip card in `scope` and picks `item`. */
+  async function toggleArchive(
+    page: Page,
+    scope: ReturnType<Page['locator']>,
+    item: RegExp,
+  ): Promise<void> {
+    await scope.getByRole('button', { name: /open menu/i }).first().click();
+    await page.getByRole('menuitem', { name: item }).click();
+  }
+
+  test('reaches the other device of the account, and so does taking it back out', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+
+    const phone = await newDevice(browser, stub, OWNER);
+    await phone.goto('/trips');
+    await createTrip(phone, TRIP.name);
+    await expect
+      .poll(() => stub.trips.length, { timeout: 30_000, intervals: [250] })
+      .toBe(1);
+
+    await phone.goto('/trips');
+    await toggleArchive(phone, phone.locator('main'), /^archive$/i);
+    await expect
+      .poll(() => stub.tripArchives.map((row) => row.archived), {
+        timeout: 30_000,
+        intervals: [250],
+      })
+      .toEqual([true]);
+    expect(stub.tripArchives[0]?.user_id).toBe(OWNER.id);
+
+    // The laptop gets the trip from the account sweep, and the flag with it.
+    const laptop = await newDevice(browser, stub, OWNER);
+    await laptop.goto('/trips');
+    const archivedToggle = laptop.getByRole('button', { name: /archived \(1\)/i });
+    await expect(archivedToggle).toBeVisible({ timeout: 30_000 });
+
+    // The laptop takes it back out, and the phone follows on its next launch.
+    await archivedToggle.click();
+    await toggleArchive(
+      laptop,
+      laptop.getByRole('list', { name: /archived trips/i }),
+      /^unarchive$/i,
+    );
+    await expect
+      .poll(() => stub.tripArchives.map((row) => row.archived), {
+        timeout: 30_000,
+        intervals: [250],
+      })
+      .toEqual([false]);
+
+    await phone.reload();
+    await expect(phone.getByText(TRIP.name).first()).toBeVisible({ timeout: 20_000 });
+    await expect(phone.getByRole('button', { name: /archived \(1\)/i })).toHaveCount(0, {
+      timeout: 30_000,
+    });
+  });
+});

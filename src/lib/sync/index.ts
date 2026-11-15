@@ -39,6 +39,12 @@ export {
 } from './invites';
 export { syncGuestGroups, type GuestGroupSyncResult } from './guest-groups';
 export {
+  canSyncTripArchive,
+  syncTripArchives,
+  type TripArchiveSyncResult,
+} from './trip-archives';
+export { TripArchiveSync } from './TripArchiveSync';
+export {
   GuestGroupSync,
   useGuestGroupSync,
   type GuestGroupSyncContextValue,

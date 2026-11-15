@@ -592,16 +592,16 @@ describe('setTripArchived', () => {
     expect(await db.rooms.get(room.id)).toBeDefined();
   });
 
-  it('stamps updatedAt', async () => {
+  it('stamps archivedUpdatedAt and leaves the shared updatedAt alone', async () => {
     const trip = await createTrip(createValidTripData());
-    vi.spyOn(dbUtils, 'updateTimestamp').mockReturnValue({
-      updatedAt: (trip.updatedAt + 1000) as Trip['updatedAt'],
-    });
+    const stamp = (trip.updatedAt + 1000) as Trip['updatedAt'];
+    vi.spyOn(dbUtils, 'now').mockReturnValue(stamp);
 
     await setTripArchived(trip.id, true);
 
     const found = await getTripById(trip.id);
-    expect(found?.updatedAt).toBe(trip.updatedAt + 1000);
+    expect(found?.archivedUpdatedAt).toBe(stamp);
+    expect(found?.updatedAt).toBe(trip.updatedAt);
   });
 
   it('throws for a trip that does not exist', async () => {

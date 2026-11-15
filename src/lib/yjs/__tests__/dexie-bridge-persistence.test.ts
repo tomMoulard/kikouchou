@@ -281,7 +281,6 @@ describe('populateDocFromDexie', () => {
     await db.trips.update(tripId, {
       currency: 'EUR',
       description: 'By the sea',
-      archived: true,
       photoId: 'coverPhoto0001' as PhotoId,
     });
     const doc = new Y.Doc();
@@ -291,7 +290,6 @@ describe('populateDocFromDexie', () => {
     const meta = doc.getMap('meta');
     expect(meta.get('currency')).toBe('EUR');
     expect(meta.get('description')).toBe('By the sea');
-    expect(meta.get('archived')).toBe(true);
     expect(meta.get('photoId')).toBe('coverPhoto0001');
   });
 
@@ -308,8 +306,9 @@ describe('populateDocFromDexie', () => {
     expect(meta.get('endDate')).toBe('');
   });
 
-  it('claims nothing about a trip that is not archived', async () => {
+  it('keeps the archived flag out of the document, because it is per account', async () => {
     const tripId = await makeTrip();
+    await db.trips.update(tripId, { archived: true });
     const doc = new Y.Doc();
 
     await populateDocFromDexie(doc, tripId);

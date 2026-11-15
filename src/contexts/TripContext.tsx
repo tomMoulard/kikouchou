@@ -65,8 +65,9 @@ function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
     // Whether this device reads the trip through an invite link. Cleared when
     // the viewer signs in, and every "read-only" control in the app follows it.
     a.viewerToken === b.viewerToken &&
-    // Whether the trip has been put away. A member archiving it elsewhere has
-    // to move the card into the archived section here, which needs a re-render.
+    // Whether the trip has been put away. The same account archiving it on
+    // another device has to move the card into the archived section here,
+    // which needs a re-render.
     a.archived === b.archived &&
     // The cover photo. A member replacing it elsewhere must change the card.
     a.photoId === b.photoId

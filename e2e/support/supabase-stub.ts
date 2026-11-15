@@ -143,6 +143,17 @@ interface GuestGroupRow {
   updated_at: string;
 }
 
+/**
+ * `public.trip_archives`. One row per (account, trip), private to the account,
+ * written only for a trip the account belongs to.
+ */
+interface TripArchiveRow {
+  user_id: string;
+  trip_id: string;
+  archived: boolean;
+  updated_at: string;
+}
+
 interface UpdateRow {
   id: number;
   trip_id: string;
@@ -209,6 +220,7 @@ export class SupabaseStub {
   updates: UpdateRow[] = [];
   snapshots: SnapshotRow[] = [];
   guestGroups: GuestGroupRow[] = [];
+  tripArchives: TripArchiveRow[] = [];
   pushSubscriptions: PushSubscriptionRow[] = [];
   /**
    * Published trip templates, by token.
@@ -490,6 +502,12 @@ export class SupabaseStub {
         return;
       case 'POST guest_groups':
         await this.upsertGuestGroups(route);
+        return;
+      case 'GET trip_archives':
+        await this.selectTripArchives(route, url);
+        return;
+      case 'POST trip_archives':
+        await this.upsertTripArchive(route);
         return;
       default:
         await this.fail(route, 404, `stub has no handler for ${method} ${rest}`);
@@ -808,6 +826,55 @@ export class SupabaseStub {
     }
 
     await this.representation(route, written);
+  }
+
+  /**
+   * `accounts read their trip archives`: the caller's rows, and nobody else's,
+   * whatever `user_id` filter the client sent.
+   */
+  private async selectTripArchives(route: Route, url: URL): Promise<void> {
+    const caller = this.callerId(route);
+    const userId = operand(url.searchParams.get('user_id'));
+
+    const rows = this.tripArchives.filter(
+      (row) => row.user_id === caller && (userId === null || userId === caller),
+    );
+
+    await this.representation(route, rows);
+  }
+
+  /**
+   * `on conflict (user_id, trip_id) do update`, as the client sends it. The
+   * policy's two halves: the row is the caller's own, and the caller is on the
+   * trip.
+   */
+  private async upsertTripArchive(route: Route): Promise<void> {
+    const caller = this.callerId(route);
+    const raw = route.request().postData();
+    const row = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
+    const tripId = String(row.trip_id ?? '');
+
+    if (row.user_id !== caller || !this.isMember(tripId, caller)) {
+      await this.rlsViolation(route, 'trip_archives');
+      return;
+    }
+
+    const written: TripArchiveRow = {
+      user_id: caller,
+      trip_id: tripId,
+      archived: row.archived === true,
+      updated_at: String(row.updated_at ?? new Date().toISOString()),
+    };
+    const existing = this.tripArchives.findIndex(
+      (entry) => entry.user_id === caller && entry.trip_id === tripId,
+    );
+    if (existing === -1) {
+      this.tripArchives.push(written);
+    } else {
+      this.tripArchives[existing] = written;
+    }
+
+    await this.representation(route, [written]);
   }
 
   private publicInvite(invite: InviteRow) {

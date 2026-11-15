@@ -14,6 +14,7 @@ import {
   createShareId,
   createTimestamps,
   createTripId,
+  now,
   updateTimestamp,
 } from '@/lib/db/utils';
 import {
@@ -465,6 +466,11 @@ export async function getTripsByLocation(query: string): Promise<Trip[]> {
  * neither: it is one flag toggled from a menu on the list, and it has no
  * business walking the assignments of a trip nobody opened.
  *
+ * Archiving is personal (see `Trip.archived`), so it stamps
+ * `archivedUpdatedAt`, the input of the per-account sync, and leaves
+ * `updatedAt` alone. `updatedAt` travels in the shared trip document, and a
+ * personal action must not show up there as an edit for every member.
+ *
  * @param id - The trip's unique identifier
  * @param archived - `true` to archive the trip, `false` to restore it
  * @throws {Error} If no trip with that id exists
@@ -481,7 +487,7 @@ export async function setTripArchived(
 ): Promise<void> {
   const updatedCount = await db.trips.update(id, {
     archived,
-    ...updateTimestamp(),
+    archivedUpdatedAt: now(),
   });
 
   if (updatedCount === 0) {

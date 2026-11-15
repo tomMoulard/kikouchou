@@ -204,6 +204,35 @@ export type Database = {
           },
         ]
       }
+      trip_archives: {
+        Row: {
+          archived: boolean
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived: boolean
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Update: {
+          archived?: boolean
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_archives_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_doc_snapshots: {
         Row: {
           state: string

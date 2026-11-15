@@ -23,7 +23,7 @@ import { MAX_EXTRA_STAYS, MAX_LENGTHS } from '@/lib/db/sanitize';
 import { isDexieTrustedMirror, syncDocToDexie } from '@/lib/yjs/dexie-bridge';
 import { DOC_SCHEMA_VERSION, upsertDocEntity } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
-import type { Person, TripId } from '@/types';
+import type { Person, TripId, UnixTimestamp } from '@/types';
 
 // ============================================================================
 // Helpers
@@ -516,39 +516,30 @@ describe('buildTripRecord — remote field validation', () => {
     expect((await db.trips.get(trip.id))?.description).toBeUndefined();
   });
 
-  it('archives the trip when a member archived it elsewhere', async () => {
+  it('ignores an archived flag another member wrote into the document', async () => {
     const trip = await makeTrip();
 
+    // Older builds wrote the flag into `meta`. Archiving is per account now,
+    // so another member's archive must not hide the trip here.
     await syncDocToDexie(makeDoc({ name: 'Brittany', archived: true }), trip.id);
-
-    expect((await db.trips.get(trip.id))?.archived).toBe(true);
-  });
-
-  it('takes the trip back out when the flag is gone from the document', async () => {
-    const trip = await makeTrip();
-    await syncDocToDexie(makeDoc({ name: 'Brittany', archived: true }), trip.id);
-
-    await syncDocToDexie(makeDoc({ name: 'Brittany' }), trip.id);
 
     expect((await db.trips.get(trip.id))?.archived).toBeUndefined();
   });
 
-  it('reads an explicit false as not archived', async () => {
+  it('keeps this account\'s own archived flag across a projection', async () => {
     const trip = await makeTrip();
+    await db.trips.update(trip.id, {
+      archived: true,
+      archivedUpdatedAt: 1_700_000_000_000 as UnixTimestamp,
+    });
 
+    // `put` replaces the row, so a flag the projection does not carry forward
+    // would pull the trip back into the active list on every remote update.
     await syncDocToDexie(makeDoc({ name: 'Brittany', archived: false }), trip.id);
 
-    expect((await db.trips.get(trip.id))?.archived).toBeUndefined();
-  });
-
-  it('refuses to archive a trip on a truthy value that is not true', async () => {
-    const trip = await makeTrip();
-
-    // Anything but a literal `true` leaves the trip where the group can see it:
-    // hiding a live trip because a peer sent 'yes' is the worse failure.
-    await syncDocToDexie(makeDoc({ name: 'Brittany', archived: 'yes' }), trip.id);
-
-    expect((await db.trips.get(trip.id))?.archived).toBeUndefined();
+    const stored = await db.trips.get(trip.id);
+    expect(stored?.archived).toBe(true);
+    expect(stored?.archivedUpdatedAt).toBe(1_700_000_000_000);
   });
 });
 
