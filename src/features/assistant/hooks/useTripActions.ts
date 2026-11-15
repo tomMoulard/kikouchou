@@ -8,7 +8,7 @@
  * @module features/assistant/hooks/useTripActions
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { type TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 
@@ -17,7 +17,11 @@ import {
   toAllDayActivityInstant,
 } from '@/features/activities/utils/activity-utils';
 
+import { useAuth } from '@/features/auth/AuthContext';
+import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
+import { TRIP_TEMPLATES_FLAG } from '@/features/sharing/components/TripTemplateCard';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
@@ -38,6 +42,7 @@ import {
   createTransport,
   createTrip,
   createVehicle,
+  deleteTrip,
   deleteActivityWithOwnershipCheck,
   deleteAssignmentWithOwnershipCheck,
   deleteExpenseWithOwnershipCheck,
@@ -104,6 +109,7 @@ import {
   type ActivityFormData,
   type ActivityId,
   type ChildSeatKind,
+  type DietaryTag,
   type Expense,
   type ExpenseCategory,
   type ExpenseFormData,
@@ -127,6 +133,7 @@ import {
   type RoomAssignmentId,
   type RoomBedLayout,
   type RoomFormData,
+  type RoomIcon,
   type RoomId,
   type ShoppingItemFormData,
   type ShoppingItemId,
@@ -141,6 +148,7 @@ import {
 
 import { MEAL_PLANNER_ACTIONS, type LLMAction, validateAction } from '../action-schema';
 import { type AssistantView, isAssistantView } from '../views';
+import { type GuestGroupWrites, runEditAction } from './trip-edit-actions';
 
 // ============================================================================
 // Type Definitions
@@ -206,6 +214,9 @@ function tryParseAction(content: string): LLMAction | null {
  * to everyone, and the only trace was a collapsed "N changes applied" line.
  */
 export const DESTRUCTIVE_ACTIONS: ReadonlySet<LLMAction['action']> = new Set<LLMAction['action']>([
+  'deleteTrip',
+  'removeGuestGroup',
+  'clearBoughtItems',
   'removeGuest',
   'removeRoom',
   'removeAssignment',
@@ -541,6 +552,9 @@ interface ActionBatchContext {
   readonly currentTrip: Trip | null;
   readonly notifySuccess: (onlineMessage: string) => void;
   readonly mealPlanner: boolean;
+  readonly templatesEnabled: boolean;
+  readonly userId: string | null;
+  readonly guestGroups: GuestGroupWrites;
 }
 
 /**
@@ -558,7 +572,15 @@ interface ActionBatchContext {
  */
 async function executeActionBatch(
   response: string,
-  { t, currentTrip, notifySuccess, mealPlanner }: ActionBatchContext,
+  {
+    t,
+    currentTrip,
+    notifySuccess,
+    mealPlanner,
+    templatesEnabled,
+    userId,
+    guestGroups,
+  }: ActionBatchContext,
 ): Promise<ActionExecutionResult> {
   // A view is drawn by the bubble, not run here. Leaving it out before the
   // viewer check below also lets a read-only trip show its planning.
@@ -758,6 +780,30 @@ async function executeActionBatch(
           break;
         }
 
+        case 'deleteTrip': {
+          // Listed in DESTRUCTIVE_ACTIONS, so the page asked first. The same
+          // steps as the trip settings page: the rows on this device, and the
+          // selection when it was this trip. Nothing on the server changes.
+          const trip = await getTripById(action.data.tripId as TripId);
+          if (!trip) {
+            notify.error(t('assistant.selectTripNotFound'));
+            break;
+          }
+          await deleteTrip(trip.id);
+          if (activeTripId === trip.id || currentTrip?.id === trip.id) {
+            await setCurrentTrip(undefined);
+          }
+          if (activeTripId === trip.id) {
+            activeTripId = null;
+          }
+          guestIdCache.delete(trip.id);
+          captureDeletion('trip_deleted', { source: 'assistant' });
+          notifySuccess(t('trips.deleted'));
+          executedCount++;
+          summaries.push(t('assistant.actionDetails.deleteTrip', { name: trip.name }));
+          break;
+        }
+
         case 'updateTrip': {
           const tid = activeTripId;
           if (!tid) {
@@ -773,6 +819,8 @@ async function executeActionBatch(
               'endDate',
               'description',
               'clearDates',
+              'currency',
+              'latitude',
             ] as const
           ).filter((k) => (k === 'clearDates' ? d[k] === true : d[k] !== undefined));
           if (keys.length === 0) {
@@ -792,10 +840,34 @@ async function executeActionBatch(
             notify.error(t('assistant.invalidDate'));
             break;
           }
+          // The code goes straight into `Intl.NumberFormat`, which throws on a
+          // malformed one, so only the ISO 4217 shape is accepted.
+          const currency =
+            typeof d.currency === 'string' ? d.currency.trim().toUpperCase() : undefined;
+          if (currency !== undefined && !/^[A-Z]{3}$/.test(currency)) {
+            notify.error(t('assistant.invalidCurrency'));
+            break;
+          }
+          // A pin is both halves or neither, inside the globe.
+          const hasLat = d.latitude !== undefined;
+          const hasLon = d.longitude !== undefined;
+          const lat = Number(d.latitude);
+          const lon = Number(d.longitude);
+          if (
+            hasLat !== hasLon ||
+            (hasLat &&
+              (!Number.isFinite(lat) ||
+                !Number.isFinite(lon) ||
+                Math.abs(lat) > 90 ||
+                Math.abs(lon) > 180))
+          ) {
+            notify.error(t('assistant.invalidMapPin'));
+            break;
+          }
 
           const fields = keys
             .map((k) =>
-              t(`assistant.actionDetails.tripField.${k}`, {
+              t(`assistant.actionDetails.tripField.${k === 'latitude' ? 'mapPin' : k}`, {
                 defaultValue: k,
               }),
             )
@@ -809,6 +881,9 @@ async function executeActionBatch(
               location: d.location as string,
               coordinates: undefined,
             }),
+            // After the location, so a new place with its pin keeps the pin.
+            ...(hasLat && { coordinates: { lat, lon } }),
+            ...(currency !== undefined && { currency }),
             ...(d.startDate !== undefined && { startDate: d.startDate as ISODateString }),
             ...(d.endDate !== undefined && { endDate: d.endDate as ISODateString }),
             // `null` is the repository's "remove": the trip goes back to having
@@ -858,6 +933,15 @@ async function executeActionBatch(
             ...(d.childSeat !== undefined && {
               childSeat: d.childSeat as ChildSeatKind,
             }),
+            // The diet fields exist where the meal planner does, like the
+            // guest form, which leaves them out while the flag is off.
+            ...(mealPlanner &&
+              Array.isArray(d.dietaryTags) &&
+              d.dietaryTags.length > 0 && {
+                dietaryTags: d.dietaryTags as DietaryTag[],
+              }),
+            ...(mealPlanner &&
+              typeof d.dietaryNote === 'string' && { dietaryNote: d.dietaryNote }),
           });
           guestIdCache.delete(tid);
           notifySuccess(t('persons.createSuccess'));
@@ -1088,7 +1172,7 @@ async function executeActionBatch(
             beds: nextBeds ?? existingRoom.bedLayouts ?? [],
             extraSpots: d.extraSpots === undefined ? existingRoom.extraSpots : d.extraSpots,
           });
-          const roomFields = ['name', 'capacity', 'beds', 'extraSpots', 'description'].filter(
+          const roomFields = ['name', 'capacity', 'beds', 'extraSpots', 'description', 'icon'].filter(
             (key) => d[key] !== undefined,
           );
           if (roomFields.length === 0) {
@@ -1111,6 +1195,8 @@ async function executeActionBatch(
             name: mergedRoom.name,
             capacity: mergedRoom.capacity,
             description: mergedRoom.description,
+            // The validator already held the icon to ROOM_ICONS.
+            ...(typeof d.icon === 'string' && { icon: d.icon as RoomIcon }),
             ...(touchesBeds
               ? { bedLayouts: mergedRoom.bedLayouts, extraSpots: mergedRoom.extraSpots }
               : {}),
@@ -1243,6 +1329,8 @@ async function executeActionBatch(
             transportMode: d.transportMode as TransportMode | undefined,
             transportNumber: d.transportNumber as string | undefined,
             needsPickup: (d.needsPickup as boolean | undefined) ?? false,
+            ...(typeof d.startLocation === 'string' && { startLocation: d.startLocation }),
+            ...(typeof d.notes === 'string' && { notes: d.notes }),
           });
           notifySuccess(t('transports.createSuccess'));
           executedCount++;
@@ -1971,6 +2059,7 @@ async function executeActionBatch(
             kind,
             category: expenseCategoryOf(d.category),
             title: String(d.title ?? ''),
+            ...(typeof d.description === 'string' && { description: d.description }),
             // A receipt typed into a chat is nearly always today's, and a
             // line with no day cannot be filed by the index every read uses.
             date: ((d.date as ISODateString | undefined) ??
@@ -2047,8 +2136,13 @@ async function executeActionBatch(
             d.beneficiaryIds !== undefined || d.shares !== undefined;
 
           const merged: ExpenseFormData = {
-            kind: existing.kind,
-            category: existing.category,
+            kind:
+              d.kind === undefined ? existing.kind : (d.kind as ExpenseFormData['kind']),
+            category:
+              d.category === undefined ? existing.category : expenseCategoryOf(d.category),
+            ...(d.description === undefined
+              ? existing.description !== undefined && { description: existing.description }
+              : { description: String(d.description) }),
             title: d.title === undefined ? existing.title : String(d.title),
             date:
               d.date === undefined
@@ -2294,8 +2388,25 @@ async function executeActionBatch(
           break;
         }
 
-        default:
-          console.warn('[AI Assistant] Unknown action:', action);
+        default: {
+          // The edits that came later live in `trip-edit-actions.ts`, so
+          // this switch does not grow without end.
+          const lines = await runEditAction(action, {
+            t,
+            tripId: activeTripId,
+            mealPlanner,
+            templatesEnabled,
+            userId,
+            notifySuccess,
+            guestGroups,
+          });
+          if (lines === null) {
+            console.warn('[AI Assistant] Unknown action:', action);
+          } else if (lines.length > 0) {
+            executedCount++;
+            summaries.push(...lines);
+          }
+        }
       }
     } catch (err) {
       console.error('[AI Assistant] Failed to execute action:', action, err);
@@ -2328,11 +2439,35 @@ export function useTripActions(): UseTripActionsReturn {
   // not offer them elsewhere, but a model can still write one, so this is the
   // gate that holds.
   const mealPlanner = useMealPlannerEnabled();
+  // Publishing a template is the enterprise cohort's, like the card on the
+  // settings page. Undecided reads as off.
+  const templatesEnabled = useFeatureFlag(TRIP_TEMPLATES_FLAG) === true;
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  // Through the hook, not the repository: it pushes each change to the
+  // account and remembers a deletion, which the sync needs.
+  const { createGroupFromPersons, updateGroup, deleteGroup } = useGuestGroups();
+  const guestGroups = useMemo(
+    (): GuestGroupWrites => ({
+      createFromPersons: createGroupFromPersons,
+      update: updateGroup,
+      remove: deleteGroup,
+    }),
+    [createGroupFromPersons, deleteGroup, updateGroup],
+  );
 
   const executeActions = useCallback(
     (response: string): Promise<ActionExecutionResult> =>
-      executeActionBatch(response, { t, currentTrip, notifySuccess, mealPlanner }),
-    [currentTrip, mealPlanner, notifySuccess, t],
+      executeActionBatch(response, {
+        t,
+        currentTrip,
+        notifySuccess,
+        mealPlanner,
+        templatesEnabled,
+        userId,
+        guestGroups,
+      }),
+    [currentTrip, guestGroups, mealPlanner, notifySuccess, t, templatesEnabled, userId],
   );
 
   return { executeActions };

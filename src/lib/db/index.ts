@@ -271,6 +271,7 @@ export {
   // Trip integration
   importGuestGroupMembers,
   createGuestGroupFromPersons,
+  personToGroupMember,
 } from './repositories/guest-group-repository';
 export type { ImportGuestGroupResult } from './repositories/guest-group-repository';
 

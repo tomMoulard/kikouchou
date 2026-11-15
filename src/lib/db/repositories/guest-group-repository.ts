@@ -293,17 +293,30 @@ export async function createGuestGroupFromPersons(
 ): Promise<GuestGroup> {
   return createGuestGroup({
     name,
-    members: persons.map((person) => ({
-      name: person.name,
-      color: person.color,
-      ...(getPersonHeadcount(person) > 1 ? { headcount: person.headcount } : {}),
-      ...(person.notes ? { notes: person.notes } : {}),
-      ...(person.phone ? { phone: person.phone } : {}),
-      ...(person.childSeat ? { childSeat: person.childSeat } : {}),
-      ...(person.dietaryTags && person.dietaryTags.length > 0
-        ? { dietaryTags: [...person.dietaryTags] }
-        : {}),
-      ...(person.dietaryNote ? { dietaryNote: person.dietaryNote } : {}),
-    })),
+    members: persons.map(personToGroupMember),
   });
+}
+
+/**
+ * The group member a guest becomes: who they are, never where they sleep.
+ *
+ * Each guest contributes its name, colour, headcount, notes, phone, child seat
+ * and diet; nothing trip-specific (stay dates, rooms, transports) comes along.
+ *
+ * @param person - A guest of some trip
+ * @returns The member to store in a group
+ */
+export function personToGroupMember(person: Person): GuestGroupMemberFormData {
+  return {
+    name: person.name,
+    color: person.color,
+    ...(getPersonHeadcount(person) > 1 ? { headcount: person.headcount } : {}),
+    ...(person.notes ? { notes: person.notes } : {}),
+    ...(person.phone ? { phone: person.phone } : {}),
+    ...(person.childSeat ? { childSeat: person.childSeat } : {}),
+    ...(person.dietaryTags && person.dietaryTags.length > 0
+      ? { dietaryTags: [...person.dietaryTags] }
+      : {}),
+    ...(person.dietaryNote ? { dietaryNote: person.dietaryNote } : {}),
+  };
 }

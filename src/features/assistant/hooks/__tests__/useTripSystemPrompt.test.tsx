@@ -631,10 +631,9 @@ describe('useTripSystemPrompt', () => {
   });
 
   it('keeps the trip-independent floor within its prompt budget', async () => {
-    // Raised from 5600 by the project owner's decision on 2026-11-15, with the
-    // action catalogue's own ceiling: room beds (`updateRoom`, and `beds` and
-    // `extraSpots` on `addRoom`) cost ~175 characters of that catalogue.
-    const MAX_FLOOR_CHARS = 5800;
+    // 5600 until 2026-11-15, when the project owner raised it so the
+    // assistant could edit everything the app lets a person edit.
+    const MAX_FLOOR_CHARS = 7900;
 
     const { tripId } = await seedTrip();
     const result = await renderWithTrip(tripId);

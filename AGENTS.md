@@ -195,7 +195,9 @@ the session. They were not raised when the models moved to the server. Two
 guards keep that honest, and both are meant to be rewritten to fit rather
 than raised:
 
-- `action-schema.test.ts` caps the generated action prompt (~1000 tokens).
+- `action-schema.test.ts` caps the generated action prompt (about 1800
+  tokens since 2026-11-15, when the owner chose an assistant that can edit
+  everything the app lets a person edit over a smaller prompt).
 - `useTripSystemPrompt.test.tsx` caps the trip-independent floor.
 
 So: never state a rule in `useTripSystemPrompt.ts` that `action-schema.ts`
@@ -210,7 +212,16 @@ member's guest names and notes, and a small model does what the text in front
 of it says. `listDestructiveActions` names the `remove*` blocks in an answer
 and `AssistantPage` asks before any of them run; a declined answer stands as
 words with `actionsDeclined` set. A new `remove*` action goes in
-`DESTRUCTIVE_ACTIONS` in `useTripActions.ts`.
+`DESTRUCTIVE_ACTIONS` in `useTripActions.ts`, and so does any other action
+that deletes (`deleteTrip`, `clearBoughtItems`), with its
+`assistant.destructive.*` label in both locales.
+
+**Later edit actions live in `hooks/trip-edit-actions.ts`.** The switch in
+`useTripActions.ts` hands any action it does not know to `runEditAction`, so
+the switch stops growing. The invite and template actions call the same
+functions as the share dialog and the template card
+(`features/sharing/utils/invite-link.ts`, `template-link.ts`), so the
+assistant hands out the link the screen would have shown.
 
 ### A view is a block that writes nothing
 

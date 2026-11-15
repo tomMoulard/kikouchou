@@ -20,22 +20,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/features/auth/AuthContext';
-import { getCurrentLanguage } from '@/lib/i18n';
-import { resolveLinkOrigin } from '@/lib/platform';
-import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
-import {
-  buildTemplateCardUrl,
-  buildTemplatePayload,
-  buildTemplateUrl,
-  publishTemplate,
-  templatePhotoIds,
-  readTemplateState,
-  unpublishTemplate,
-  uploadTemplatePhotos,
-} from '@/lib/sync/templates';
+import { readTemplateState } from '@/lib/sync/templates';
 import type { Trip } from '@/types';
+
+import {
+  publishTripTemplate,
+  templateCardUrlFor,
+  templateUrlFor,
+  unpublishTripTemplate,
+} from '../utils/template-link';
 
 // ============================================================================
 // Type Definitions
@@ -83,23 +78,11 @@ export interface UseTripTemplateLinkResult {
 // Helpers
 // ============================================================================
 
-/** The preview service, and the language the publisher is reading in. */
-function shareFor(): { readonly origin: string; readonly language: string } {
-  return {
-    origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
-    language: getCurrentLanguage(),
-  };
-}
-
 /** The link for a token. */
-function urlFor(token: string): string {
-  return buildTemplateUrl(resolveLinkOrigin(window.location.origin), import.meta.env.BASE_URL || '/', token, shareFor());
-}
+const urlFor = templateUrlFor;
 
 /** The link's card for a token, or null without a preview service. */
-function cardUrlFor(token: string): string | null {
-  return buildTemplateCardUrl(token, shareFor());
-}
+const cardUrlFor = templateCardUrlFor;
 
 // ============================================================================
 // Hook
@@ -221,57 +204,16 @@ export function useTripTemplateLink(
         }
         return;
       }
-      const remote = await ensureRemoteTrip(client, userId, trip.id);
-      if (remote.status !== 'ready') {
-        if (isMountedRef.current) {
-          setState({
-            kind: 'error',
-            message: remote.status === 'error' ? remote.message : 'the trip is not on the server',
-          });
-        }
-        captureEvent('trip_template_publish_failed', { reason: remote.status });
+      // Shared with the assistant's publishTemplate action.
+      const result = await publishTripTemplate(client, userId, trip);
+      if (!isMountedRef.current) {
         return;
       }
-
-      const existing = await readTemplateState(client, remote.remoteTripId);
-      const payload = await buildTemplatePayload(trip);
-      const result = await publishTemplate(
-        client,
-        remote.remoteTripId,
-        payload,
-        existing.status === 'ok' ? existing.state.token : null,
+      setState(
+        result.status === 'published'
+          ? { kind: 'published', url: result.url, cardUrl: result.cardUrl, token: result.token }
+          : { kind: 'error', message: result.message },
       );
-
-      if (result.status === 'error') {
-        if (isMountedRef.current) {
-          setState({ kind: 'error', message: result.message });
-        }
-        captureEvent('trip_template_publish_failed', { reason: 'write' });
-        return;
-      }
-      // After the row, because the read rule checks the payload. A photo that
-      // could not be copied is retried by the next refresh, not reported as a
-      // failed publish: the link works without it.
-      const photosFailed = await uploadTemplatePhotos(
-        client,
-        { id: trip.id, remoteTripId: remote.remoteTripId },
-        payload,
-      );
-      captureEvent('trip_template_published', {
-        room_count: payload.rooms.length,
-        photo_count: templatePhotoIds(payload).length,
-        photos_failed: photosFailed,
-        has_description: payload.description !== null,
-        republished: existing.status === 'ok' && existing.state.isTemplate,
-      });
-      if (isMountedRef.current) {
-        setState({
-          kind: 'published',
-          url: urlFor(result.token),
-          cardUrl: cardUrlFor(result.token),
-          token: result.token,
-        });
-      }
     } catch (error: unknown) {
       console.error('Failed to publish the trip template:', error);
       if (isMountedRef.current) {
@@ -300,20 +242,16 @@ export function useTripTemplateLink(
         }
         return;
       }
-      const remote = await ensureRemoteTrip(client, userId, trip.id);
-      if (remote.status !== 'ready') {
+      // Shared with the assistant's unpublishTemplate action.
+      const result = await unpublishTripTemplate(client, userId, trip.id);
+      if (!isMountedRef.current || result.status === 'not-on-server') {
         return;
       }
-      const result = await unpublishTemplate(client, remote.remoteTripId);
-      if (!isMountedRef.current) {
-        return;
-      }
-      if (result.status === 'error') {
-        setState({ kind: 'error', message: result.message });
-        return;
-      }
-      captureEvent('trip_template_unpublished');
-      setState({ kind: 'unpublished' });
+      setState(
+        result.status === 'error'
+          ? { kind: 'error', message: result.message }
+          : { kind: 'unpublished' },
+      );
     } catch (error: unknown) {
       console.error('Failed to take the trip template down:', error);
       if (isMountedRef.current) {

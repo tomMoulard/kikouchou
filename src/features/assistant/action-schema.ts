@@ -11,6 +11,8 @@
 import {
   ACTIVITY_CATEGORIES,
   CHILD_SEAT_KINDS,
+  DIETARY_TAGS,
+  ROOM_ICONS,
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
   MEAL_KINDS,
@@ -149,9 +151,23 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       },
     },
   },
+  // Deletes the trip and everything in it, on this device. Listed in
+  // DESTRUCTIVE_ACTIONS, so the page asks before it runs.
+  {
+    action: 'deleteTrip',
+    label: 'Delete a trip',
+    fields: {
+      tripId: {
+        type: 'string',
+        required: true,
+        description: 'Trip id (copy from All trips)',
+        example: '<trip id>',
+      },
+    },
+  },
   {
     action: 'updateTrip',
-    label: 'Edit the trip; a new location clears its pin',
+    label: 'Edit the trip; a new location without latitude clears its pin',
     fields: {
       name: {
         type: 'string',
@@ -188,6 +204,24 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: false,
         description: 'true removes both dates',
         example: false,
+      },
+      currency: {
+        type: 'string',
+        required: false,
+        description: 'ISO 4217 code of the accounts',
+        example: 'EUR',
+      },
+      latitude: {
+        type: 'number',
+        required: false,
+        description: 'Map pin latitude, with longitude',
+        example: 48.85,
+      },
+      longitude: {
+        type: 'number',
+        required: false,
+        description: 'Map pin longitude',
+        example: 2.35,
       },
     },
   },
@@ -239,6 +273,19 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: false,
         description: 'Child seat needed: rearFacing, forwardFacing or booster',
         example: 'booster',
+      },
+      dietaryTags: {
+        type: 'string[]',
+        required: false,
+        description: 'Diets followed, the meal planner counts them',
+        example: ['vegetarian'],
+        enum: DIETARY_TAGS,
+      },
+      dietaryNote: {
+        type: 'string',
+        required: false,
+        description: 'Food remarks',
+        example: 'No nuts',
       },
     },
   },
@@ -293,6 +340,146 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: true,
         description: 'ID of the guest (from the guests list)',
         example: '<guest id>',
+      },
+    },
+  },
+  {
+    action: 'updateGuest',
+    label: 'Edit a guest',
+    fields: {
+      personId: {
+        type: 'string',
+        required: true,
+        description: 'Guest id',
+        example: '<guest id>',
+      },
+      name: {
+        type: 'string',
+        required: false,
+        description: 'New name',
+        example: 'Alice',
+      },
+      stayStartDate: {
+        type: 'string',
+        required: false,
+        description: 'Stay start date (YYYY-MM-DD)',
+        example: '2026-04-20',
+      },
+      stayEndDate: {
+        type: 'string',
+        required: false,
+        description: 'Stay end date (YYYY-MM-DD)',
+        example: '2026-04-25',
+      },
+      clearStay: {
+        type: 'boolean',
+        required: false,
+        description: 'true removes the stated stay',
+        example: false,
+      },
+      headcount: {
+        type: 'number',
+        required: false,
+        description: 'People this entry stands for',
+        example: 2,
+      },
+      phone: {
+        type: 'string',
+        required: false,
+        description: 'Phone number',
+        example: '+33 6 12 34 56 78',
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Notes',
+        example: 'Vegetarian',
+      },
+      childSeat: {
+        type: 'string',
+        required: false,
+        description: 'rearFacing, forwardFacing, booster or none',
+        example: 'booster',
+      },
+      color: {
+        type: 'string',
+        required: false,
+        description: 'Colour, #rrggbb',
+        example: '#ef4444',
+      },
+      dietaryTags: {
+        type: 'string[]',
+        required: false,
+        description: 'Diets followed, the meal planner counts them',
+        example: ['vegetarian'],
+        enum: DIETARY_TAGS,
+      },
+      dietaryNote: {
+        type: 'string',
+        required: false,
+        description: 'Food remarks',
+        example: 'No nuts',
+      },
+    },
+  },
+  // ---- Guest groups (saved rosters, per account) ---------------------------
+  {
+    action: 'createGuestGroup',
+    label: 'Save guests of this trip as a group',
+    fields: {
+      name: {
+        type: 'string',
+        required: true,
+        description: 'Group name',
+        example: 'The cousins',
+      },
+      personIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Guests to save; everybody when omitted',
+        example: ['<guest id>'],
+      },
+    },
+  },
+  {
+    action: 'updateGuestGroup',
+    label: 'Rename a group or add guests to it',
+    fields: {
+      groupId: {
+        type: 'string',
+        required: true,
+        description: 'Group id',
+        example: '<group id>',
+      },
+      name: {
+        type: 'string',
+        required: false,
+        description: 'New name',
+        example: 'The cousins',
+      },
+      addPersonIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Guests of this trip to add',
+        example: ['<guest id>'],
+      },
+      removeMemberIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Member ids to take out',
+        example: ['<member id>'],
+      },
+    },
+  },
+  {
+    action: 'removeGuestGroup',
+    label: 'Delete a saved group',
+    fields: {
+      groupId: {
+        type: 'string',
+        required: true,
+        description: 'Group id',
+        example: '<group id>',
       },
     },
   },
@@ -380,6 +567,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         description: 'Room description',
         example: 'Cozy room for two',
       },
+      icon: {
+        type: 'string',
+        required: false,
+        description: 'Icon',
+        example: 'bed-double',
+        enum: ROOM_ICONS,
+      },
     },
   },
   {
@@ -390,6 +584,18 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         type: 'string',
         required: true,
         description: 'ID of the room (from the rooms list)',
+        example: '<room id>',
+      },
+    },
+  },
+  {
+    action: 'duplicateRoom',
+    label: 'Copy a room',
+    fields: {
+      roomId: {
+        type: 'string',
+        required: true,
+        description: 'Room id',
         example: '<room id>',
       },
     },
@@ -435,6 +641,36 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: true,
         description: 'Assignment ID',
         example: '<assignment id>',
+      },
+    },
+  },
+  {
+    action: 'updateAssignment',
+    label: 'Move a room assignment',
+    fields: {
+      assignmentId: {
+        type: 'string',
+        required: true,
+        description: 'Assignment id',
+        example: '<assignment id>',
+      },
+      roomId: {
+        type: 'string',
+        required: false,
+        description: 'New room id',
+        example: '<room id>',
+      },
+      startDate: {
+        type: 'string',
+        required: false,
+        description: 'First night (YYYY-MM-DD)',
+        example: '2026-04-20',
+      },
+      endDate: {
+        type: 'string',
+        required: false,
+        description: 'Check-out day (YYYY-MM-DD)',
+        example: '2026-04-25',
       },
     },
   },
@@ -488,6 +724,18 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         description: 'Whether pickup/dropoff is needed',
         example: false,
       },
+      startLocation: {
+        type: 'string',
+        required: false,
+        description: 'Where the journey starts',
+        example: 'Lyon',
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Notes',
+        example: 'Seat 42',
+      },
     },
   },
   {
@@ -516,6 +764,81 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         type: 'string',
         required: true,
         description: 'Transport ID',
+        example: '<transport id>',
+      },
+    },
+  },
+  {
+    action: 'updateTransport',
+    label: 'Edit a leg; shared fields change for the whole train',
+    fields: {
+      transportId: {
+        type: 'string',
+        required: true,
+        description: 'Transport id',
+        example: '<transport id>',
+      },
+      type: {
+        type: 'string',
+        required: false,
+        description: 'Direction',
+        example: 'arrival',
+        enum: ['arrival', 'departure'],
+      },
+      datetime: {
+        type: 'string',
+        required: false,
+        description: 'Date and time (ISO 8601)',
+        example: '2026-04-20T14:00:00',
+      },
+      location: {
+        type: 'string',
+        required: false,
+        description: 'Where it arrives or leaves from',
+        example: 'Airport',
+      },
+      startLocation: {
+        type: 'string',
+        required: false,
+        description: 'Where the journey starts',
+        example: 'Lyon',
+      },
+      transportMode: {
+        type: 'string',
+        required: false,
+        description: 'Mode',
+        example: 'train',
+        enum: ['train', 'plane', 'car', 'bus', 'other'],
+      },
+      transportNumber: {
+        type: 'string',
+        required: false,
+        description: 'Train or flight number',
+        example: 'AF123',
+      },
+      needsPickup: {
+        type: 'boolean',
+        required: false,
+        description: 'Whether a pickup is needed',
+        example: false,
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Notes',
+        example: 'Seat 42',
+      },
+    },
+  },
+  // Takes one guest off a shared train and keeps their own leg.
+  {
+    action: 'leaveTransport',
+    label: 'Take a leg off its shared train',
+    fields: {
+      transportId: {
+        type: 'string',
+        required: true,
+        description: 'Transport id',
         example: '<transport id>',
       },
     },
@@ -704,10 +1027,55 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
     },
   },
   {
-    // No `updateVehicle`: its optional line would cost ~200 characters of a
-    // budget with 50 left, and a car entered wrong can be removed and re-added
-    // — deleting one detaches the rides that named it rather than cancelling
-    // them, so nobody loses a journey over a seat count.
+    action: 'updateVehicle',
+    label: 'Edit a car',
+    fields: {
+      vehicleId: {
+        type: 'string',
+        required: true,
+        description: 'Car id',
+        example: '<car id>',
+      },
+      name: {
+        type: 'string',
+        required: false,
+        description: 'New name',
+        example: 'Hired Espace',
+      },
+      ownerId: {
+        type: 'string',
+        required: false,
+        description: 'Owner guest id',
+        example: '<guest id>',
+      },
+      seatCount: {
+        type: 'number',
+        required: false,
+        description: 'Seats, driver included',
+        example: 7,
+      },
+      childSeats: {
+        type: 'string[]',
+        required: false,
+        description: 'Restraints carried, the whole list',
+        example: ['booster'],
+        enum: CHILD_SEAT_KINDS,
+      },
+      luggageNotes: {
+        type: 'string',
+        required: false,
+        description: 'Luggage room',
+        example: 'Big boot',
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Notes',
+        example: 'Automatic',
+      },
+    },
+  },
+  {
     action: 'removeVehicle',
     label: 'Remove a car',
     fields: {
@@ -994,6 +1362,12 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         description: 'Day paid (YYYY-MM-DD), today when omitted',
         example: '2026-04-20',
       },
+      description: {
+        type: 'string',
+        required: false,
+        description: 'Longer note',
+        example: 'Market and bakery',
+      },
     },
   },
   {
@@ -1049,6 +1423,25 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         description: 'Day paid (YYYY-MM-DD)',
         example: '2026-04-20',
       },
+      kind: {
+        type: 'string',
+        required: false,
+        description: 'A transfer pays one guest back',
+        example: 'expense',
+        enum: EXPENSE_KINDS,
+      },
+      category: {
+        type: 'string',
+        required: false,
+        description: 'Kind of spending',
+        example: 'groceries',
+      },
+      description: {
+        type: 'string',
+        required: false,
+        description: 'Longer note',
+        example: 'Market and bakery',
+      },
     },
   },
   {
@@ -1079,6 +1472,25 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         enum: ASSISTANT_VIEWS,
       },
     },
+  },
+  // ---- Sharing -------------------------------------------------------------
+  // Network writes: an account and a connection. The link goes in the change
+  // list so the user can copy it.
+  {
+    action: 'createInviteLink',
+    label: 'Make an invite link for this trip',
+    fields: {},
+  },
+  // Behind the `ent-trip-templates` flag, like the control on the settings page.
+  {
+    action: 'publishTemplate',
+    label: 'Publish this trip as a template link',
+    fields: {},
+  },
+  {
+    action: 'unpublishTemplate',
+    label: 'Withdraw the template link of this trip',
+    fields: {},
   },
   // ---- Meals (behind the `meal-planner` flag, see MEAL_PLANNER_ACTIONS) -----
   {
@@ -1187,6 +1599,47 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       },
     },
   },
+  {
+    action: 'updateShoppingItem',
+    label: 'Edit a shopping item, or mark it not bought',
+    fields: {
+      itemId: {
+        type: 'string',
+        required: true,
+        description: 'Shopping item id',
+        example: '<item id>',
+      },
+      name: {
+        type: 'string',
+        required: false,
+        description: 'What to buy',
+        example: 'Bread',
+      },
+      quantity: {
+        type: 'string',
+        required: false,
+        description: 'How much',
+        example: '2',
+      },
+      buyerId: {
+        type: 'string',
+        required: false,
+        description: 'Guest who buys it',
+        example: '<guest id>',
+      },
+      checked: {
+        type: 'boolean',
+        required: false,
+        description: 'false puts it back on the list',
+        example: false,
+      },
+    },
+  },
+  {
+    action: 'clearBoughtItems',
+    label: 'Remove every bought item from the list',
+    fields: {},
+  },
 ] as const;
 
 /**
@@ -1203,6 +1656,8 @@ export const MEAL_PLANNER_ACTIONS: ReadonlySet<string> = new Set([
   'addShoppingItem',
   'checkShoppingItem',
   'removeShoppingItem',
+  'updateShoppingItem',
+  'clearBoughtItems',
 ]);
 
 /**
@@ -1416,9 +1871,7 @@ export function generateActionPrompt(
     lines.push(
       // The envelope is shown once for the whole family, immediately above the
       // list, so the shape the model copies is still on screen next to it.
-      // "same shape, " was cut here to pay for archiveTrip and unarchiveTrip:
-      // the example it described sits on the very next line.
-      'Id-only, ids from above:',
+      'Id-only, same shape, ids from above:',
       `  ${buildExample(idOnlyExample)}`,
       `  ${idOnly
         .map((def) => `${def.action} ${Object.keys(def.fields).join('+')}`)

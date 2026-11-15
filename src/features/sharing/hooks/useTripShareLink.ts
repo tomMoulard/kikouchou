@@ -25,20 +25,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { captureEvent } from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
-import { getCurrentLanguage } from '@/lib/i18n';
-import { resolveLinkOrigin } from '@/lib/platform';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import {
-  buildInviteUrl,
-  createInvite,
-  inviteExpiryForTrip,
-  inviteOutlastsTrip,
-  isInviteUsable,
-  listInvites,
-} from '@/lib/sync/invites';
-import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
-import { uploadTripDocument } from '@/lib/sync/upload-document';
 import type { Trip } from '@/types';
+
+import { getTripInviteLink, inviteUrlFor } from '../utils/invite-link';
 
 // ============================================================================
 // Type Definitions
@@ -119,10 +109,7 @@ export function useTripShareLink(
       setState({
         kind: 'invite',
         token: viewerToken,
-        url: buildInviteUrl(resolveLinkOrigin(window.location.origin), import.meta.env.BASE_URL || '/', viewerToken, {
-          origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
-          language: getCurrentLanguage(),
-        }),
+        url: inviteUrlFor(viewerToken),
       });
       return;
     }
@@ -165,95 +152,13 @@ export function useTripShareLink(
         return;
       }
 
-      const remote = await ensureRemoteTrip(client, userId, tripId);
+      // The server steps live in `getTripInviteLink`, which the assistant's
+      // `createInviteLink` action shares, so both hand out the same link.
+      const result = await getTripInviteLink(client, userId, tripId, endDate);
       if (cancelled || !isMountedRef.current) {
         return;
       }
-      if (remote.status === 'unauthenticated') {
-        setState({ kind: 'needs-account' });
-        return;
-      }
-      if (remote.status !== 'ready') {
-        setState({
-          kind: 'error',
-          message:
-            remote.status === 'missing'
-              ? 'This trip is no longer on this device.'
-              : remote.message,
-        });
-        return;
-      }
-
-      // Put the document on the server before handing out a link to it.
-      //
-      // Sync is mounted for the open trip only, so a trip shared from the list
-      // while a different trip is open would otherwise get a server row and an
-      // invite with no document behind them — and the invitee would sit on
-      // "Getting the trip…" indefinitely, seeing the name and dates from the
-      // preview row and none of the contents.
-      //
-      // Awaited, and a failure is reported rather than swallowed: a link to an
-      // empty trip is worse than being told the share did not work.
-      const uploaded = await uploadTripDocument(client, tripId, remote.remoteTripId);
-      if (cancelled || !isMountedRef.current) {
-        return;
-      }
-      if (uploaded.status === 'error') {
-        captureEvent('trip_share_blocked', { reason: 'upload-failed' });
-        setState({
-          kind: 'error',
-          message: uploaded.message,
-        });
-        return;
-      }
-
-      // Reuse a live invite before minting another, so opening the dialog
-      // repeatedly does not litter the trip with links — but only one that will
-      // still work on the trip's last day. A link minted under the old
-      // one-month default can be live today and dead before the trip starts.
-      const existing = (await listInvites(client, remote.remoteTripId)).find(
-        (invite) =>
-          isInviteUsable(invite) && (endDate === null || inviteOutlastsTrip(invite, endDate)),
-      );
-      if (cancelled || !isMountedRef.current) {
-        return;
-      }
-
-      const token = existing
-        ? existing.token
-        : await mintToken(client, remote.remoteTripId, userId, endDate);
-      if (cancelled || !isMountedRef.current) {
-        return;
-      }
-      if (token === null) {
-        setState({ kind: 'error', message: 'Could not create a share link.' });
-        return;
-      }
-
-      // `reused` is the interesting half: minting a link every time somebody
-      // opens the dialog would litter the trip with live invites, so this
-      // distinguishes "shared again" from "shared for the first time".
-      captureEvent('trip_invite_ready', { reused: existing !== undefined });
-
-      setState({
-        kind: 'invite',
-        token,
-        // Read from `window` here, in a hook a component owns — `lib/` must not.
-        //
-        // The language goes into the link because the preview is rendered once,
-        // by a crawler, before anybody sees it: the card is drawn in whatever
-        // language the person sharing the trip is using, which is the best
-        // available guess at the language of the chat it is pasted into.
-        url: buildInviteUrl(
-          resolveLinkOrigin(window.location.origin),
-          import.meta.env.BASE_URL || '/',
-          token,
-          {
-            origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
-            language: getCurrentLanguage(),
-          },
-        ),
-      });
+      setState(result);
     };
 
     void run().catch((error: unknown) => {
@@ -275,29 +180,4 @@ export function useTripShareLink(
   }, []);
 
   return { state, refresh };
-}
-
-// ============================================================================
-// Internals
-// ============================================================================
-
-/**
- * Mints a link that lives until a week after the trip ends.
- *
- * Without an end date — a trip row that has not loaded — the invite keeps its
- * own one-month default, which is the pre-existing behaviour and never worse.
- */
-async function mintToken(
-  client: Parameters<typeof createInvite>[0],
-  remoteTripId: string,
-  userId: string,
-  endDate: string | null,
-): Promise<string | null> {
-  const created = await createInvite(
-    client,
-    remoteTripId,
-    userId,
-    endDate === null ? {} : { expiresAt: inviteExpiryForTrip(endDate) },
-  );
-  return created.status === 'created' ? created.invite.token : null;
 }
