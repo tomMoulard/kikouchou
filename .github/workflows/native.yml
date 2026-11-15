@@ -214,6 +214,24 @@ jobs:
           cp "$(first "$outputs/bundle/playRelease" '*.aab')" "out/kikouchou-${version}.aab"
           ls -l out
 
+      # android/app/build.gradle leaves libdatastore_shared_counter.so out of
+      # the app, because R8 removes the only code that loads it. If a
+      # dependency update brings that code back, the app would crash with
+      # UnsatisfiedLinkError, so the release code must not name the library.
+      - name: Check no code loads an excluded native library
+        run: |
+          aab="$(find out -name '*.aab' -print -quit)"
+          dex="$RUNNER_TEMP/dex"
+          rm -rf "$dex" && mkdir -p "$dex"
+          unzip -q "$aab" 'base/dex/*.dex' -d "$dex"
+          if grep -a -l 'datastore_shared_counter' "$dex"/base/dex/*.dex; then
+            echo "::error title=Excluded native library is loaded::The release code loads libdatastore_shared_counter.so, which android/app/build.gradle excludes. Remove the exclusion."
+            exit 1
+          fi
+          if unzip -l "$aab" | grep '\.so$'; then
+            echo "::warning title=Native code in the bundle::Play asks for debug symbols for these libraries."
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: android

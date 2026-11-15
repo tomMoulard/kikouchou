@@ -106,6 +106,19 @@ android {
         }
     }
 
+    // The one native library a dependency brings, from androidx DataStore,
+    // serves its multi-process mode. Nothing in this app uses that mode: R8
+    // removes the code that loads the library, so the library was dead
+    // weight. It also made Play warn on every bundle that its native code
+    // has no debug symbols, and Google ships it stripped, so there were none
+    // to give. native.yml fails if the release code loads it again, which
+    // would otherwise crash at run time with UnsatisfiedLinkError.
+    packaging {
+        jniLibs {
+            excludes += ['**/libdatastore_shared_counter.so']
+        }
+    }
+
     // A build that another person can reproduce byte for byte is what lets
     // F-Droid ship the APK this repository signed, rather than its own.
     dependenciesInfo {
