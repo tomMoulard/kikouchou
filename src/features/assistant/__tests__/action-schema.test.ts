@@ -411,6 +411,16 @@ describe('action-schema prompt budget', () => {
     ).toHaveLength(0);
   });
 
+  it('offers archiving a trip in both directions, as compact id lines', () => {
+    const lines = generateActionPrompt();
+    const compact = lines.filter((line) => line.includes('archiveTrip tripId'));
+
+    expect(compact).toHaveLength(1);
+    expect(compact[0]).toContain('unarchiveTrip tripId');
+    expect(validateAction({ action: 'archiveTrip', data: { tripId: 't1' } })).not.toBeNull();
+    expect(validateAction({ action: 'unarchiveTrip', data: {} })).toBeNull();
+  });
+
   it('still shows the envelope those compact lines are wrapped in', () => {
     const prompt = generateActionPrompt().join('\n');
 

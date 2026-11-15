@@ -70,6 +70,7 @@ import {
   setActivityParticipation,
   setCurrentTrip,
   setTransportRide,
+  setTripArchived,
   createSharedTransports,
   getSharedLegKey,
   getTransportsByTripId,
@@ -733,6 +734,26 @@ async function executeActionBatch(
           executedCount++;
           summaries.push(
             t('assistant.actionDetails.selectTrip', { name: trip.name }),
+          );
+          break;
+        }
+
+        case 'archiveTrip':
+        case 'unarchiveTrip': {
+          // Any trip in the list, like the card menu on the trip list. The
+          // flag is personal and never enters the trip document, so a viewer
+          // trip may be archived too, and the batch's trip does not move.
+          const trip = await getTripById(action.data.tripId as TripId);
+          if (!trip) {
+            notify.error(t('assistant.selectTripNotFound'));
+            break;
+          }
+          const archived = action.action === 'archiveTrip';
+          await setTripArchived(trip.id, archived);
+          notifySuccess(t('trips.updated'));
+          executedCount++;
+          summaries.push(
+            t(`assistant.actionDetails.${action.action}`, { name: trip.name }),
           );
           break;
         }

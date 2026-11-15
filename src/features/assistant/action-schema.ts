@@ -121,6 +121,34 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       },
     },
   },
+  // Archiving is personal (it syncs per account, not through the trip), so
+  // these take any trip from the list and leave the selection alone. Two
+  // id-only verbs rather than one action with a flag: an id-only action costs
+  // one short line of the catalogue, a flag would cost a block of its own.
+  {
+    action: 'archiveTrip',
+    label: 'Archive a trip',
+    fields: {
+      tripId: {
+        type: 'string',
+        required: true,
+        description: 'Trip id (copy from All trips)',
+        example: '<trip id>',
+      },
+    },
+  },
+  {
+    action: 'unarchiveTrip',
+    label: 'Take a trip out of the archive',
+    fields: {
+      tripId: {
+        type: 'string',
+        required: true,
+        description: 'Trip id (copy from All trips)',
+        example: '<trip id>',
+      },
+    },
+  },
   {
     action: 'updateTrip',
     label: 'Edit the trip; a new location clears its pin',
@@ -1388,7 +1416,9 @@ export function generateActionPrompt(
     lines.push(
       // The envelope is shown once for the whole family, immediately above the
       // list, so the shape the model copies is still on screen next to it.
-      'Id-only, same shape, ids from above:',
+      // "same shape, " was cut here to pay for archiveTrip and unarchiveTrip:
+      // the example it described sits on the very next line.
+      'Id-only, ids from above:',
       `  ${buildExample(idOnlyExample)}`,
       `  ${idOnly
         .map((def) => `${def.action} ${Object.keys(def.fields).join('+')}`)

@@ -1512,6 +1512,8 @@
     "actionDetails": {
       "createTrip": "Voyage créé : {{name}}",
       "selectTrip": "Passage au voyage : {{name}}",
+      "archiveTrip": "Voyage archivé : {{name}}",
+      "unarchiveTrip": "Voyage sorti des archives : {{name}}",
       "updateTrip": "Voyage mis à jour ({{fields}})",
       "tripField": {
         "name": "nom",

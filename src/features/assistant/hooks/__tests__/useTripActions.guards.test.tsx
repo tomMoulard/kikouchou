@@ -69,8 +69,9 @@ async function run(
 /**
  * One schema-valid payload for each action that needs a selected trip.
  *
- * `createTrip` and `selectTrip` are deliberately absent: they are the two that
- * work without one.
+ * `createTrip`, `selectTrip`, `archiveTrip` and `unarchiveTrip` are
+ * deliberately absent: they name their trip, or make one, and work without a
+ * selection.
  */
 const TRIP_SCOPED_ACTIONS: readonly { readonly action: string; readonly data: unknown }[] = [
   { action: 'updateTrip', data: { name: 'Renamed' } },
@@ -336,6 +337,47 @@ describe('useTripActions — no trip selected', () => {
     expect(outcome.count).toBe(2);
     const rooms = await db.rooms.where('tripId').equals(trip.id).toArray();
     expect(rooms.map((room) => room.name)).toEqual(['Attic']);
+  });
+});
+
+describe('useTripActions: archiving a trip', () => {
+  it('archives a trip from the list and takes it back out, without selecting it', async () => {
+    const trip = await createTrip({ name: 'Last summer' });
+    const result = await renderWithoutTrip();
+
+    const archived = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'archiveTrip', data: { tripId: trip.id } }),
+    );
+
+    expect(archived).toEqual({
+      count: 1,
+      summaries: ['assistant.actionDetails.archiveTrip'],
+    });
+    const stored = await db.trips.get(trip.id);
+    expect(stored?.archived).toBe(true);
+    // Stamped, so the per-account sync uploads it like a tap on the card.
+    expect(stored?.archivedUpdatedAt).toBeTypeOf('number');
+    expect(result.current.trip.currentTrip).toBeNull();
+
+    const restored = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'unarchiveTrip', data: { tripId: trip.id } }),
+    );
+
+    expect(restored.summaries).toEqual(['assistant.actionDetails.unarchiveTrip']);
+    expect((await db.trips.get(trip.id))?.archived).toBe(false);
+  });
+
+  it('reports a trip which is not there and writes nothing', async () => {
+    const result = await renderWithoutTrip();
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'archiveTrip', data: { tripId: 'no-such-trip' } }),
+    );
+
+    expect(outcome).toEqual({ count: 0, summaries: [] });
   });
 });
 

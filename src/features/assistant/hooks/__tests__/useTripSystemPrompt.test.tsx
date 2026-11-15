@@ -224,6 +224,19 @@ describe('useTripSystemPrompt', () => {
     expect(prompt).not.toContain('undefined');
   });
 
+  it('marks an archived trip in the trip list, and only that one', async () => {
+    const { tripId } = await seedTrip();
+    const old = await createTrip({ name: 'Old trip' });
+    await db.trips.update(old.id, { archived: true });
+    const result = await renderWithTrip(tripId);
+
+    const lines = result.current.prompt.systemPrompt.split('\n');
+    expect(lines.find((line) => line.includes(`\`${old.id}\``))).toContain('(archived)');
+    expect(lines.find((line) => line.includes(`\`${tripId}\``) && line.startsWith('- '))).not.toContain(
+      '(archived)',
+    );
+  });
+
   it('states the dates of a dated trip', async () => {
     const trip = await createTrip({
       name: 'Dated Trip',

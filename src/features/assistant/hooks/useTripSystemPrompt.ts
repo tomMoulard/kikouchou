@@ -648,10 +648,13 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       trips.length > 0
         ? [
             '',
-            '## All trips (use trip id with the selectTrip action)',
+            // No "(use the id with selectTrip)" any more: three actions take a
+            // tripId now, each line says `id:`, and the floor budget paid for
+            // archiveTrip and unarchiveTrip with those characters.
+            '## All trips',
             ...trips.map(
               (trip) =>
-                `- "${toPromptText(trip.name)}" — id: \`${trip.id}\` — ${trip.startDate && trip.endDate ? `${trip.startDate} to ${trip.endDate}` : 'no dates'}${trip.location ? ` — ${toPromptText(trip.location)}` : ''}`,
+                `- "${toPromptText(trip.name)}"${trip.archived === true ? ' (archived)' : ''} — id: \`${trip.id}\` — ${trip.startDate && trip.endDate ? `${trip.startDate} to ${trip.endDate}` : 'no dates'}${trip.location ? ` — ${toPromptText(trip.location)}` : ''}`,
             ),
           ]
         : [];
