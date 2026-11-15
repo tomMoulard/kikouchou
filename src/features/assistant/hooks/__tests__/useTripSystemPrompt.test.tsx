@@ -565,6 +565,32 @@ describe('useTripSystemPrompt', () => {
    * ceiling, not a target: it sits a little above what the prompt costs today,
    * so the next section still has to earn its place.
    */
+  it('lists the beds of a room in the form its actions write them back', async () => {
+    const { tripId } = await seedTrip();
+    await db.rooms.bulkAdd([
+      {
+        id: 'r-twin',
+        tripId,
+        name: 'Attic',
+        capacity: 3,
+        order: 0,
+        bedLayouts: [
+          { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+          { name: 'Together', beds: [{ kind: 'queen', count: 1 }] },
+        ],
+        extraSpots: 1,
+      },
+    ] as never);
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain(
+        '"Attic" (id: r-twin): sleeps 3; beds: Twin: 2 single 80x200 | Together: 1 queen; +1 extra spot(s)\n',
+      );
+    });
+  });
+
   it('says which room has a photo and that the trip has a cover, and only then', async () => {
     const { tripId } = await seedTrip();
     await db.rooms.bulkAdd([
@@ -575,9 +601,9 @@ describe('useTripSystemPrompt', () => {
     const result = await renderWithTrip(tripId);
 
     await waitFor(() => {
-      expect(result.current.prompt.systemPrompt).toContain('"Red room" (id: r-photo): 2 bed(s), has a photo');
+      expect(result.current.prompt.systemPrompt).toContain('"Red room" (id: r-photo): sleeps 2, has a photo');
     });
-    expect(result.current.prompt.systemPrompt).toContain('"Plain room" (id: r-plain): 1 bed(s)\n');
+    expect(result.current.prompt.systemPrompt).toContain('"Plain room" (id: r-plain): sleeps 1\n');
     expect(result.current.prompt.systemPrompt).not.toContain('Cover photo');
 
     await act(async () => {
@@ -592,7 +618,10 @@ describe('useTripSystemPrompt', () => {
   });
 
   it('keeps the trip-independent floor within its prompt budget', async () => {
-    const MAX_FLOOR_CHARS = 5600;
+    // Raised from 5600 by the project owner's decision on 2026-11-15, with the
+    // action catalogue's own ceiling: room beds (`updateRoom`, and `beds` and
+    // `extraSpots` on `addRoom`) cost ~175 characters of that catalogue.
+    const MAX_FLOOR_CHARS = 5800;
 
     const { tripId } = await seedTrip();
     const result = await renderWithTrip(tripId);

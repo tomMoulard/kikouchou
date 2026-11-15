@@ -48,6 +48,25 @@ message Room {
   int32 order = 5;
   optional string description = 6;
   optional string icon = 7;
+  // The ways the beds can be set up. Empty means the room describes no beds,
+  // and then capacity is the organiser's own number.
+  repeated BedLayout bed_layouts = 8;
+  // Sleeping spots that are not beds. 0 means none.
+  uint32 extra_spots = 9;
+}
+
+// One way a room's beds can be set up.
+message BedLayout {
+  optional string name = 1;
+  repeated Bed beds = 2;
+}
+
+// One line of a bed layout: count beds of one kind and size.
+message Bed {
+  string kind = 1;                 // "single", "double", "queen", ...
+  uint32 count = 2;
+  optional uint32 width_cm = 3;
+  optional uint32 length_cm = 4;
 }
 
 // A trip participant.

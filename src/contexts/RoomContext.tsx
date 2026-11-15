@@ -21,6 +21,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
+import { isDeepEqual } from '@/lib/yjs/doc-model';
 import {
   createRooms as repositoryCreateRooms,
   deleteRoomWithOwnershipCheck,
@@ -142,7 +143,10 @@ const compareRooms = (a: Room, b: Room): boolean =>
   // one until some unrelated field changed too.
   a.icon === b.icon &&
   // The room's photo, for the same reason.
-  a.photoId === b.photoId;
+  a.photoId === b.photoId &&
+  // The beds are nested arrays, so they are compared deeply.
+  a.extraSpots === b.extraSpots &&
+  isDeepEqual(a.bedLayouts, b.bedLayouts);
 
 /**
  * Compares two room arrays for equality based on IDs and all mutable properties.

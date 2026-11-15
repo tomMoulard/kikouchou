@@ -307,8 +307,13 @@ describe('action-schema', () => {
  * still a real one: it is 100
  * characters above what the catalogue costs today, so the next action pays for
  * itself by trimming, exactly as the ride actions did.
+ *
+ * Raised from 4300 to 4500 by the project owner's decision on 2026-11-15, for
+ * room beds: `updateRoom` and the `beds`/`extraSpots` fields of `addRoom` cost
+ * about 175 characters (~50 tokens per turn). Without them the assistant could
+ * read a room's beds but not describe or change them.
  */
-const MAX_ACTION_PROMPT_CHARS = 4300;
+const MAX_ACTION_PROMPT_CHARS = 4500;
 
 /**
  * The ceiling for the catalogue a device with the `meal-planner` flag on
@@ -318,8 +323,9 @@ const MAX_ACTION_PROMPT_CHARS = 4300;
  * 2026-10-29: the meal actions cost about 420 characters (~115 tokens per
  * turn), and only flagged devices pay it.
  * The ceiling above still holds every device without the flag.
+ * Raised by 200 with it on 2026-11-15, for the room beds.
  */
-const MAX_MEAL_PLANNER_ACTION_PROMPT_CHARS = 4750;
+const MAX_MEAL_PLANNER_ACTION_PROMPT_CHARS = 4950;
 
 describe('action-schema prompt budget', () => {
   it('documents every action without the meal planner within the prompt budget', () => {
@@ -373,6 +379,19 @@ describe('action-schema prompt budget', () => {
         }
       }
     }
+  });
+
+  it('offers updateRoom, with the beds and the extra spots', () => {
+    expect(
+      validateAction({
+        action: 'updateRoom',
+        data: { roomId: 'r1', beds: 'Twin: 2 single 80x200 | 1 queen', extraSpots: 1 },
+      }),
+    ).not.toBeNull();
+    expect(validateAction({ action: 'updateRoom', data: { beds: '1 queen' } })).toBeNull();
+    expect(
+      validateAction({ action: 'addRoom', data: { name: 'Attic', capacity: 2, beds: '1 queen' } }),
+    ).not.toBeNull();
   });
 
   it('spends one line, not one block, on an action that carries only ids', () => {

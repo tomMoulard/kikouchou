@@ -100,6 +100,40 @@ describe('rooms crossing the trust boundary', () => {
     expect((await db.rooms.get('r1'))?.capacity).toBe(1);
   });
 
+  it('keeps the beds a peer sends and computes the capacity from them', async () => {
+    const tripId = await makeTrip();
+    const bedLayouts = [
+      { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+      { name: 'Together', beds: [{ kind: 'queen', count: 1 }] },
+    ];
+    await project(tripId, 'rooms', { ...VALID_ROOM, capacity: 9, bedLayouts, extraSpots: 1 });
+
+    const room = await db.rooms.get('r1');
+    expect(room?.bedLayouts).toEqual(bedLayouts);
+    expect(room?.extraSpots).toBe(1);
+    expect(room?.capacity).toBe(3);
+  });
+
+  it('bounds the beds a peer sends, and drops them when nothing usable is left', async () => {
+    const tripId = await makeTrip();
+    await project(tripId, 'rooms', {
+      ...VALID_ROOM,
+      bedLayouts: [{ beds: [{ kind: 'bunk', count: 1e9 }] }],
+      extraSpots: 1e9,
+    });
+    expect((await db.rooms.get('r1'))?.capacity).toBe(MAX_ROOM_CAPACITY);
+
+    await project(tripId, 'rooms', {
+      ...VALID_ROOM,
+      bedLayouts: [{ beds: [{ kind: 'waterbed', count: 2 }] }],
+      extraSpots: 3,
+    });
+    const room = await db.rooms.get('r1');
+    expect(room).not.toHaveProperty('bedLayouts');
+    expect(room).not.toHaveProperty('extraSpots');
+    expect(room?.capacity).toBe(2);
+  });
+
   it('bounds a name and a description the local form would have capped', async () => {
     const tripId = await makeTrip();
     await project(tripId, 'rooms', {

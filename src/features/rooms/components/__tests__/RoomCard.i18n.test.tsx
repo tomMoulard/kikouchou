@@ -84,7 +84,7 @@ describe('RoomCard capacity wording', () => {
 });
 
 describe('RoomCard spoken name', () => {
-  it('names the room, its beds and how many are taken, and keeps up', async () => {
+  it('names the room, how many it sleeps and how many are taken, and keeps up', async () => {
     const room = { ...singleBedRoom, capacity: 4 };
     const props = {
       occupants: [],
@@ -99,10 +99,10 @@ describe('RoomCard spoken name', () => {
       { withProviders: false },
     );
 
-    expect(screen.getByRole('button', { name: 'Attic, 4 beds, 1 of 4 spots taken' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Attic, Sleeps 4, 1 of 4 spots taken' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', '1 of 4 spots taken');
 
     rerender(<RoomCard room={room} peakOccupancy={2} {...props} />);
-    expect(screen.getByRole('button', { name: 'Attic, 4 beds, 2 of 4 spots taken' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Attic, Sleeps 4, 2 of 4 spots taken' })).toBeInTheDocument();
   });
 });

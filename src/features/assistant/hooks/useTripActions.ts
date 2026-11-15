@@ -22,6 +22,7 @@ import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
 import { stayFollowingTravel } from '@/features/persons/utils/stay-from-travel';
+import { parseBedsText } from '@/features/rooms/utils/bed-text';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
@@ -76,6 +77,7 @@ import {
   updateActivityWithOwnershipCheck,
   updateExpenseWithOwnershipCheck,
   updateRideWithOwnershipCheck,
+  updateRoomWithOwnershipCheck,
   updateTrip,
 } from '@/lib/db';
 import { notify } from '@/lib/notifications';
@@ -85,6 +87,7 @@ import {
   ExpenseFormDataSchema,
   MealFormDataSchema,
   RideFormDataSchema,
+  RoomFormDataSchema,
   ShoppingItemFormDataSchema,
   TransportFormDataSchema,
   VehicleFormDataSchema,
@@ -92,6 +95,7 @@ import {
 import {
   CHILD_SEAT_KINDS,
   DEFAULT_EXPENSE_CATEGORY,
+  computeRoomCapacityFromBeds,
   EXPENSE_CATEGORIES,
   getDefaultPersonColor,
   type Activity,
@@ -120,6 +124,8 @@ import {
   type RideFormData,
   type RideId,
   type RoomAssignmentId,
+  type RoomBedLayout,
+  type RoomFormData,
   type RoomId,
   type ShoppingItemFormData,
   type ShoppingItemId,
@@ -291,6 +297,35 @@ function parseActionBlocks(response: string): LLMAction[] {
 // ============================================================================
 // Room Helpers
 // ============================================================================
+
+/**
+ * The room form data an `addRoom` or `updateRoom` action describes.
+ *
+ * With beds, the capacity is the beds', whatever number the model gave, and
+ * the extra spots count; without beds the number is the model's and the extra
+ * spots are dropped, the same rule the repository applies.
+ */
+function buildRoomFormData(input: {
+  readonly name: string;
+  readonly capacity: number;
+  readonly description: string | undefined;
+  readonly beds: readonly RoomBedLayout[] | undefined;
+  readonly extraSpots: unknown;
+}): RoomFormData {
+  const bedLayouts = input.beds !== undefined && input.beds.length > 0 ? [...input.beds] : undefined;
+  const extraSpots =
+    bedLayouts !== undefined && typeof input.extraSpots === 'number' && input.extraSpots > 0
+      ? input.extraSpots
+      : undefined;
+  const fromBeds = computeRoomCapacityFromBeds(bedLayouts, extraSpots);
+  return {
+    name: input.name,
+    capacity: fromBeds ?? input.capacity,
+    description: input.description,
+    bedLayouts,
+    extraSpots,
+  };
+}
 
 /**
  * Reads how many rooms an `addRoom` action asks for.
@@ -951,17 +986,31 @@ async function executeActionBatch(
           // as untrusted here as any other writer: a stray 5000 would be
           // 5000 rooms. Clamp rather than refuse, so "add three doubles"
           // still lands when the model spells the three oddly.
-           count = clampRoomCount(d.count),
+           count = clampRoomCount(d.count);
 
-           created = await createRooms(
-            tid,
-            {
-              name: d.name as string,
-              capacity: d.capacity as number,
-              description: d.description as string | undefined,
-            },
-            count,
-          );
+          // The beds arrive as one line of text (see `bed-text`). A line that
+          // names no known bed refuses the room rather than storing beds
+          // nobody described; the capacity is then the beds'.
+          const roomBeds = d.beds === undefined ? undefined : parseBedsText(String(d.beds));
+          if (roomBeds === null) {
+            notify.error(t('assistant.invalidRoom'));
+            break;
+          }
+          const roomData = buildRoomFormData({
+            name: d.name as string,
+            capacity: d.capacity as number,
+            description: d.description as string | undefined,
+            beds: roomBeds,
+            extraSpots: d.extraSpots,
+          });
+          const roomValidation = RoomFormDataSchema.safeParse(roomData);
+          if (!roomValidation.success) {
+            console.warn('[AI Assistant] Rejected addRoom:', roomValidation.error.issues);
+            notify.error(t('assistant.invalidRoom'));
+            break;
+          }
+
+          const created = await createRooms(tid, roomData, count);
           notifySuccess(
             created.length > 1
               ? t('rooms.createSuccessMany', { count: created.length })
@@ -973,15 +1022,86 @@ async function executeActionBatch(
               ? t('assistant.actionDetails.addRooms', {
                   count: created.length,
                   name: d.name as string,
-                  capacity: String(d.capacity),
+                  capacity: String(roomData.capacity),
                   defaultValue:
                     'Added {{count}} rooms: {{name}} ({{capacity}} guests max)',
                 })
               : t('assistant.actionDetails.addRoom', {
                   name: d.name as string,
-                  capacity: String(d.capacity),
+                  capacity: String(roomData.capacity),
                   defaultValue: 'Added room: {{name}} ({{capacity}} guests max)',
                 }),
+          );
+          break;
+        }
+
+        case 'updateRoom': {
+          const tid = activeTripId;
+          if (!tid) {
+            notify.error(t('assistant.noTripForAction'));
+            break;
+          }
+          const d = action.data as Record<string, unknown>;
+          const roomId = d.roomId as RoomId;
+          const existingRoom = await getRoomById(roomId);
+          if (!existingRoom || existingRoom.tripId !== tid) {
+            notify.error(t('assistant.roomNotFound'));
+            break;
+          }
+
+          const nextBeds = d.beds === undefined ? undefined : parseBedsText(String(d.beds));
+          if (nextBeds === null) {
+            notify.error(t('assistant.invalidRoom'));
+            break;
+          }
+
+          // Validated as a whole room, so a patch can never leave the room
+          // in a state the form itself would reject.
+          const mergedRoom = buildRoomFormData({
+            name: d.name === undefined ? existingRoom.name : (d.name as string),
+            capacity: d.capacity === undefined ? existingRoom.capacity : (d.capacity as number),
+            description:
+              d.description === undefined
+                ? existingRoom.description
+                : (d.description as string),
+            beds: nextBeds ?? existingRoom.bedLayouts ?? [],
+            extraSpots: d.extraSpots === undefined ? existingRoom.extraSpots : d.extraSpots,
+          });
+          const roomFields = ['name', 'capacity', 'beds', 'extraSpots', 'description'].filter(
+            (key) => d[key] !== undefined,
+          );
+          if (roomFields.length === 0) {
+            break;
+          }
+          const mergedRoomValidation = RoomFormDataSchema.safeParse(mergedRoom);
+          if (!mergedRoomValidation.success) {
+            console.warn(
+              '[AI Assistant] Rejected updateRoom:',
+              mergedRoomValidation.error.issues,
+            );
+            notify.error(t('assistant.invalidRoom'));
+            break;
+          }
+
+          // The bed keys go with every edit that names one of them, so "none"
+          // clears the beds and the capacity is computed again.
+          const touchesBeds = d.beds !== undefined || d.extraSpots !== undefined;
+          await updateRoomWithOwnershipCheck(roomId, tid, {
+            name: mergedRoom.name,
+            capacity: mergedRoom.capacity,
+            description: mergedRoom.description,
+            ...(touchesBeds
+              ? { bedLayouts: mergedRoom.bedLayouts, extraSpots: mergedRoom.extraSpots }
+              : {}),
+          });
+          notifySuccess(t('rooms.updateSuccess'));
+          executedCount++;
+          summaries.push(
+            t('assistant.actionDetails.updateRoom', {
+              name: mergedRoom.name,
+              fields: roomFields.join(', '),
+              defaultValue: 'Updated room {{name}} ({{fields}})',
+            }),
           );
           break;
         }

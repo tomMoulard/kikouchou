@@ -116,8 +116,29 @@ export interface ApplyResult {
 // Internal Helpers
 // ============================================================================
 
+/**
+ * Writes an incoming room, keeping beds the changeset could not have carried.
+ *
+ * A sender on an older build has no beds to send, so a room without them is
+ * silence, not a removal: the beds this device holds stay, and so does the
+ * capacity computed from them. The same rule as a guest's further stays.
+ */
 async function upsertRoom(room: Room): Promise<void> {
-  await db.rooms.put(room);
+  if (room.bedLayouts !== undefined) {
+    await db.rooms.put(room);
+    return;
+  }
+  const existing = await db.rooms.get(room.id);
+  if (existing?.bedLayouts === undefined) {
+    await db.rooms.put(room);
+    return;
+  }
+  await db.rooms.put({
+    ...room,
+    capacity: existing.capacity,
+    bedLayouts: existing.bedLayouts,
+    ...(existing.extraSpots === undefined ? {} : { extraSpots: existing.extraSpots }),
+  });
 }
 
 /**

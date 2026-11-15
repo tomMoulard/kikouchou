@@ -60,7 +60,7 @@ import {
   type TripImportData,
 } from '@/features/trips/components/LocationAutocomplete';
 import { DEFAULT_CURRENCY, DEFAULT_ROOM_ICON, SUPPORTED_CURRENCIES } from '@/types';
-import type { HexColor, RoomIcon, Trip, TripFormData, TripId } from '@/types';
+import type { HexColor, RoomBedLayout, RoomIcon, Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Constants
@@ -233,6 +233,10 @@ export interface NewTripRoom {
   readonly icon: RoomIcon;
   /** A photo saved with the room: a template's, carried through the wizard. */
   readonly photo?: Blob;
+  /** The beds, as a template describes them; the list itself never sets them. */
+  readonly bedLayouts?: RoomBedLayout[];
+  /** Sleeping spots that are not beds, from a template. */
+  readonly extraSpots?: number;
 }
 
 /**

@@ -19,6 +19,8 @@ import { useTranslation } from 'react-i18next';
 import type { Locale } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
 
+import { formatBedLayout } from '@/features/rooms/utils/bed-format';
+
 import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { formatDateRange, formatFullDate, formatTripDateRange } from '@/lib/utils/date-format';
@@ -117,9 +119,18 @@ const RoomBlock = memo(function RoomBlock({
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="font-semibold">{room.name}</h3>
         <span className="text-sm text-muted-foreground">
-          {t('rooms.beds', { count: room.capacity })}
+          {t('rooms.sleeps', { count: room.capacity })}
         </span>
       </div>
+      {room.bedLayouts.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {room.bedLayouts
+            .map((layout) =>
+              layout.name ? `${layout.name}: ${formatBedLayout(layout, t)}` : formatBedLayout(layout, t),
+            )
+            .join(` ${t('rooms.layoutOr')} `)}
+        </p>
+      )}
 
       {room.stays.length === 0 ? (
         <p className="text-sm text-muted-foreground">

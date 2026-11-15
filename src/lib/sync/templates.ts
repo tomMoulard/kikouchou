@@ -37,6 +37,7 @@ import { nanoid } from 'nanoid';
 
 import { getRoomsByTripId } from '@/lib/db';
 import { getPhoto, toPhotoId } from '@/lib/db/repositories/photo-repository';
+import { normalizeRoomBeds } from '@/lib/db/sanitize';
 import { fetchTripPhoto } from '@/lib/photos/photo-sync';
 import { PHOTO_BUCKET, templatePhotoPath, uploadPhoto } from '@/lib/photos/storage';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
@@ -46,6 +47,7 @@ import {
   normalizeCurrency,
   normalizeRoomIcon,
   type CurrencyCode,
+  type RoomBedLayout,
   type RoomIcon,
 } from '@/types';
 import type { PhotoId, Trip } from '@/types';
@@ -102,6 +104,10 @@ export interface TemplateRoom {
   readonly icon: RoomIcon;
   /** The room's photo, read from `templates/<token>/<photoId>`. */
   readonly photoId?: PhotoId;
+  /** The ways the beds can be set up; absent when the room describes none. */
+  readonly bedLayouts?: RoomBedLayout[];
+  /** Sleeping spots that are not beds. */
+  readonly extraSpots?: number;
 }
 
 /** Everything a template link hands to whoever opens it. */
@@ -296,8 +302,25 @@ export async function buildTemplatePayload(trip: Trip): Promise<TripTemplatePayl
       capacity: room.capacity,
       icon: room.icon ?? DEFAULT_ROOM_ICON,
       ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
+      ...(room.bedLayouts === undefined ? {} : { bedLayouts: room.bedLayouts }),
+      ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
     })),
   };
+}
+
+/**
+ * A room's beds as plain JSON for the `rooms` column, absent keys left out.
+ */
+function toBedLayoutsJson(layouts: readonly RoomBedLayout[]) {
+  return layouts.map((layout) => ({
+    ...(layout.name === undefined ? {} : { name: layout.name }),
+    beds: layout.beds.map((bed) => ({
+      kind: bed.kind,
+      count: bed.count,
+      ...(bed.widthCm === undefined ? {} : { widthCm: bed.widthCm }),
+      ...(bed.lengthCm === undefined ? {} : { lengthCm: bed.lengthCm }),
+    })),
+  }));
 }
 
 /**
@@ -320,6 +343,8 @@ function toTemplateRow(payload: TripTemplatePayload) {
       capacity: room.capacity,
       icon: room.icon,
       ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
+      ...(room.bedLayouts === undefined ? {} : { bedLayouts: toBedLayoutsJson(room.bedLayouts) }),
+      ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
     })),
     updated_at: new Date().toISOString(),
   };
@@ -370,13 +395,19 @@ function parseRoom(raw: unknown): TemplateRoom | null {
   if (typeof capacityRaw !== 'number' || !Number.isFinite(capacityRaw)) {
     return null;
   }
-  const capacity = Math.min(Math.max(Math.round(capacityRaw), 1), MAX_ROOM_CAPACITY);
+  // The beds are bounded like everything else here, and when there are some
+  // the capacity is computed from them rather than read.
+  const beds = normalizeRoomBeds({
+    capacity: Math.min(Math.max(Math.round(capacityRaw), 1), MAX_ROOM_CAPACITY),
+    bedLayouts: record.bedLayouts,
+    extraSpots: record.extraSpots,
+  });
 
   const photoId = toPhotoId(record.photoId);
   return {
     name,
-    capacity,
     icon: normalizeRoomIcon(record.icon),
+    ...beds,
     ...(photoId === undefined ? {} : { photoId }),
   };
 }

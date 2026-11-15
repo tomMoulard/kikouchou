@@ -1908,6 +1908,123 @@ describe('useTripActions — rooms', () => {
 
     expect(await roomNamesOf(tripId)).toEqual(['Attic 1', 'Attic 2']);
   });
+
+  it('adds a room with its beds, sleeping what the beds sleep', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRoom',
+        data: { name: 'Attic', capacity: 9, beds: 'Twin: 2 single 80x200 | Together: 1 queen', extraSpots: 1 },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [room] = await db.rooms.where('tripId').equals(tripId).toArray();
+    expect(room).toMatchObject({
+      capacity: 3,
+      extraSpots: 1,
+      bedLayouts: [
+        { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+        { name: 'Together', beds: [{ kind: 'queen', count: 1 }] },
+      ],
+    });
+  });
+
+  it('refuses a room whose beds name no known bed, rather than half of them', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'addRoom', data: { name: 'Attic', capacity: 2, beds: '1 waterbed' } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await roomNamesOf(tripId)).toEqual([]);
+  });
+});
+
+describe('useTripActions — updateRoom', () => {
+  async function seedRoom(tripId: TripId) {
+    await db.rooms.add({
+      id: 'room-attic' as never,
+      tripId,
+      name: 'Attic',
+      capacity: 2,
+      order: 0,
+      bedLayouts: [{ beds: [{ kind: 'single', count: 2 }] }],
+    });
+  }
+
+  it('changes the beds and computes the capacity again', async () => {
+    const { tripId } = await seedTrip();
+    await seedRoom(tripId);
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'updateRoom', data: { roomId: 'room-attic', beds: '1 queen 160x200, 1 cot' } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await db.rooms.get('room-attic')).toMatchObject({
+      name: 'Attic',
+      capacity: 3,
+      bedLayouts: [
+        { beds: [{ kind: 'queen', count: 1, widthCm: 160, lengthCm: 200 }, { kind: 'cot', count: 1 }] },
+      ],
+    });
+  });
+
+  it('clears the beds on "none" and keeps the capacity it is given', async () => {
+    const { tripId } = await seedTrip();
+    await seedRoom(tripId);
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'updateRoom', data: { roomId: 'room-attic', beds: 'none', capacity: 4 } }),
+    );
+
+    const room = await db.rooms.get('room-attic');
+    expect(room).not.toHaveProperty('bedLayouts');
+    expect(room?.capacity).toBe(4);
+  });
+
+  it('renames a room without touching its beds', async () => {
+    const { tripId } = await seedTrip();
+    await seedRoom(tripId);
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'updateRoom', data: { roomId: 'room-attic', name: 'Loft' } }),
+    );
+
+    expect(await db.rooms.get('room-attic')).toMatchObject({
+      name: 'Loft',
+      capacity: 2,
+      bedLayouts: [{ beds: [{ kind: 'single', count: 2 }] }],
+    });
+  });
+
+  it('refuses a room of another trip', async () => {
+    const { tripId } = await seedTrip();
+    const other = await seedTrip();
+    await seedRoom(other.tripId);
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'updateRoom', data: { roomId: 'room-attic', name: 'Mine now' } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.rooms.get('room-attic'))?.name).toBe('Attic');
+  });
 });
 
 // ============================================================================

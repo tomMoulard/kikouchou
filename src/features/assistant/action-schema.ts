@@ -283,7 +283,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       capacity: {
         type: 'number',
         required: true,
-        description: 'Number of beds (positive int)',
+        description: 'How many people it sleeps (positive int); ignored when beds are given',
         example: 2,
       },
       count: {
@@ -291,6 +291,60 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: false,
         description: 'How many rooms, numbered from the name (default 1)',
         example: 3,
+      },
+      description: {
+        type: 'string',
+        required: false,
+        description: 'Room description',
+        example: 'Cozy room for two',
+      },
+      beds: {
+        type: 'string',
+        required: false,
+        description: 'Beds; layouts split by |, e.g. "Twin: 2 single 80x200 | 1 queen"',
+        example: 'Twin: 2 single 80x200 | 1 queen',
+      },
+      extraSpots: {
+        type: 'number',
+        required: false,
+        description: 'Sleeping spots that are not beds',
+        example: 1,
+      },
+    },
+  },
+  {
+    action: 'updateRoom',
+    label: 'Edit a room',
+    fields: {
+      roomId: {
+        type: 'string',
+        required: true,
+        description: 'ID of the room (from the rooms list)',
+        example: '<room id>',
+      },
+      name: {
+        type: 'string',
+        required: false,
+        description: 'Room name',
+        example: 'Attic',
+      },
+      capacity: {
+        type: 'number',
+        required: false,
+        description: 'How many people it sleeps; ignored when it has beds',
+        example: 2,
+      },
+      beds: {
+        type: 'string',
+        required: false,
+        description: 'Beds as in the rooms list; "none" removes them',
+        example: '1 queen 160x200',
+      },
+      extraSpots: {
+        type: 'number',
+        required: false,
+        description: 'Sleeping spots that are not beds',
+        example: 1,
       },
       description: {
         type: 'string',

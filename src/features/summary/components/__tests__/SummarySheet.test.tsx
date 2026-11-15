@@ -38,6 +38,10 @@ function buildSummary(overrides: Partial<TripSummary> = {}): TripSummary {
         roomId: 'room-1' as RoomId,
         name: 'Master bedroom',
         capacity: 2,
+        bedLayouts: [
+          { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+          { beds: [{ kind: 'queen', count: 1 }] },
+        ],
         icon: undefined,
         stays: [
           {
@@ -54,6 +58,7 @@ function buildSummary(overrides: Partial<TripSummary> = {}): TripSummary {
         roomId: 'room-2' as RoomId,
         name: 'Attic',
         capacity: 1,
+        bedLayouts: [],
         icon: undefined,
         stays: [],
       },
@@ -115,6 +120,20 @@ describe('SummarySheet', () => {
     expect(rooms.getByText('Marie')).toBeInTheDocument();
     expect(rooms.getByText('Attic')).toBeInTheDocument();
     expect(screen.getByText('summary.roomEmpty')).toBeInTheDocument();
+  });
+
+  it('prints the beds of a room that describes them, each layout once', () => {
+    render(<SummarySheet summary={buildSummary()} printedOn={PRINTED_ON} />);
+
+    const rooms = within(screen.getByRole('region', { name: 'summary.rooms' }));
+
+    // The i18n mock echoes keys, so the kind reads as its key; the sizes are
+    // the typed ones, or the kind's usual size when none was typed.
+    expect(
+      rooms.getByText(
+        'Twin: 2 × rooms.bedKinds.single · 80 × 200 rooms.layoutOr rooms.bedKinds.queen · 160 × 200',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('names the guests still without a bed', () => {

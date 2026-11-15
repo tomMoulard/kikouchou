@@ -11,7 +11,18 @@
  */
 
 import {
+  BED_KINDS,
   CHILD_SEAT_KINDS,
+  MAX_BED_COUNT,
+  MAX_BED_LAYOUT_NAME_LENGTH,
+  MAX_BED_LENGTH_CM,
+  MAX_BED_WIDTH_CM,
+  MAX_BEDS_PER_LAYOUT,
+  MAX_ROOM_BED_LAYOUTS,
+  MAX_ROOM_EXTRA_SPOTS,
+  MIN_BED_LENGTH_CM,
+  MIN_BED_WIDTH_CM,
+  computeRoomCapacityFromBeds,
   DIETARY_TAGS,
   MAX_ACTIVITY_PARTICIPANTS,
   MAX_EXPENSE_AMOUNT,
@@ -29,7 +40,14 @@ import {
   normalizeCurrency,
   normalizePersonHeadcount,
 } from '@/types';
-import type { ChildSeatKind, DietaryTag, ISODateString } from '@/types';
+import type {
+  BedKind,
+  ChildSeatKind,
+  DietaryTag,
+  ISODateString,
+  RoomBed,
+  RoomBedLayout,
+} from '@/types';
 
 // ============================================================================
 // Constants - Maximum Lengths
@@ -528,6 +546,128 @@ export function normalizeRoomCapacity(value: unknown): number {
   }
 
   return rounded > MAX_ROOM_CAPACITY ? MAX_ROOM_CAPACITY : rounded;
+}
+
+/**
+ * A whole number of centimetres inside its bounds, or undefined. A size out of
+ * range is dropped rather than clamped: a bed read as 250 cm wide when someone
+ * typed 2500 is a wrong fact, and the kind's usual size is a better guess.
+ */
+function normalizeBedSize(value: unknown, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const rounded = Math.round(value);
+  return rounded >= min && rounded <= max ? rounded : undefined;
+}
+
+/**
+ * One line of a bed layout, or null when it is not usable: an unknown kind
+ * (a newer build's) cannot say how many people it sleeps.
+ */
+function normalizeRoomBed(raw: unknown): RoomBed | null {
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const entry = raw as Record<string, unknown>;
+  if (typeof entry.kind !== 'string' || !BED_KINDS.includes(entry.kind as BedKind)) {
+    return null;
+  }
+  const count =
+    typeof entry.count === 'number' && Number.isFinite(entry.count)
+      ? Math.min(Math.max(Math.round(entry.count), 1), MAX_BED_COUNT)
+      : 1;
+  const bed: RoomBed = { kind: entry.kind as BedKind, count };
+  const widthCm = normalizeBedSize(entry.widthCm, MIN_BED_WIDTH_CM, MAX_BED_WIDTH_CM);
+  const lengthCm = normalizeBedSize(entry.lengthCm, MIN_BED_LENGTH_CM, MAX_BED_LENGTH_CM);
+  if (widthCm !== undefined) {
+    bed.widthCm = widthCm;
+  }
+  if (lengthCm !== undefined) {
+    bed.lengthCm = lengthCm;
+  }
+  return bed;
+}
+
+/**
+ * A room's bed layouts (`Room.bedLayouts`), kept only where usable.
+ *
+ * The field arrives from other devices, template links, QR imports and the
+ * assistant, so a bad line is dropped on its own, a layout left with no line
+ * is dropped, and every list is cut at its bound. The bounds matter beyond
+ * tidiness: the stored capacity is computed from these beds.
+ *
+ * @param raw - The field as stored or received
+ * @returns The usable layouts, or undefined when none is left
+ */
+export function normalizeBedLayouts(raw: unknown): RoomBedLayout[] | undefined {
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  const layouts: RoomBedLayout[] = [];
+  for (const entry of raw) {
+    if (layouts.length >= MAX_ROOM_BED_LAYOUTS) {
+      break;
+    }
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const { name, beds } = entry as Record<string, unknown>;
+    if (!Array.isArray(beds)) {
+      continue;
+    }
+    const usable = beds
+      .slice(0, MAX_BEDS_PER_LAYOUT)
+      .map(normalizeRoomBed)
+      .filter((bed): bed is RoomBed => bed !== null);
+    if (usable.length === 0) {
+      continue;
+    }
+    const layout: RoomBedLayout = { beds: usable };
+    const trimmed = typeof name === 'string' ? sanitizeText(name, MAX_BED_LAYOUT_NAME_LENGTH) : '';
+    if (trimmed) {
+      layout.name = trimmed;
+    }
+    layouts.push(layout);
+  }
+  return layouts.length > 0 ? layouts : undefined;
+}
+
+/**
+ * A room's extra sleeping spots, clamped to its bounds. Zero and absent mean
+ * the same thing, so both come back as undefined.
+ */
+export function normalizeExtraSpots(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return undefined;
+  }
+  const rounded = Math.min(Math.max(Math.round(raw), 0), MAX_ROOM_EXTRA_SPOTS);
+  return rounded > 0 ? rounded : undefined;
+}
+
+/**
+ * A room's capacity and beds, made to agree.
+ *
+ * With beds, the capacity is what they sleep, whatever number came with them:
+ * a peer, a template or the assistant cannot store "sleeps 9" beside two
+ * single beds. Without beds, the capacity is the number given and the extra
+ * spots are dropped, because they only add to beds.
+ *
+ * @param raw - The three fields as received
+ * @returns The fields to store; absent fields are left out
+ */
+export function normalizeRoomBeds(raw: {
+  readonly capacity: unknown;
+  readonly bedLayouts?: unknown;
+  readonly extraSpots?: unknown;
+}): { capacity: number; bedLayouts?: RoomBedLayout[]; extraSpots?: number } {
+  const bedLayouts = normalizeBedLayouts(raw.bedLayouts);
+  if (!bedLayouts) {
+    return { capacity: normalizeRoomCapacity(raw.capacity) };
+  }
+  const extraSpots = normalizeExtraSpots(raw.extraSpots);
+  const capacity = normalizeRoomCapacity(computeRoomCapacityFromBeds(bedLayouts, extraSpots));
+  return extraSpots === undefined ? { capacity, bedLayouts } : { capacity, bedLayouts, extraSpots };
 }
 
 /**

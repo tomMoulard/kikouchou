@@ -26,8 +26,21 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PhotoField, type PhotoChange } from '@/components/shared/PhotoField';
 import { RoomIconDialog } from '@/components/shared/RoomIconDialog';
+
+import { BedLayoutsField } from '@/features/rooms/components/BedLayoutsField';
+import {
+  createLayoutFromCapacity,
+  parseLayoutDrafts,
+  toLayoutDrafts,
+  type LayoutDraft,
+} from '@/features/rooms/utils/bed-drafts';
+
 import { cn } from '@/lib/utils';
-import { MAX_ROOM_CAPACITY, MIN_ROOM_CAPACITY } from '@/types';
+import {
+  MAX_ROOM_CAPACITY,
+  MIN_ROOM_CAPACITY,
+  computeRoomCapacityFromBeds,
+} from '@/types';
 import type { Room, RoomFormData, RoomIcon } from '@/types';
 
 // ============================================================================
@@ -60,11 +73,26 @@ interface RoomFormProps {
 interface FormErrors {
   name?: string;
   capacity?: string;
+  /** Set when a bed size is out of bounds; the message sits on the bed. */
+  beds?: boolean;
 }
 
 // ============================================================================
 // Constants
 // ============================================================================
+
+/**
+ * The drafts of a set of layouts without their React keys, so two drafts of
+ * the same beds compare equal.
+ */
+function serializeLayouts(layouts: readonly LayoutDraft[]): string {
+  return JSON.stringify(
+    layouts.map((layout) => ({
+      name: layout.name.trim(),
+      beds: layout.beds.map(({ kind, count, width, length }) => [kind, count, width.trim(), length.trim()]),
+    })),
+  );
+}
 
 /**
  * Default capacity for new rooms.
@@ -84,6 +112,9 @@ const MIN_CAPACITY = MIN_ROOM_CAPACITY;
  * per bed, which is why this is a guard and not a taste judgement.
  */
 const MAX_CAPACITY = MAX_ROOM_CAPACITY;
+
+/** No bed line flagged, as one shared value so the field does not re-render. */
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
 // ============================================================================
 // Component
@@ -138,6 +169,10 @@ const RoomForm = memo(function RoomForm({
   const [description, setDescription] = useState(room?.description ?? '');
   const [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon);
   const [photo, setPhoto] = useState<PhotoChange>(undefined);
+  const [layouts, setLayouts] = useState<readonly LayoutDraft[]>(() =>
+    toLayoutDrafts(room?.bedLayouts),
+  );
+  const [extraSpots, setExtraSpots] = useState<number>(room?.extraSpots ?? 0);
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});
@@ -151,8 +186,21 @@ const RoomForm = memo(function RoomForm({
     setDescription(room?.description ?? '');
     setIcon(room?.icon);
     setPhoto(undefined);
+    setLayouts(toLayoutDrafts(room?.bedLayouts));
+    setExtraSpots(room?.extraSpots ?? 0);
     setErrors({});
   }
+
+  // What the beds say, recomputed on every edit so the readout follows.
+  const hasBeds = layouts.length > 0;
+  const parsedBeds = useMemo(() => parseLayoutDrafts(layouts), [layouts]);
+  const effectiveCapacity = hasBeds
+    ? (computeRoomCapacityFromBeds(parsedBeds.layouts, extraSpots) ?? capacity)
+    : capacity;
+  const initialLayouts = useMemo(
+    () => serializeLayouts(toLayoutDrafts(room?.bedLayouts)),
+    [room?.bedLayouts],
+  );
 
   // Compute dirty state
   const isDirty = useMemo(
@@ -161,8 +209,10 @@ const RoomForm = memo(function RoomForm({
       capacity !== (room?.capacity ?? DEFAULT_CAPACITY) ||
       description !== (room?.description ?? '') ||
       icon !== room?.icon ||
-      photo !== undefined,
-    [name, capacity, description, icon, photo, room],
+      photo !== undefined ||
+      serializeLayouts(layouts) !== initialLayouts ||
+      (hasBeds && extraSpots !== (room?.extraSpots ?? 0)),
+    [name, capacity, description, icon, photo, room, layouts, initialLayouts, hasBeds, extraSpots],
   );
 
   // Notify parent of dirty state changes
@@ -217,15 +267,19 @@ const RoomForm = memo(function RoomForm({
       newErrors.name = nameError;
     }
 
-    // Validate capacity
-    const capacityError = validateCapacity(capacity);
+    // Validate capacity: the beds' when there are some, the typed one otherwise
+    const capacityError = validateCapacity(effectiveCapacity);
     if (capacityError) {
       newErrors.capacity = capacityError;
     }
 
+    if (hasBeds && parsedBeds.invalidBedKeys.size > 0) {
+      newErrors.beds = true;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, capacity, validateName, validateCapacity]);
+  }, [name, effectiveCapacity, hasBeds, parsedBeds, validateName, validateCapacity]);
 
   // ============================================================================
   // Event Handlers
@@ -281,6 +335,27 @@ const RoomForm = memo(function RoomForm({
   }, [capacity, validateCapacity]);
 
   /**
+   * Takes the edited layouts. Removing the last one goes back to a typed
+   * number, which starts from what the beds slept.
+   */
+  const handleLayoutsChange = useCallback(
+    (next: readonly LayoutDraft[]) => {
+      if (next.length === 0 && hasBeds) {
+        setCapacity(Math.min(Math.max(effectiveCapacity, MIN_CAPACITY), MAX_CAPACITY));
+      }
+      setLayouts(next);
+      setErrors((prev) => (prev.capacity || prev.beds ? { ...prev, capacity: undefined, beds: undefined } : prev));
+    },
+    [hasBeds, effectiveCapacity],
+  );
+
+  /** Starts describing the beds, from the number the room already had. */
+  const handleDescribeBeds = useCallback(() => {
+    setLayouts([createLayoutFromCapacity(capacity)]);
+    setErrors((prev) => (prev.capacity ? { ...prev, capacity: undefined } : prev));
+  }, [capacity]);
+
+  /**
    * Handles description textarea change.
    */
   const handleDescriptionChange = useCallback(
@@ -321,17 +396,21 @@ const RoomForm = memo(function RoomForm({
       if (!validateForm()) {return;}
 
       try {
+        // The bed keys are always sent, empty included: that is how an edit
+        // that removed every layout clears them from the stored room.
         await doSubmit({
           name: name.trim(),
-          capacity,
+          capacity: effectiveCapacity,
           description: description.trim() || undefined,
           icon,
+          bedLayouts: hasBeds ? parsedBeds.layouts : undefined,
+          extraSpots: hasBeds && extraSpots > 0 ? extraSpots : undefined,
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, capacity, description, icon],
+    [validateForm, doSubmit, name, effectiveCapacity, description, icon, hasBeds, parsedBeds, extraSpots],
   );
 
   // ============================================================================
@@ -385,26 +464,62 @@ const RoomForm = memo(function RoomForm({
         )}
       </div>
 
-      {/* Capacity Field */}
-      <div className="space-y-2">
-        <Label htmlFor="room-capacity">
-          {t('rooms.capacity')}
-          <span className="text-destructive ml-1" aria-hidden="true">*</span>
-        </Label>
-        <NumberStepper
-          id="room-capacity"
-          value={capacity}
-          onValueChange={handleCapacityChange}
-          onBlur={handleCapacityBlur}
-          min={MIN_CAPACITY}
-          max={MAX_CAPACITY}
-          decrementLabel={t('rooms.bedsDecrease', 'Remove a bed')}
-          incrementLabel={t('rooms.bedsIncrease', 'Add a bed')}
-          aria-invalid={Boolean(errors.capacity)}
-          aria-describedby={errors.capacity ? 'room-capacity-error' : undefined}
-          disabled={isSubmitting}
-          className={cn(errors.capacity && 'border-destructive')}
-        />
+      {/*
+        Beds. A room either describes its beds, and then sleeps what they
+        sleep, or carries a plain number, which is what every room was before
+        beds existed. The number stays the quick path: most rooms need nothing
+        more, and "Describe the beds" is one click away.
+      */}
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium leading-none">{t('rooms.bedsLegend')}</legend>
+        <p className="text-xs text-muted-foreground">{t('rooms.bedsHint')}</p>
+
+        {hasBeds ? (
+          <BedLayoutsField
+            layouts={layouts}
+            onLayoutsChange={handleLayoutsChange}
+            extraSpots={extraSpots}
+            onExtraSpotsChange={setExtraSpots}
+            invalidBedKeys={errors.beds ? parsedBeds.invalidBedKeys : EMPTY_KEYS}
+            disabled={isSubmitting}
+          />
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="room-capacity">
+              {t('rooms.capacity')}
+              <span className="text-destructive ml-1" aria-hidden="true">*</span>
+            </Label>
+            <NumberStepper
+              id="room-capacity"
+              value={capacity}
+              onValueChange={handleCapacityChange}
+              onBlur={handleCapacityBlur}
+              min={MIN_CAPACITY}
+              max={MAX_CAPACITY}
+              decrementLabel={t('rooms.bedsDecrease', 'One person fewer')}
+              incrementLabel={t('rooms.bedsIncrease', 'One person more')}
+              aria-invalid={Boolean(errors.capacity)}
+              aria-describedby={errors.capacity ? 'room-capacity-error' : undefined}
+              disabled={isSubmitting}
+              className={cn(errors.capacity && 'border-destructive')}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDescribeBeds}
+              disabled={isSubmitting}
+            >
+              {t('rooms.describeBeds')}
+            </Button>
+          </div>
+        )}
+
+        {hasBeds && (
+          <p id="room-capacity-readout" className="text-sm font-medium" aria-live="polite">
+            {t('rooms.sleeps', { count: effectiveCapacity })}
+          </p>
+        )}
         {errors.capacity && (
           <p
             id="room-capacity-error"
@@ -414,7 +529,7 @@ const RoomForm = memo(function RoomForm({
             {errors.capacity}
           </p>
         )}
-      </div>
+      </fieldset>
 
       {/* Description Field */}
       <div className="space-y-2">

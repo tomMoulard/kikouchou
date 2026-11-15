@@ -96,6 +96,8 @@ interface SampleTripCopy {
     readonly bunk: { readonly name: string; readonly description: string };
     readonly sofa: { readonly name: string; readonly description: string };
     readonly tent: { readonly name: string; readonly description: string };
+    /** Names of the twin room's two layouts: apart, and pushed together. */
+    readonly twinLayouts: { readonly apart: string; readonly together: string };
   };
   readonly persons: {
     readonly camille: string;
@@ -246,9 +248,10 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
     rooms: {
       master: { name: 'Main bedroom', description: 'Double bed, view on the dune.' },
       twin: { name: 'Twin room', description: 'Two single beds, next to the bathroom.' },
-      bunk: { name: 'Bunk room', description: 'Bunk bed and a small bed for the kids.' },
+      bunk: { name: 'Bunk room', description: 'Bunk bed, and a mattress for the youngest.' },
       sofa: { name: 'Living room sofa bed', description: 'Opens into a double. First up makes the coffee.' },
       tent: { name: 'Tent in the garden', description: 'Under the pines. Bring a sleeping bag.' },
+      twinLayouts: { apart: 'Twin', together: 'Together' },
     },
     persons: {
       camille: 'Camille',
@@ -349,9 +352,10 @@ const COPY: Readonly<Record<Language, SampleTripCopy>> = {
     rooms: {
       master: { name: 'Chambre principale', description: 'Lit double, vue sur la dune.' },
       twin: { name: 'Chambre à deux lits', description: 'Deux lits simples, à côté de la salle de bain.' },
-      bunk: { name: 'Chambre des enfants', description: 'Lits superposés et un petit lit.' },
+      bunk: { name: 'Chambre des enfants', description: 'Lits superposés, et un matelas pour le plus jeune.' },
       sofa: { name: 'Canapé-lit du salon', description: 'Se déplie en lit double. Le premier levé fait le café.' },
       tent: { name: 'Tente dans le jardin', description: 'Sous les pins. Prévoir un sac de couchage.' },
+      twinLayouts: { apart: 'Lits séparés', together: 'Lits collés' },
     },
     persons: {
       camille: 'Camille',
@@ -594,11 +598,32 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
   } as const;
 
   // The order is also what names each room's picture: SAMPLE_ROOM_PHOTOS.
+  //
+  // The beds show each way a room can describe them: one bed, two layouts of
+  // the same room (the singles pushed into a queen), a bunk bed with an extra
+  // spot, and the tent with a plain number. Each capacity is what its beds
+  // sleep, as the repository would compute it.
   const rooms: Room[] = [
-    { id: roomIds.master, tripId, order: 0, capacity: 2, icon: 'bed-double', ...copy.rooms.master },
-    { id: roomIds.twin, tripId, order: 1, capacity: 2, icon: 'bed-twin', ...copy.rooms.twin },
-    { id: roomIds.bunk, tripId, order: 2, capacity: 3, icon: 'bunk-bed', ...copy.rooms.bunk },
-    { id: roomIds.sofa, tripId, order: 3, capacity: 2, icon: 'sofa', ...copy.rooms.sofa },
+    {
+      id: roomIds.master, tripId, order: 0, capacity: 2, icon: 'bed-double', ...copy.rooms.master,
+      bedLayouts: [{ beds: [{ kind: 'queen', count: 1, widthCm: 160, lengthCm: 200 }] }],
+    },
+    {
+      id: roomIds.twin, tripId, order: 1, capacity: 2, icon: 'bed-twin', ...copy.rooms.twin,
+      bedLayouts: [
+        { name: copy.rooms.twinLayouts.apart, beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+        { name: copy.rooms.twinLayouts.together, beds: [{ kind: 'queen', count: 1, widthCm: 160, lengthCm: 200 }] },
+      ],
+    },
+    {
+      id: roomIds.bunk, tripId, order: 2, capacity: 3, icon: 'bunk-bed', ...copy.rooms.bunk,
+      bedLayouts: [{ beds: [{ kind: 'bunk', count: 1 }] }],
+      extraSpots: 1,
+    },
+    {
+      id: roomIds.sofa, tripId, order: 3, capacity: 2, icon: 'sofa', ...copy.rooms.sofa,
+      bedLayouts: [{ beds: [{ kind: 'sofa-bed', count: 1 }] }],
+    },
     { id: roomIds.tent, tripId, order: 4, capacity: 2, icon: 'tent', ...copy.rooms.tent },
   ];
 

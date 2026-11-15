@@ -272,6 +272,31 @@ describe('readTripTemplate', () => {
       });
     });
 
+    it('keeps the beds of a room and computes its capacity from them', async () => {
+      const bedLayouts = [
+        { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+        { name: 'Together', beds: [{ kind: 'queen', count: 1 }] },
+      ];
+      const result = await read({
+        name: 'T',
+        rooms: [{ name: 'Attic', capacity: 7, bedLayouts, extraSpots: 1 }],
+      });
+
+      expect(result).toMatchObject({
+        template: { rooms: [{ name: 'Attic', capacity: 3, bedLayouts, extraSpots: 1 }] },
+      });
+    });
+
+    it('drops beds this build cannot read and keeps the room', async () => {
+      const result = await read({
+        name: 'T',
+        rooms: [{ name: 'Attic', capacity: 2, bedLayouts: [{ beds: [{ kind: 'waterbed', count: 1 }] }] }],
+      });
+
+      expect(result).toMatchObject({ template: { rooms: [{ name: 'Attic', capacity: 2 }] } });
+      expect(result).not.toMatchObject({ template: { rooms: [{ bedLayouts: expect.anything() }] } });
+    });
+
     it('raises a capacity of zero to one bed', async () => {
       const result = await read({ name: 'T', rooms: [{ name: 'Attic', capacity: 0 }] });
 
@@ -617,6 +642,34 @@ describe('the published row is bounded to what the server accepts', () => {
     const rooms = row.rooms as { name: string }[];
     expect(rooms).toHaveLength(50);
     expect(rooms[0]?.name).toBe('0'.padEnd(100, 'r'));
+  });
+
+  it('publishes the beds of a room as plain JSON', async () => {
+    const { client, calls } = stubClient({ updateRows: { data: [{ trip_id: 'remote-1' }] } });
+
+    await refreshTemplatePayload(client, 'remote-1', {
+      ...PAYLOAD,
+      rooms: [
+        {
+          name: 'Attic',
+          capacity: 3,
+          icon: 'bed-twin',
+          bedLayouts: [{ beds: [{ kind: 'queen', count: 1, widthCm: 160, lengthCm: 200 }] }],
+          extraSpots: 1,
+        },
+      ],
+    });
+
+    const row = (calls.updates[0] as { row: Record<string, unknown> }).row;
+    expect(row.rooms).toEqual([
+      {
+        name: 'Attic',
+        capacity: 3,
+        icon: 'bed-twin',
+        bedLayouts: [{ beds: [{ kind: 'queen', count: 1, widthCm: 160, lengthCm: 200 }] }],
+        extraSpots: 1,
+      },
+    ]);
   });
 
   it('keeps a short location as it is, and an absent description as null', async () => {

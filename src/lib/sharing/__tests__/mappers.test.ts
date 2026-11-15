@@ -185,6 +185,39 @@ describe('Room mappers', () => {
     expect(result.icon).toBe(icon);
   });
 
+  it('carries the beds through proto and back', () => {
+    const room: Room = {
+      ...testRoom,
+      capacity: 3,
+      bedLayouts: [
+        { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+        { beds: [{ kind: 'queen', count: 1 }] },
+      ],
+      extraSpots: 1,
+    };
+
+    expect(protoToRoom(roomToProto(room))).toEqual(room);
+  });
+
+  it('computes the capacity from the beds a changeset carries, not from its number', () => {
+    const proto = roomToProto({
+      ...testRoom,
+      capacity: 40,
+      bedLayouts: [{ beds: [{ kind: 'double', count: 1 }] }],
+    });
+
+    expect(protoToRoom(proto).capacity).toBe(2);
+  });
+
+  it('drops a bed of a kind this build does not know', () => {
+    const proto = roomToProto({
+      ...testRoom,
+      bedLayouts: [{ beds: [{ kind: 'waterbed' as never, count: 1 }, { kind: 'cot', count: 1 }] }],
+    });
+
+    expect(protoToRoom(proto).bedLayouts).toEqual([{ beds: [{ kind: 'cot', count: 1 }] }]);
+  });
+
   it('rejects invalid room icons', () => {
     const room: Room = { ...testRoom, icon: 'invalid-icon' as RoomIcon };
     const proto = roomToProto(room);

@@ -32,6 +32,7 @@ import type {
   Person,
   PersonId,
   RoomAssignmentId,
+  RoomBedLayout,
   RoomIcon,
   RoomId,
   Transport,
@@ -73,8 +74,10 @@ export interface SummaryRoom {
   readonly roomId: RoomId;
   /** Room name. */
   readonly name: string;
-  /** Beds in the room. */
+  /** How many people the room sleeps. */
   readonly capacity: number;
+  /** The ways its beds can be set up; empty when the room describes none. */
+  readonly bedLayouts: readonly RoomBedLayout[];
   /** The room's icon, or `undefined` on a room saved before icons existed. */
   readonly icon: RoomIcon | undefined;
   /** Stays in this room, earliest first, then by guest name. */
@@ -288,6 +291,7 @@ export async function loadTripSummary(
       roomId: room.id,
       name: room.name,
       capacity: room.capacity,
+      bedLayouts: room.bedLayouts ?? [],
       icon: room.icon,
       stays,
     };

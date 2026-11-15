@@ -32,6 +32,7 @@ import { computeBalances } from '@/features/money/lib/balances';
 import { loadTripMoney } from '@/features/money/lib/trip-money';
 import { buildMealAttendance } from '@/features/meals/utils/meal-headcount';
 import { listStatedStayPeriods } from '@/features/persons/utils/guest-presence';
+import { formatBedsText } from '@/features/rooms/utils/bed-text';
 
 import {
   collectDrivenRideIds,
@@ -740,7 +741,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Rooms');
       for (const room of rooms) {
         parts.push(
-          `- "${toPromptText(room.name)}" (id: ${room.id}): ${room.capacity} bed(s)${room.photoId ? ', has a photo' : ''}${room.description ? ` — ${toPromptText(room.description)}` : ''}`,
+          `- "${toPromptText(room.name)}" (id: ${room.id}): sleeps ${room.capacity}${room.bedLayouts ? `; beds: ${toPromptText(formatBedsText(room.bedLayouts))}${room.extraSpots ? `; +${room.extraSpots} extra spot(s)` : ''}` : ''}${room.photoId ? ', has a photo' : ''}${room.description ? ` — ${toPromptText(room.description)}` : ''}`,
         );
       }
     } else {

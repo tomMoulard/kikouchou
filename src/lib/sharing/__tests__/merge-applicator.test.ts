@@ -244,6 +244,64 @@ describe('applyMerge: rooms and phones', () => {
     expect(await db.rooms.get(room.id)).toEqual(room);
   });
 
+  it('keeps the beds this device holds when a changeset carries none', async () => {
+    const bedLayouts = [{ beds: [{ kind: 'queen' as const, count: 1 }] }];
+    await db.rooms.put({
+      id: 'room-1' as RoomId,
+      tripId: TRIP_ID,
+      name: 'Attic',
+      capacity: 3,
+      order: 0,
+      bedLayouts,
+      extraSpots: 1,
+    });
+
+    // An older sender: no beds, and a capacity of its own.
+    await applyMerge(
+      buildMergeResult({
+        autoApply: {
+          persons: [],
+          assignments: [],
+          transports: [],
+          rooms: [{ id: 'room-1' as RoomId, tripId: TRIP_ID, name: 'Loft', capacity: 6, order: 0 }],
+        },
+      }),
+    );
+
+    const stored = await db.rooms.get('room-1');
+    expect(stored?.name).toBe('Loft');
+    expect(stored?.bedLayouts).toEqual(bedLayouts);
+    expect(stored?.extraSpots).toBe(1);
+    expect(stored?.capacity).toBe(3);
+  });
+
+  it('takes the beds a changeset carries over the ones this device holds', async () => {
+    await db.rooms.put({
+      id: 'room-1' as RoomId,
+      tripId: TRIP_ID,
+      name: 'Attic',
+      capacity: 2,
+      order: 0,
+      bedLayouts: [{ beds: [{ kind: 'queen', count: 1 }] }],
+    });
+    const incoming = {
+      id: 'room-1' as RoomId,
+      tripId: TRIP_ID,
+      name: 'Attic',
+      capacity: 2,
+      order: 0,
+      bedLayouts: [{ beds: [{ kind: 'single' as const, count: 2 }] }],
+    };
+
+    await applyMerge(
+      buildMergeResult({
+        autoApply: { persons: [], assignments: [], transports: [], rooms: [incoming] },
+      }),
+    );
+
+    expect((await db.rooms.get('room-1'))?.bedLayouts).toEqual(incoming.bedLayouts);
+  });
+
   it('takes the phone a changeset carries over the one this device holds', async () => {
     await db.persons.put({ ...makePerson('person-1'), phone: '+33 1 00 00 00 00' });
 

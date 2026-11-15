@@ -370,6 +370,12 @@ function getRoomConflictingFields(host: Room, guest: Room): string[] {
   if (host.order !== guest.order) fields.push('order');
   if (host.description !== guest.description) fields.push('description');
   if (host.icon !== guest.icon) fields.push('icon');
+  // A room with no beds is a sender that could not carry them (see
+  // `upsertRoom`), so only a room that brings beds can change them.
+  if (guest.bedLayouts !== undefined) {
+    if (JSON.stringify(host.bedLayouts) !== JSON.stringify(guest.bedLayouts)) fields.push('bedLayouts');
+    if (host.extraSpots !== guest.extraSpots) fields.push('extraSpots');
+  }
   return fields;
 }
 

@@ -182,7 +182,10 @@ describe('rooms.beds renders through i18next, not as a raw key', () => {
     // switching it while a component is still mounted trips React's act warning.
   });
 
-  it('labels the room card footer with the same wording as the timeline', async () => {
+  // The card says how many people a room sleeps, not how many beds it has:
+  // two singles pushed into a queen are two beds or one, and still sleep two.
+  // The timeline keeps its own label until the rooms planning learns about beds.
+  it('labels the room card footer with how many people the room sleeps', async () => {
     await i18n.changeLanguage('en');
     renderWithI18n(
       <RoomCard
@@ -196,10 +199,27 @@ describe('rooms.beds renders through i18next, not as a raw key', () => {
       />,
     );
 
-    expect(screen.getByText('4 beds')).toBeInTheDocument();
+    expect(screen.getByText('Sleeps 4')).toBeInTheDocument();
   });
 
-  it('labels a single-bed room card "1 bed"', async () => {
+  it('labels the room card footer in French', async () => {
+    await i18n.changeLanguage('fr');
+    renderWithI18n(
+      <RoomCard
+        room={FOUR_BED}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('4 couchages')).toBeInTheDocument();
+  });
+
+  it('labels a room card that sleeps one "Sleeps 1"', async () => {
     await i18n.changeLanguage('en');
     renderWithI18n(
       <RoomCard
@@ -213,6 +233,35 @@ describe('rooms.beds renders through i18next, not as a raw key', () => {
       />,
     );
 
-    expect(screen.getByText('1 bed')).toBeInTheDocument();
+    expect(screen.getByText('Sleeps 1')).toBeInTheDocument();
+  });
+
+  it('prints each layout of a room with beds, in the reader\'s words', async () => {
+    await i18n.changeLanguage('en');
+    renderWithI18n(
+      <RoomCard
+        room={{
+          ...FOUR_BED,
+          capacity: 3,
+          bedLayouts: [
+            { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+            { name: 'Together', beds: [{ kind: 'queen', count: 1 }] },
+          ],
+          extraSpots: 1,
+        }}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={3}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const beds = screen.getByRole('list', { name: 'Beds' });
+    expect(beds).toHaveTextContent('Twin: 2 × Single · 80 × 200');
+    expect(beds).toHaveTextContent('or Together: Queen · 160 × 200');
+    expect(screen.getByText('+ 1 extra spot')).toBeInTheDocument();
+    expect(screen.getByText('Sleeps 3')).toBeInTheDocument();
   });
 });

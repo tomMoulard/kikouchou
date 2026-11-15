@@ -12,7 +12,7 @@ import {
   buildDuplicateRoomName,
 } from '@/features/rooms/utils/room-naming';
 import { db } from '@/lib/db/database';
-import { sanitizeRoomData } from '@/lib/db/sanitize';
+import { normalizeRoomBeds, sanitizeRoomData } from '@/lib/db/sanitize';
 import { copyPhotosToTrip } from '@/lib/db/repositories/photo-repository';
 import { createRoomId } from '@/lib/db/utils';
 import { MAX_ROOM_CAPACITY, MIN_ROOM_CAPACITY } from '@/types';
@@ -59,6 +59,66 @@ function validateCapacity(capacity: number): void {
       `Room capacity must be a whole number from ${MIN_ROOM_CAPACITY} to ${MAX_ROOM_CAPACITY}`,
     );
   }
+}
+
+/**
+ * A room's bed fields, copied, with the absent ones left out. A clone or a
+ * copy gets its own arrays, so editing one room's beds never edits another's.
+ */
+function copyBedFields(
+  room: Pick<Room, 'bedLayouts' | 'extraSpots'>,
+): Pick<Room, 'bedLayouts' | 'extraSpots'> {
+  return {
+    ...(room.bedLayouts === undefined
+      ? {}
+      : {
+          bedLayouts: room.bedLayouts.map((layout) => ({
+            ...layout,
+            beds: layout.beds.map((bed) => ({ ...bed })),
+          })),
+        }),
+    ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
+  };
+}
+
+/**
+ * The room form data to store on create: text sanitised, and the capacity and
+ * beds made to agree (see `normalizeRoomBeds`). Absent bed fields are left out
+ * rather than stored as `undefined`.
+ */
+function prepareRoomData(data: RoomFormData): RoomFormData {
+  const { bedLayouts, extraSpots, ...rest } = sanitizeRoomData(data);
+  return { ...rest, ...normalizeRoomBeds({ capacity: rest.capacity, bedLayouts, extraSpots }) };
+}
+
+/**
+ * The capacity and bed fields a partial update writes, or null when the
+ * update does not touch them.
+ *
+ * A patch that names the beds or the extra spots is merged over the stored
+ * room, and the capacity is computed again. A patch that names only the
+ * capacity of a room with beds is overruled by the beds: the stored number
+ * never disagrees with the beds a guest reads. A field that comes back absent
+ * is written as `undefined`, which Dexie's `update` deletes.
+ */
+function resolveBedPatch(
+  stored: Room,
+  data: Partial<RoomFormData>,
+): Pick<Room, 'capacity' | 'bedLayouts' | 'extraSpots'> | null {
+  const touchesBeds = 'bedLayouts' in data || 'extraSpots' in data;
+  if (!touchesBeds && (data.capacity === undefined || stored.bedLayouts === undefined)) {
+    return null;
+  }
+  const normalized = normalizeRoomBeds({
+    capacity: data.capacity ?? stored.capacity,
+    bedLayouts: 'bedLayouts' in data ? data.bedLayouts : stored.bedLayouts,
+    extraSpots: 'extraSpots' in data ? data.extraSpots : stored.extraSpots,
+  });
+  return {
+    capacity: normalized.capacity,
+    bedLayouts: normalized.bedLayouts,
+    extraSpots: normalized.extraSpots,
+  };
 }
 
 /**
@@ -136,11 +196,11 @@ export async function createRooms(
   data: RoomFormData,
   count = 1,
 ): Promise<Room[]> {
-  // Sanitize input data (trim whitespace, enforce max lengths)
-  const sanitizedData = sanitizeRoomData(data);
-
   // Validate capacity (IMP-5 fix) and the count, before any write
-  validateCapacity(sanitizedData.capacity);
+  validateCapacity(data.capacity);
+
+  // Sanitize input data (trim whitespace, enforce max lengths, beds bounded)
+  const sanitizedData = prepareRoomData(data);
   validateCount(count);
 
   try {
@@ -254,11 +314,14 @@ export async function updateRoom(
     validateCapacity(sanitizedData.capacity);
   }
 
-  const updatedCount = await db.rooms.update(id, sanitizedData);
-
-  if (updatedCount === 0) {
-    throw new Error(`Room with id "${id}" not found`);
-  }
+  await db.transaction('rw', db.rooms, async () => {
+    const stored = await db.rooms.get(id);
+    if (!stored) {
+      throw new Error(`Room with id "${id}" not found`);
+    }
+    const bedPatch = resolveBedPatch(stored, sanitizedData);
+    await db.rooms.update(id, bedPatch ? { ...sanitizedData, ...bedPatch } : sanitizedData);
+  });
 }
 
 /**
@@ -365,7 +428,7 @@ export async function getRoomCount(tripId: TripId): Promise<number> {
  * Clones all rooms from a source trip to a target trip.
  *
  * Creates new rooms in the target trip with new IDs, preserving name, capacity,
- * description, icon, and relative ordering from the source trip.
+ * beds, description, icon, and relative ordering from the source trip.
  * Existing rooms in the target trip are not affected.
  *
  * @param sourceTripId - The trip to clone rooms from
@@ -403,6 +466,7 @@ export async function cloneRoomsToTrip(
       capacity: sourceRoom.capacity,
       description: sourceRoom.description,
       icon: sourceRoom.icon,
+      ...copyBedFields(sourceRoom),
       ...(sourceRoom.photoId === undefined ? {} : { photoId: sourceRoom.photoId }),
       order: baseOrder + index,
     }));
@@ -464,7 +528,8 @@ export async function updateRoomWithOwnershipCheck(
       throw new Error('Cannot update room: room does not belong to current trip');
     }
 
-    await db.rooms.update(id, data);
+    const bedPatch = resolveBedPatch(room, data);
+    await db.rooms.update(id, bedPatch ? { ...data, ...bedPatch } : data);
   });
 }
 
@@ -472,7 +537,7 @@ export async function updateRoomWithOwnershipCheck(
  * Copies a room within its trip, with ownership validation, in a single
  * transaction.
  *
- * The copy takes the original's capacity, description and icon, a name that
+ * The copy takes the original's capacity, beds, description and icon, a name that
  * continues the original's number series, and the order right after the
  * original, so it lands beside the room it came from rather than at the end of
  * a long list. Assignments are not copied: the beds are new and empty.
@@ -515,6 +580,7 @@ export async function duplicateRoomWithOwnershipCheck(
       capacity: source.capacity,
       description: source.description,
       icon: source.icon,
+      ...copyBedFields(source),
       // Same trip, so the same bytes: the copy names the original's photo.
       ...(source.photoId === undefined ? {} : { photoId: source.photoId }),
       order: source.order + 1,

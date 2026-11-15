@@ -16,7 +16,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, ChevronDown, Copy, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, BedDouble, Check, ChevronDown, Copy, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 
 import {
@@ -39,6 +39,7 @@ import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ZoomablePhoto } from '@/components/shared/ZoomablePhoto';
+import { formatBedLayout } from '@/features/rooms/utils/bed-format';
 import { usePhotoUrl, type PhotoTrip } from '@/hooks/usePhotoUrl';
 import { cn } from '@/lib/utils';
 import type { Person, Room } from '@/types';
@@ -197,10 +198,22 @@ const RoomCard = memo(function RoomCard({
     () =>
       [
         room.name,
-        t('rooms.beds', { count: room.capacity }),
+        t('rooms.sleeps', { count: room.capacity }),
         t('rooms.spotsTaken', { occupied: peakOccupancy, count: room.capacity }),
       ].join(', '),
     [room.name, room.capacity, peakOccupancy, t]
+  ),
+
+  // The beds, one line per layout. A room with two layouts is set up one way
+  // or the other, so the second line starts with "or".
+  bedLines = useMemo(
+    () =>
+      (room.bedLayouts ?? []).map((layout, index) => ({
+        key: index,
+        name: layout.name,
+        beds: formatBedLayout(layout, t),
+      })),
+    [room.bedLayouts, t],
   ),
 
   // Get the room icon component based on room.icon field
@@ -539,11 +552,28 @@ const RoomCard = memo(function RoomCard({
           )}
         </CardContent>
 
-        {/* Card Footer - Beds count and expand indicator */}
-        <CardFooter className="pt-0 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {t('rooms.beds', { count: room.capacity })}
-          </p>
+        {/* Card Footer - What the room sleeps, its beds, and the expand indicator */}
+        <CardFooter className="pt-0 flex items-end justify-between gap-2">
+          <div className="min-w-0 space-y-0.5 text-xs text-muted-foreground">
+            <p>{t('rooms.sleeps', { count: room.capacity })}</p>
+            {bedLines.length > 0 && (
+              <ul aria-label={t('rooms.bedsLegend')} className="space-y-0.5">
+                {bedLines.map((line, index) => (
+                  <li key={line.key} className="flex gap-1">
+                    <BedDouble className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0">
+                      {index > 0 && `${t('rooms.layoutOr')} `}
+                      {line.name && <span className="font-medium text-foreground">{line.name}: </span>}
+                      {line.beds}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {room.bedLayouts !== undefined && room.extraSpots !== undefined && (
+              <p>{t('rooms.extraSpotsSummary', { count: room.extraSpots })}</p>
+            )}
+          </div>
           {expandedContent && (
             <ChevronDown
               className={cn(

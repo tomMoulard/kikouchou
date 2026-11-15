@@ -125,6 +125,8 @@ export function TemplateLandingPage(): ReactElement {
           capacity: room.capacity,
           icon: room.icon,
           ...(photo === undefined ? {} : { photo }),
+          ...(room.bedLayouts === undefined ? {} : { bedLayouts: room.bedLayouts }),
+          ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
         };
       }),
     };

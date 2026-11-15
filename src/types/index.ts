@@ -577,6 +577,143 @@ export function normalizeRoomIcon(value: unknown): RoomIcon {
   return ROOM_ICONS.includes(value as RoomIcon) ? (value as RoomIcon) : DEFAULT_ROOM_ICON;
 }
 
+// ============================================================================
+// Beds
+// ============================================================================
+
+/**
+ * Kind of bed in a room. The kind says how many people the bed sleeps and
+ * gives the size used when the organiser does not type one.
+ *
+ * A floor mattress or a child in the parents' bed is not a bed kind: it is
+ * an extra sleeping spot ({@link Room.extraSpots}).
+ */
+export type BedKind =
+  | 'single'   // 90 × 190, one person
+  | 'double'   // 140 × 190, "lit 140"
+  | 'queen'    // 160 × 200, "lit 160"
+  | 'king'     // 180 × 200, "lit 180"
+  | 'bunk'     // A bunk bed: two levels, one person each
+  | 'sofa-bed' // Unfolds into a 140
+  | 'cot';     // Baby cot, one child
+
+/**
+ * Every bed kind, as values. A bed arriving from a peer, a template or a QR
+ * import is a string until it is checked against this list.
+ */
+export const BED_KINDS: readonly BedKind[] = [
+  'single',
+  'double',
+  'queen',
+  'king',
+  'bunk',
+  'sofa-bed',
+  'cot',
+] as const;
+
+/** How many people one bed of each kind sleeps. */
+export const BED_KIND_SLEEPS: Readonly<Record<BedKind, number>> = {
+  single: 1,
+  double: 2,
+  queen: 2,
+  king: 2,
+  bunk: 2,
+  'sofa-bed': 2,
+  cot: 1,
+};
+
+/** The usual size of each kind, in centimetres, shown when none is typed. */
+export const BED_KIND_DEFAULT_SIZE: Readonly<Record<BedKind, { readonly widthCm: number; readonly lengthCm: number }>> = {
+  single: { widthCm: 90, lengthCm: 190 },
+  double: { widthCm: 140, lengthCm: 190 },
+  queen: { widthCm: 160, lengthCm: 200 },
+  king: { widthCm: 180, lengthCm: 200 },
+  bunk: { widthCm: 90, lengthCm: 190 },
+  'sofa-bed': { widthCm: 140, lengthCm: 190 },
+  cot: { widthCm: 60, lengthCm: 120 },
+};
+
+/** Bounds of a bed's width, in centimetres. */
+export const MIN_BED_WIDTH_CM = 40;
+export const MAX_BED_WIDTH_CM = 250;
+/** Bounds of a bed's length, in centimetres. */
+export const MIN_BED_LENGTH_CM = 80;
+export const MAX_BED_LENGTH_CM = 250;
+/** Most beds of one kind and size in one line of a layout. */
+export const MAX_BED_COUNT = 20;
+/** Most lines in one layout. */
+export const MAX_BEDS_PER_LAYOUT = 10;
+/**
+ * Most layouts a room may have. Two covers twin or together; three covers a
+ * room with a sofa bed as well.
+ */
+export const MAX_ROOM_BED_LAYOUTS = 3;
+/** Longest layout name ("Twin", "Together"). */
+export const MAX_BED_LAYOUT_NAME_LENGTH = 40;
+/** Most extra sleeping spots on top of the beds. */
+export const MAX_ROOM_EXTRA_SPOTS = 20;
+
+/**
+ * One line of a layout: `count` beds of one kind and size.
+ *
+ * The size is optional. Absent, the room shows the usual size of the kind
+ * ({@link BED_KIND_DEFAULT_SIZE}).
+ */
+export interface RoomBed {
+  /** Kind of bed */
+  kind: BedKind;
+  /** How many beds of this kind and size (1 to {@link MAX_BED_COUNT}) */
+  count: number;
+  /** Width in centimetres, when the organiser knows it */
+  widthCm?: number;
+  /** Length in centimetres, when the organiser knows it */
+  lengthCm?: number;
+}
+
+/**
+ * One way the room's beds can be set up.
+ *
+ * @example
+ * Two singles that can be pushed into one queen are two layouts:
+ * ```typescript
+ * [
+ *   { name: 'Twin', beds: [{ kind: 'single', count: 2, widthCm: 80, lengthCm: 200 }] },
+ *   { name: 'Together', beds: [{ kind: 'queen', count: 1 }] },
+ * ]
+ * ```
+ */
+export interface RoomBedLayout {
+  /** Optional name, so guests can say which one they want */
+  name?: string;
+  /** The beds of this layout, at least one line */
+  beds: RoomBed[];
+}
+
+/** How many people one layout sleeps, extra spots not included. */
+export function getBedLayoutSleeps(layout: Pick<RoomBedLayout, 'beds'>): number {
+  return layout.beds.reduce((sum, bed) => sum + BED_KIND_SLEEPS[bed.kind] * bed.count, 0);
+}
+
+/**
+ * How many people a room with these beds sleeps: its largest layout, plus
+ * the extra spots. Returns null when the room describes no beds, and the
+ * stored capacity is then the organiser's own number.
+ *
+ * The largest layout, because the layouts are alternatives: the room can be
+ * set up to sleep that many. Which layout a night uses is the planning's
+ * question, not the room's.
+ */
+export function computeRoomCapacityFromBeds(
+  bedLayouts: readonly Pick<RoomBedLayout, 'beds'>[] | undefined,
+  extraSpots: number | undefined,
+): number | null {
+  if (!bedLayouts || bedLayouts.length === 0) {
+    return null;
+  }
+  const largest = Math.max(...bedLayouts.map(getBedLayoutSleeps));
+  return largest + (extraSpots ?? 0);
+}
+
 /**
  * Supported application languages.
  */
@@ -823,10 +960,26 @@ export interface Room extends Identifiable, TripScoped {
   name: string;
 
   /**
-   * Number of beds/sleeping spots in the room.
-   * Must be a positive integer (minimum: 1).
+   * How many people the room sleeps. Must be a positive integer (minimum: 1).
+   *
+   * When the room describes its beds ({@link bedLayouts}), this is computed
+   * from them by {@link computeRoomCapacityFromBeds} and stored, so a build
+   * that does not know about beds still reads the right number. Without beds
+   * it is the organiser's own number.
    */
   capacity: number;
+
+  /**
+   * The ways the room's beds can be set up, at most
+   * {@link MAX_ROOM_BED_LAYOUTS}. Absent means the room describes no beds.
+   */
+  bedLayouts?: RoomBedLayout[];
+
+  /**
+   * Sleeping spots that are not beds: a floor mattress, a child in the
+   * parents' bed. Only meaningful beside {@link bedLayouts}. Absent means 0.
+   */
+  extraSpots?: number;
 
   /**
    * Optional description or notes about the room.
@@ -2094,12 +2247,16 @@ export interface TripFormData {
 export interface RoomFormData {
   /** Display name for the room */
   name: string;
-  /** Number of beds/sleeping spots (minimum: 1) */
+  /** How many people the room sleeps (minimum: 1); computed when beds are set */
   capacity: number;
   /** Optional description or notes */
   description?: string;
   /** Optional icon for visual identification */
   icon?: RoomIcon;
+  /** The ways the beds can be set up; absent or empty means no beds described */
+  bedLayouts?: RoomBedLayout[];
+  /** Sleeping spots that are not beds */
+  extraSpots?: number;
 }
 
 /**

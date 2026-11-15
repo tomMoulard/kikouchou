@@ -157,6 +157,8 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
         name: room.name,
         capacity: room.capacity,
         icon: room.icon,
+        ...(room.bedLayouts === undefined ? {} : { bedLayouts: room.bedLayouts }),
+        ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
       });
       rooms += 1;
       if (room.photo) {

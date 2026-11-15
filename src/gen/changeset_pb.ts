@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file changeset.proto.
  */
 export const file_changeset: GenFile = /*@__PURE__*/
-  fileDesc("Cg9jaGFuZ2VzZXQucHJvdG8SEWtpa291Y2hvdS5zaGFyaW5nIp4CCg1UcmlwQ2hhbmdlc2V0Eg8KB3ZlcnNpb24YASABKA0SDwoHdHJpcF9pZBgCIAEoCRIQCghzaGFyZV9pZBgDIAEoCRITCgtleHBvcnRlZF9ieRgEIAEoCRITCgtleHBvcnRlZF9hdBgFIAEoAxIYChBiYXNlX3NuYXBzaG90X2F0GAYgASgDEiwKBWFkZGVkGAcgASgLMh0ua2lrb3VjaG91LnNoYXJpbmcuRW50aXR5TGlzdBIvCghtb2RpZmllZBgIIAEoCzIdLmtpa291Y2hvdS5zaGFyaW5nLkVudGl0eUxpc3QSNgoNdHJpcF9zbmFwc2hvdBgJIAEoCzIfLmtpa291Y2hvdS5zaGFyaW5nLlRyaXBTbmFwc2hvdCKgAgoKRW50aXR5TGlzdBIqCgdwZXJzb25zGAEgAygLMhkua2lrb3VjaG91LnNoYXJpbmcuUGVyc29uEjYKC2Fzc2lnbm1lbnRzGAIgAygLMiEua2lrb3VjaG91LnNoYXJpbmcuUm9vbUFzc2lnbm1lbnQSMAoKdHJhbnNwb3J0cxgDIAMoCzIcLmtpa291Y2hvdS5zaGFyaW5nLlRyYW5zcG9ydBImCgVyb29tcxgEIAMoCzIXLmtpa291Y2hvdS5zaGFyaW5nLlJvb20SJgoFcmlkZXMYBSADKAsyFy5raWtvdWNob3Uuc2hhcmluZy5SaWRlEiwKCHZlaGljbGVzGAYgAygLMhoua2lrb3VjaG91LnNoYXJpbmcuVmVoaWNsZSLcAQoMVHJpcFNuYXBzaG90EgwKBG5hbWUYASABKAkSEgoKc3RhcnRfZGF0ZRgCIAEoCRIQCghlbmRfZGF0ZRgDIAEoCRIVCghsb2NhdGlvbhgEIAEoCUgAiAEBEhgKC2Rlc2NyaXB0aW9uGAUgASgJSAGIAQESFgoJY29vcmRfbGF0GAYgASgBSAKIAQESFgoJY29vcmRfbG9uGAcgASgBSAOIAQFCCwoJX2xvY2F0aW9uQg4KDF9kZXNjcmlwdGlvbkIMCgpfY29vcmRfbGF0QgwKCl9jb29yZF9sb24imAEKBFJvb20SCgoCaWQYASABKAkSDwoHdHJpcF9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhAKCGNhcGFjaXR5GAQgASgNEg0KBW9yZGVyGAUgASgFEhgKC2Rlc2NyaXB0aW9uGAYgASgJSACIAQESEQoEaWNvbhgHIAEoCUgBiAEBQg4KDF9kZXNjcmlwdGlvbkIHCgVfaWNvbiKCAwoGUGVyc29uEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRINCgVjb2xvchgEIAEoCRIcCg9zdGF5X3N0YXJ0X2RhdGUYBSABKAlIAIgBARIaCg1zdGF5X2VuZF9kYXRlGAYgASgJSAGIAQESEgoFbm90ZXMYByABKAlIAogBARIWCgloZWFkY291bnQYCCABKA1IA4gBARISCgVwaG9uZRgJIAEoCUgEiAEBEjkKCmNoaWxkX3NlYXQYCiABKA4yIC5raWtvdWNob3Uuc2hhcmluZy5DaGlsZFNlYXRLaW5kSAWIAQESMgoLZXh0cmFfc3RheXMYCyADKAsyHS5raWtvdWNob3Uuc2hhcmluZy5TdGF5UGVyaW9kQhIKEF9zdGF5X3N0YXJ0X2RhdGVCEAoOX3N0YXlfZW5kX2RhdGVCCAoGX25vdGVzQgwKCl9oZWFkY291bnRCCAoGX3Bob25lQg0KC19jaGlsZF9zZWF0IjIKClN0YXlQZXJpb2QSEgoKc3RhcnRfZGF0ZRgBIAEoCRIQCghlbmRfZGF0ZRgCIAEoCSJ3Cg5Sb29tQXNzaWdubWVudBIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEg8KB3Jvb21faWQYAyABKAkSEQoJcGVyc29uX2lkGAQgASgJEhIKCnN0YXJ0X2RhdGUYBSABKAkSEAoIZW5kX2RhdGUYBiABKAkijwUKCVRyYW5zcG9ydBIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEhEKCXBlcnNvbl9pZBgDIAEoCRIuCgR0eXBlGAQgASgOMiAua2lrb3VjaG91LnNoYXJpbmcuVHJhbnNwb3J0VHlwZRIQCghkYXRldGltZRgFIAEoCRIQCghsb2NhdGlvbhgGIAEoCRI4Cgtjb29yZGluYXRlcxgHIAEoCzIeLmtpa291Y2hvdS5zaGFyaW5nLkNvb3JkaW5hdGVzSACIAQESPQoOdHJhbnNwb3J0X21vZGUYCCABKA4yIC5raWtvdWNob3Uuc2hhcmluZy5UcmFuc3BvcnRNb2RlSAGIAQESHQoQdHJhbnNwb3J0X251bWJlchgJIAEoCUgCiAEBEhYKCWRyaXZlcl9pZBgKIAEoCUgDiAEBEhQKDG5lZWRzX3BpY2t1cBgLIAEoCBISCgVub3RlcxgMIAEoCUgEiAEBEhsKDnN0YXJ0X2xvY2F0aW9uGA0gASgJSAWIAQESPgoRc3RhcnRfY29vcmRpbmF0ZXMYDiABKAsyHi5raWtvdWNob3Uuc2hhcmluZy5Db29yZGluYXRlc0gGiAEBEhQKB3JpZGVfaWQYDyABKAlIB4gBARIaCg1zaGFyZWRfbGVnX2lkGBAgASgJSAiIAQFCDgoMX2Nvb3JkaW5hdGVzQhEKD190cmFuc3BvcnRfbW9kZUITChFfdHJhbnNwb3J0X251bWJlckIMCgpfZHJpdmVyX2lkQggKBl9ub3Rlc0IRCg9fc3RhcnRfbG9jYXRpb25CFAoSX3N0YXJ0X2Nvb3JkaW5hdGVzQgoKCF9yaWRlX2lkQhAKDl9zaGFyZWRfbGVnX2lkIpQCCgdWZWhpY2xlEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRIVCghvd25lcl9pZBgEIAEoCUgAiAEBEhcKCnNlYXRfY291bnQYBiABKA1IAYgBARI1CgtjaGlsZF9zZWF0cxgHIAMoDjIgLmtpa291Y2hvdS5zaGFyaW5nLkNoaWxkU2VhdEtpbmQSGgoNbHVnZ2FnZV9ub3RlcxgIIAEoCUgCiAEBEhIKBW5vdGVzGAkgASgJSAOIAQFCCwoJX293bmVyX2lkQg0KC19zZWF0X2NvdW50QhAKDl9sdWdnYWdlX25vdGVzQggKBl9ub3Rlc0oECAUQBlIJaXNfcmVudGFsIu0CCgRSaWRlEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSMwoJZGlyZWN0aW9uGAMgASgOMiAua2lrb3VjaG91LnNoYXJpbmcuUmlkZURpcmVjdGlvbhIVCg1tZWV0X2RhdGV0aW1lGAQgASgJEhAKCGxvY2F0aW9uGAUgASgJEjgKC2Nvb3JkaW5hdGVzGAYgASgLMh4ua2lrb3VjaG91LnNoYXJpbmcuQ29vcmRpbmF0ZXNIAIgBARIeChFsZWFkX3RpbWVfbWludXRlcxgHIAEoDUgBiAEBEhYKCWRyaXZlcl9pZBgIIAEoCUgCiAEBEhcKCnZlaGljbGVfaWQYCSABKAlIA4gBARISCgVub3RlcxgKIAEoCUgEiAEBQg4KDF9jb29yZGluYXRlc0IUChJfbGVhZF90aW1lX21pbnV0ZXNCDAoKX2RyaXZlcl9pZEINCgtfdmVoaWNsZV9pZEIICgZfbm90ZXMiJwoLQ29vcmRpbmF0ZXMSCwoDbGF0GAEgASgBEgsKA2xvbhgCIAEoASppCg1UcmFuc3BvcnRUeXBlEh4KGlRSQU5TUE9SVF9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWVFJBTlNQT1JUX1RZUEVfQVJSSVZBTBABEhwKGFRSQU5TUE9SVF9UWVBFX0RFUEFSVFVSRRACKmYKDVJpZGVEaXJlY3Rpb24SHgoaUklERV9ESVJFQ1RJT05fVU5TUEVDSUZJRUQQABIZChVSSURFX0RJUkVDVElPTl9QSUNLVVAQARIaChZSSURFX0RJUkVDVElPTl9EUk9QT0ZGEAIqkgEKDUNoaWxkU2VhdEtpbmQSHwobQ0hJTERfU0VBVF9LSU5EX1VOU1BFQ0lGSUVEEAASHwobQ0hJTERfU0VBVF9LSU5EX1JFQVJfRkFDSU5HEAESIgoeQ0hJTERfU0VBVF9LSU5EX0ZPUldBUkRfRkFDSU5HEAISGwoXQ0hJTERfU0VBVF9LSU5EX0JPT1NURVIQAyqtAQoNVHJhbnNwb3J0TW9kZRIeChpUUkFOU1BPUlRfTU9ERV9VTlNQRUNJRklFRBAAEhgKFFRSQU5TUE9SVF9NT0RFX1RSQUlOEAESGAoUVFJBTlNQT1JUX01PREVfUExBTkUQAhIWChJUUkFOU1BPUlRfTU9ERV9DQVIQAxIWChJUUkFOU1BPUlRfTU9ERV9CVVMQBBIYChRUUkFOU1BPUlRfTU9ERV9PVEhFUhAFYgZwcm90bzM");
+  fileDesc("Cg9jaGFuZ2VzZXQucHJvdG8SEWtpa291Y2hvdS5zaGFyaW5nIp4CCg1UcmlwQ2hhbmdlc2V0Eg8KB3ZlcnNpb24YASABKA0SDwoHdHJpcF9pZBgCIAEoCRIQCghzaGFyZV9pZBgDIAEoCRITCgtleHBvcnRlZF9ieRgEIAEoCRITCgtleHBvcnRlZF9hdBgFIAEoAxIYChBiYXNlX3NuYXBzaG90X2F0GAYgASgDEiwKBWFkZGVkGAcgASgLMh0ua2lrb3VjaG91LnNoYXJpbmcuRW50aXR5TGlzdBIvCghtb2RpZmllZBgIIAEoCzIdLmtpa291Y2hvdS5zaGFyaW5nLkVudGl0eUxpc3QSNgoNdHJpcF9zbmFwc2hvdBgJIAEoCzIfLmtpa291Y2hvdS5zaGFyaW5nLlRyaXBTbmFwc2hvdCKgAgoKRW50aXR5TGlzdBIqCgdwZXJzb25zGAEgAygLMhkua2lrb3VjaG91LnNoYXJpbmcuUGVyc29uEjYKC2Fzc2lnbm1lbnRzGAIgAygLMiEua2lrb3VjaG91LnNoYXJpbmcuUm9vbUFzc2lnbm1lbnQSMAoKdHJhbnNwb3J0cxgDIAMoCzIcLmtpa291Y2hvdS5zaGFyaW5nLlRyYW5zcG9ydBImCgVyb29tcxgEIAMoCzIXLmtpa291Y2hvdS5zaGFyaW5nLlJvb20SJgoFcmlkZXMYBSADKAsyFy5raWtvdWNob3Uuc2hhcmluZy5SaWRlEiwKCHZlaGljbGVzGAYgAygLMhoua2lrb3VjaG91LnNoYXJpbmcuVmVoaWNsZSLcAQoMVHJpcFNuYXBzaG90EgwKBG5hbWUYASABKAkSEgoKc3RhcnRfZGF0ZRgCIAEoCRIQCghlbmRfZGF0ZRgDIAEoCRIVCghsb2NhdGlvbhgEIAEoCUgAiAEBEhgKC2Rlc2NyaXB0aW9uGAUgASgJSAGIAQESFgoJY29vcmRfbGF0GAYgASgBSAKIAQESFgoJY29vcmRfbG9uGAcgASgBSAOIAQFCCwoJX2xvY2F0aW9uQg4KDF9kZXNjcmlwdGlvbkIMCgpfY29vcmRfbGF0QgwKCl9jb29yZF9sb24i4AEKBFJvb20SCgoCaWQYASABKAkSDwoHdHJpcF9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhAKCGNhcGFjaXR5GAQgASgNEg0KBW9yZGVyGAUgASgFEhgKC2Rlc2NyaXB0aW9uGAYgASgJSACIAQESEQoEaWNvbhgHIAEoCUgBiAEBEjEKC2JlZF9sYXlvdXRzGAggAygLMhwua2lrb3VjaG91LnNoYXJpbmcuQmVkTGF5b3V0EhMKC2V4dHJhX3Nwb3RzGAkgASgNQg4KDF9kZXNjcmlwdGlvbkIHCgVfaWNvbiJNCglCZWRMYXlvdXQSEQoEbmFtZRgBIAEoCUgAiAEBEiQKBGJlZHMYAiADKAsyFi5raWtvdWNob3Uuc2hhcmluZy5CZWRCBwoFX25hbWUibAoDQmVkEgwKBGtpbmQYASABKAkSDQoFY291bnQYAiABKA0SFQoId2lkdGhfY20YAyABKA1IAIgBARIWCglsZW5ndGhfY20YBCABKA1IAYgBAUILCglfd2lkdGhfY21CDAoKX2xlbmd0aF9jbSKCAwoGUGVyc29uEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRINCgVjb2xvchgEIAEoCRIcCg9zdGF5X3N0YXJ0X2RhdGUYBSABKAlIAIgBARIaCg1zdGF5X2VuZF9kYXRlGAYgASgJSAGIAQESEgoFbm90ZXMYByABKAlIAogBARIWCgloZWFkY291bnQYCCABKA1IA4gBARISCgVwaG9uZRgJIAEoCUgEiAEBEjkKCmNoaWxkX3NlYXQYCiABKA4yIC5raWtvdWNob3Uuc2hhcmluZy5DaGlsZFNlYXRLaW5kSAWIAQESMgoLZXh0cmFfc3RheXMYCyADKAsyHS5raWtvdWNob3Uuc2hhcmluZy5TdGF5UGVyaW9kQhIKEF9zdGF5X3N0YXJ0X2RhdGVCEAoOX3N0YXlfZW5kX2RhdGVCCAoGX25vdGVzQgwKCl9oZWFkY291bnRCCAoGX3Bob25lQg0KC19jaGlsZF9zZWF0IjIKClN0YXlQZXJpb2QSEgoKc3RhcnRfZGF0ZRgBIAEoCRIQCghlbmRfZGF0ZRgCIAEoCSJ3Cg5Sb29tQXNzaWdubWVudBIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEg8KB3Jvb21faWQYAyABKAkSEQoJcGVyc29uX2lkGAQgASgJEhIKCnN0YXJ0X2RhdGUYBSABKAkSEAoIZW5kX2RhdGUYBiABKAkijwUKCVRyYW5zcG9ydBIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEhEKCXBlcnNvbl9pZBgDIAEoCRIuCgR0eXBlGAQgASgOMiAua2lrb3VjaG91LnNoYXJpbmcuVHJhbnNwb3J0VHlwZRIQCghkYXRldGltZRgFIAEoCRIQCghsb2NhdGlvbhgGIAEoCRI4Cgtjb29yZGluYXRlcxgHIAEoCzIeLmtpa291Y2hvdS5zaGFyaW5nLkNvb3JkaW5hdGVzSACIAQESPQoOdHJhbnNwb3J0X21vZGUYCCABKA4yIC5raWtvdWNob3Uuc2hhcmluZy5UcmFuc3BvcnRNb2RlSAGIAQESHQoQdHJhbnNwb3J0X251bWJlchgJIAEoCUgCiAEBEhYKCWRyaXZlcl9pZBgKIAEoCUgDiAEBEhQKDG5lZWRzX3BpY2t1cBgLIAEoCBISCgVub3RlcxgMIAEoCUgEiAEBEhsKDnN0YXJ0X2xvY2F0aW9uGA0gASgJSAWIAQESPgoRc3RhcnRfY29vcmRpbmF0ZXMYDiABKAsyHi5raWtvdWNob3Uuc2hhcmluZy5Db29yZGluYXRlc0gGiAEBEhQKB3JpZGVfaWQYDyABKAlIB4gBARIaCg1zaGFyZWRfbGVnX2lkGBAgASgJSAiIAQFCDgoMX2Nvb3JkaW5hdGVzQhEKD190cmFuc3BvcnRfbW9kZUITChFfdHJhbnNwb3J0X251bWJlckIMCgpfZHJpdmVyX2lkQggKBl9ub3Rlc0IRCg9fc3RhcnRfbG9jYXRpb25CFAoSX3N0YXJ0X2Nvb3JkaW5hdGVzQgoKCF9yaWRlX2lkQhAKDl9zaGFyZWRfbGVnX2lkIpQCCgdWZWhpY2xlEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRIVCghvd25lcl9pZBgEIAEoCUgAiAEBEhcKCnNlYXRfY291bnQYBiABKA1IAYgBARI1CgtjaGlsZF9zZWF0cxgHIAMoDjIgLmtpa291Y2hvdS5zaGFyaW5nLkNoaWxkU2VhdEtpbmQSGgoNbHVnZ2FnZV9ub3RlcxgIIAEoCUgCiAEBEhIKBW5vdGVzGAkgASgJSAOIAQFCCwoJX293bmVyX2lkQg0KC19zZWF0X2NvdW50QhAKDl9sdWdnYWdlX25vdGVzQggKBl9ub3Rlc0oECAUQBlIJaXNfcmVudGFsIu0CCgRSaWRlEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSMwoJZGlyZWN0aW9uGAMgASgOMiAua2lrb3VjaG91LnNoYXJpbmcuUmlkZURpcmVjdGlvbhIVCg1tZWV0X2RhdGV0aW1lGAQgASgJEhAKCGxvY2F0aW9uGAUgASgJEjgKC2Nvb3JkaW5hdGVzGAYgASgLMh4ua2lrb3VjaG91LnNoYXJpbmcuQ29vcmRpbmF0ZXNIAIgBARIeChFsZWFkX3RpbWVfbWludXRlcxgHIAEoDUgBiAEBEhYKCWRyaXZlcl9pZBgIIAEoCUgCiAEBEhcKCnZlaGljbGVfaWQYCSABKAlIA4gBARISCgVub3RlcxgKIAEoCUgEiAEBQg4KDF9jb29yZGluYXRlc0IUChJfbGVhZF90aW1lX21pbnV0ZXNCDAoKX2RyaXZlcl9pZEINCgtfdmVoaWNsZV9pZEIICgZfbm90ZXMiJwoLQ29vcmRpbmF0ZXMSCwoDbGF0GAEgASgBEgsKA2xvbhgCIAEoASppCg1UcmFuc3BvcnRUeXBlEh4KGlRSQU5TUE9SVF9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWVFJBTlNQT1JUX1RZUEVfQVJSSVZBTBABEhwKGFRSQU5TUE9SVF9UWVBFX0RFUEFSVFVSRRACKmYKDVJpZGVEaXJlY3Rpb24SHgoaUklERV9ESVJFQ1RJT05fVU5TUEVDSUZJRUQQABIZChVSSURFX0RJUkVDVElPTl9QSUNLVVAQARIaChZSSURFX0RJUkVDVElPTl9EUk9QT0ZGEAIqkgEKDUNoaWxkU2VhdEtpbmQSHwobQ0hJTERfU0VBVF9LSU5EX1VOU1BFQ0lGSUVEEAASHwobQ0hJTERfU0VBVF9LSU5EX1JFQVJfRkFDSU5HEAESIgoeQ0hJTERfU0VBVF9LSU5EX0ZPUldBUkRfRkFDSU5HEAISGwoXQ0hJTERfU0VBVF9LSU5EX0JPT1NURVIQAyqtAQoNVHJhbnNwb3J0TW9kZRIeChpUUkFOU1BPUlRfTU9ERV9VTlNQRUNJRklFRBAAEhgKFFRSQU5TUE9SVF9NT0RFX1RSQUlOEAESGAoUVFJBTlNQT1JUX01PREVfUExBTkUQAhIWChJUUkFOU1BPUlRfTU9ERV9DQVIQAxIWChJUUkFOU1BPUlRfTU9ERV9CVVMQBBIYChRUUkFOU1BPUlRfTU9ERV9PVEhFUhAFYgZwcm90bzM");
 
 /**
  * Top-level changeset message — this is what goes into the QR code.
@@ -224,6 +224,21 @@ export type Room = Message<"kikouchou.sharing.Room"> & {
    * @generated from field: optional string icon = 7;
    */
   icon?: string | undefined;
+
+  /**
+   * The ways the beds can be set up. Empty means the room describes no beds,
+   * and then capacity is the organiser's own number.
+   *
+   * @generated from field: repeated kikouchou.sharing.BedLayout bed_layouts = 8;
+   */
+  bedLayouts: BedLayout[];
+
+  /**
+   * Sleeping spots that are not beds. 0 means none.
+   *
+   * @generated from field: uint32 extra_spots = 9;
+   */
+  extraSpots: number;
 };
 
 /**
@@ -232,6 +247,66 @@ export type Room = Message<"kikouchou.sharing.Room"> & {
  */
 export const RoomSchema: GenMessage<Room> = /*@__PURE__*/
   messageDesc(file_changeset, 3);
+
+/**
+ * One way a room's beds can be set up.
+ *
+ * @generated from message kikouchou.sharing.BedLayout
+ */
+export type BedLayout = Message<"kikouchou.sharing.BedLayout"> & {
+  /**
+   * @generated from field: optional string name = 1;
+   */
+  name?: string | undefined;
+
+  /**
+   * @generated from field: repeated kikouchou.sharing.Bed beds = 2;
+   */
+  beds: Bed[];
+};
+
+/**
+ * Describes the message kikouchou.sharing.BedLayout.
+ * Use `create(BedLayoutSchema)` to create a new message.
+ */
+export const BedLayoutSchema: GenMessage<BedLayout> = /*@__PURE__*/
+  messageDesc(file_changeset, 4);
+
+/**
+ * One line of a bed layout: count beds of one kind and size.
+ *
+ * @generated from message kikouchou.sharing.Bed
+ */
+export type Bed = Message<"kikouchou.sharing.Bed"> & {
+  /**
+   * "single", "double", "queen", ...
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: uint32 count = 2;
+   */
+  count: number;
+
+  /**
+   * @generated from field: optional uint32 width_cm = 3;
+   */
+  widthCm?: number | undefined;
+
+  /**
+   * @generated from field: optional uint32 length_cm = 4;
+   */
+  lengthCm?: number | undefined;
+};
+
+/**
+ * Describes the message kikouchou.sharing.Bed.
+ * Use `create(BedSchema)` to create a new message.
+ */
+export const BedSchema: GenMessage<Bed> = /*@__PURE__*/
+  messageDesc(file_changeset, 5);
 
 /**
  * A trip participant.
@@ -318,7 +393,7 @@ export type Person = Message<"kikouchou.sharing.Person"> & {
  * Use `create(PersonSchema)` to create a new message.
  */
 export const PersonSchema: GenMessage<Person> = /*@__PURE__*/
-  messageDesc(file_changeset, 4);
+  messageDesc(file_changeset, 6);
 
 /**
  * One stay of a guest: check-in and check-out days, ISO YYYY-MM-DD.
@@ -342,7 +417,7 @@ export type StayPeriod = Message<"kikouchou.sharing.StayPeriod"> & {
  * Use `create(StayPeriodSchema)` to create a new message.
  */
 export const StayPeriodSchema: GenMessage<StayPeriod> = /*@__PURE__*/
-  messageDesc(file_changeset, 5);
+  messageDesc(file_changeset, 7);
 
 /**
  * Links a person to a room for a specific date range.
@@ -390,7 +465,7 @@ export type RoomAssignment = Message<"kikouchou.sharing.RoomAssignment"> & {
  * Use `create(RoomAssignmentSchema)` to create a new message.
  */
 export const RoomAssignmentSchema: GenMessage<RoomAssignment> = /*@__PURE__*/
-  messageDesc(file_changeset, 6);
+  messageDesc(file_changeset, 8);
 
 /**
  * An arrival or departure event.
@@ -496,7 +571,7 @@ export type Transport = Message<"kikouchou.sharing.Transport"> & {
  * Use `create(TransportSchema)` to create a new message.
  */
 export const TransportSchema: GenMessage<Transport> = /*@__PURE__*/
-  messageDesc(file_changeset, 7);
+  messageDesc(file_changeset, 9);
 
 /**
  * A car available to the trip — someone's own, or the one hired for the week.
@@ -556,7 +631,7 @@ export type Vehicle = Message<"kikouchou.sharing.Vehicle"> & {
  * Use `create(VehicleSchema)` to create a new message.
  */
 export const VehicleSchema: GenMessage<Vehicle> = /*@__PURE__*/
-  messageDesc(file_changeset, 8);
+  messageDesc(file_changeset, 10);
 
 /**
  * A car journey serving one or more Transport legs.
@@ -627,7 +702,7 @@ export type Ride = Message<"kikouchou.sharing.Ride"> & {
  * Use `create(RideSchema)` to create a new message.
  */
 export const RideSchema: GenMessage<Ride> = /*@__PURE__*/
-  messageDesc(file_changeset, 9);
+  messageDesc(file_changeset, 11);
 
 /**
  * GPS coordinates.
@@ -651,7 +726,7 @@ export type Coordinates = Message<"kikouchou.sharing.Coordinates"> & {
  * Use `create(CoordinatesSchema)` to create a new message.
  */
 export const CoordinatesSchema: GenMessage<Coordinates> = /*@__PURE__*/
-  messageDesc(file_changeset, 10);
+  messageDesc(file_changeset, 12);
 
 /**
  * @generated from enum kikouchou.sharing.TransportType

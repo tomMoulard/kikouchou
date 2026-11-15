@@ -33,7 +33,8 @@
  *    is closer to right than wrong: the shares of one line are agreed together,
  *    so the later edit is the group's later reading of that receipt. Fixing the
  *    activity case needs a `Y.Array` per activity and is deliberately out of
- *    scope here.
+ *    scope here. A room's `bedLayouts` are the same shape: the beds of a room
+ *    are described together, so the last description wins whole.
  *
  * @module lib/yjs/doc-model
  */

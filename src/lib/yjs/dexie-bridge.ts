@@ -30,7 +30,7 @@ import {
   normalizeMaxParticipants,
   normalizeMealHeadcountAdjustment,
   normalizeMealOrganizerIds,
-  normalizeRoomCapacity,
+  normalizeRoomBeds,
   normalizeSeatCount,
   sanitizeOptionalText,
   sanitizeText,
@@ -635,7 +635,21 @@ function buildRoomRecord(room: SharedRecord, tripId: TripId): Room | undefined {
 
   row.name = sanitizeText(boundedString(row.name), MAX_LENGTHS.roomName);
   row.description = optionalBoundedText(row.description, MAX_LENGTHS.roomDescription);
-  row.capacity = normalizeRoomCapacity(row.capacity);
+  // The beds are bounded like the capacity, and the capacity is computed from
+  // them when there are some: a peer cannot store "sleeps 9" beside two
+  // single beds. A field that comes back absent is removed from the row.
+  const beds = normalizeRoomBeds(row);
+  row.capacity = beds.capacity;
+  if (beds.bedLayouts === undefined) {
+    delete row.bedLayouts;
+  } else {
+    row.bedLayouts = beds.bedLayouts;
+  }
+  if (beds.extraSpots === undefined) {
+    delete row.extraSpots;
+  } else {
+    row.extraSpots = beds.extraSpots;
+  }
 
   if (row.icon !== undefined && !(ROOM_ICONS as readonly unknown[]).includes(row.icon)) {
     delete row.icon;

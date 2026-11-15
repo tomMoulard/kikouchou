@@ -34,7 +34,7 @@ import {
 import {
   MAX_LENGTHS,
   normalizeExtraStays,
-  normalizeRoomCapacity,
+  normalizeRoomBeds,
   sanitizeOptionalText,
 } from '@/lib/db/sanitize';
 import { toSharedLegIdOrUndefined } from '@/lib/db/shared-legs';
@@ -230,6 +230,11 @@ export function roomToProto(room: Room): ProtoRoom {
     order: room.order,
     description: room.description,
     icon: room.icon,
+    bedLayouts: (room.bedLayouts ?? []).map((layout) => ({
+      name: layout.name,
+      beds: layout.beds.map((bed) => ({ ...bed })),
+    })),
+    extraSpots: room.extraSpots ?? 0,
   });
 }
 
@@ -380,16 +385,24 @@ export function protoToTransport(proto: ProtoTransport): Transport {
  * the unbounded-capacity OOM AGENTS.md records. Clamping keeps the room, which
  * is what the importer wanted; dropping it would lose a real bedroom over a
  * number the app can repair.
+ *
+ * The beds are bounded the same way, and when there are some the capacity is
+ * computed from them. A sender on an older build carries no beds: the room
+ * then has none here, and `upsertRoom` keeps the ones this device holds.
  */
 export function protoToRoom(proto: ProtoRoom): Room {
   return {
     id: proto.id as RoomId,
     tripId: proto.tripId as TripId,
     name: proto.name,
-    capacity: normalizeRoomCapacity(proto.capacity),
     order: Number.isFinite(proto.order) ? proto.order : 0,
     description: proto.description,
     icon: parseRoomIcon(proto.icon),
+    ...normalizeRoomBeds({
+      capacity: proto.capacity,
+      bedLayouts: proto.bedLayouts,
+      extraSpots: proto.extraSpots,
+    }),
   };
 }
 

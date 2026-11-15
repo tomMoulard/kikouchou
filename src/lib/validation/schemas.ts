@@ -31,12 +31,24 @@ import {
   MIN_PERSON_HEADCOUNT,
   MIN_ROOM_CAPACITY,
   MIN_VEHICLE_SEAT_COUNT,
+  BED_KINDS,
+  MAX_BED_COUNT,
+  MAX_BED_LAYOUT_NAME_LENGTH,
+  MAX_BED_LENGTH_CM,
+  MAX_BED_WIDTH_CM,
+  MAX_BEDS_PER_LAYOUT,
+  MAX_ROOM_BED_LAYOUTS,
+  MAX_ROOM_EXTRA_SPOTS,
+  MIN_BED_LENGTH_CM,
+  MIN_BED_WIDTH_CM,
+  computeRoomCapacityFromBeds,
   MEAL_KINDS,
   MEAL_SLOTS,
   ROOM_ICONS,
 } from '@/types';
 import type {
   ActivityCategory,
+  BedKind,
   DietaryTag,
   ExpenseCategory,
   ExpenseKind,
@@ -305,6 +317,31 @@ export const TripFormDataSchema = z
   );
 
 /**
+ * Bed kind validator.
+ */
+export const bedKindSchema = z.enum(
+  BED_KINDS as readonly [BedKind, ...BedKind[]],
+) satisfies z.ZodType<BedKind>;
+
+/**
+ * One line of a bed layout: a kind, a count and an optional size in cm.
+ */
+export const roomBedSchema = z.object({
+  kind: bedKindSchema,
+  count: z.number().int().min(1).max(MAX_BED_COUNT),
+  widthCm: z.number().int().min(MIN_BED_WIDTH_CM).max(MAX_BED_WIDTH_CM).optional(),
+  lengthCm: z.number().int().min(MIN_BED_LENGTH_CM).max(MAX_BED_LENGTH_CM).optional(),
+});
+
+/**
+ * One way a room's beds can be set up: at least one line of beds.
+ */
+export const roomBedLayoutSchema = z.object({
+  name: z.string().max(MAX_BED_LAYOUT_NAME_LENGTH).optional(),
+  beds: z.array(roomBedSchema).min(1).max(MAX_BEDS_PER_LAYOUT),
+});
+
+/**
  * Room form data schema.
  *
  * Validates:
@@ -312,6 +349,11 @@ export const TripFormDataSchema = z
  * - capacity: required, positive integer (minimum 1)
  * - description: optional, max 500 characters
  * - icon: optional, valid room icon
+ * - bedLayouts: optional, at most {@link MAX_ROOM_BED_LAYOUTS}
+ * - extraSpots: optional, 0 to {@link MAX_ROOM_EXTRA_SPOTS}
+ *
+ * When the room describes beds, `capacity` must equal what they sleep, so the
+ * stored number never disagrees with the beds a guest reads.
  */
 export const RoomFormDataSchema = z.object({
   name: z
@@ -331,7 +373,15 @@ export const RoomFormDataSchema = z.object({
     .max(500, 'Description must be 500 characters or less')
     .optional(),
   icon: roomIconSchema.optional(),
-});
+  bedLayouts: z.array(roomBedLayoutSchema).max(MAX_ROOM_BED_LAYOUTS).optional(),
+  extraSpots: z.number().int().min(0).max(MAX_ROOM_EXTRA_SPOTS).optional(),
+}).refine(
+  (data) => {
+    const fromBeds = computeRoomCapacityFromBeds(data.bedLayouts, data.extraSpots);
+    return fromBeds === null || fromBeds === data.capacity;
+  },
+  { message: 'Capacity must match the beds', path: ['capacity'] },
+);
 
 /**
  * Person form data schema.

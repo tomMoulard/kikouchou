@@ -600,6 +600,27 @@ Compare stay windows with `stayNightsOverlap` rather than re-deriving the
 comparison. A window with `startDate === endDate` covers no night and claims
 nothing, which is what the occupancy maths already said about it.
 
+### A room sleeps what its beds sleep
+
+A room either describes its beds (`Room.bedLayouts`, plus `extraSpots` for a
+floor mattress or a child in a parent's bed) or carries a plain `capacity`.
+The layouts are alternatives: two 80 × 200 singles, or the same singles
+pushed into one queen. The room sleeps its largest layout plus its extra
+spots (`computeRoomCapacityFromBeds`).
+
+- **`capacity` is still stored, and computed from the beds when there are
+  some.** Every occupancy figure and older builds read it. `normalizeRoomBeds`
+  (`lib/db/sanitize`) is the one place the two are made to agree, and every
+  writer goes through it: the repository, the Yjs projection, the QR mapper,
+  the template reader and the assistant. A capacity sent beside beds is
+  overruled by them.
+- **The beds are remote input.** An unknown kind, a size out of bounds, a
+  layout with no usable bed are dropped one by one, and every list is bounded.
+- **A QR changeset with no beds is silence**, like a missing phone: an older
+  sender has no such field, so `upsertRoom` keeps the beds the device holds.
+- **Which layout a night uses is not stored.** The rooms planning does not read
+  the beds yet: it still draws one lane per person of `capacity`.
+
 ### Count people, not rows
 
 `Person.headcount` means one guest row can stand for a couple or a family. Any
