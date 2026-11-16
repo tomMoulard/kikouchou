@@ -42,6 +42,8 @@ function fakeClient(
   initialRows: FakeRow[] = [],
   options: {
     readonly selectError?: string;
+    /** The PostgREST code that goes with `selectError`. */
+    readonly selectErrorCode?: string;
     /** Refuses the upsert of these remote trip ids. */
     readonly refuse?: Readonly<Record<string, string>>;
     /** Runs between the select and the answer, to model a tap mid-pass. */
@@ -64,7 +66,10 @@ function fakeClient(
             selects += 1;
             await options.beforeSelectAnswer?.();
             if (options.selectError) {
-              return { data: null, error: { message: options.selectError } };
+              return {
+                data: null,
+                error: { message: options.selectError, code: options.selectErrorCode },
+              };
             }
             return { data: rows, error: null };
           },
@@ -300,6 +305,37 @@ describe('syncTripArchives', () => {
     const result = await syncTripArchives(fake.client, USER_ID);
 
     expect(result).toMatchObject({ status: 'error', reason: 'server' });
+  });
+
+  // PostHog issue 01a1e38b: a build that shipped before its migration reached
+  // the hosted project. PostgREST answers PGRST205 for a table it does not
+  // know, and every pass reported it to error tracking as a server failure.
+  it('reports a table the server does not have as unavailable', async () => {
+    await memberTrip('r1', { archived: true, archivedUpdatedAt: T1 });
+    const fake = fakeClient([], {
+      selectError: "Could not find the table 'public.trip_archives' in the schema cache",
+      selectErrorCode: 'PGRST205',
+    });
+
+    const result = await syncTripArchives(fake.client, USER_ID);
+
+    expect(result).toEqual({
+      status: 'error',
+      message: "Could not find the table 'public.trip_archives' in the schema cache",
+      reason: 'unavailable',
+    });
+    expect(fake.upserted).toEqual([]);
+  });
+
+  it('reads the missing table from the message when the code is lost', async () => {
+    await memberTrip('r1');
+    const fake = fakeClient([], {
+      selectError: "Could not find the table 'public.trip_archives' in the schema cache",
+    });
+
+    const result = await syncTripArchives(fake.client, USER_ID);
+
+    expect(result).toMatchObject({ status: 'error', reason: 'unavailable' });
   });
 
   it('ends the pass when an upload loses the connection', async () => {

@@ -214,6 +214,33 @@ describe('TripArchiveSync', () => {
     expect(mockedReportError).toHaveBeenCalledTimes(1);
   });
 
+  // PostHog issue 01a1e38b: the hosted project had no trip_archives table yet,
+  // and every archive change, return to the tab and reconnect reported it.
+  it('stops for the session, without reporting, when the server has no archive table', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    signedInAs('user-1');
+    mockedSync.mockResolvedValue({
+      status: 'error',
+      message: "Could not find the table 'public.trip_archives' in the schema cache",
+      reason: 'unavailable',
+    });
+    render(<TripArchiveSync />);
+    await waitFor(() => {
+      expect(mockedSync).toHaveBeenCalledTimes(1);
+    });
+    await settle();
+
+    await act(async () => {
+      setVisibility('visible');
+    });
+    await settle();
+
+    expect(mockedSync).toHaveBeenCalledTimes(1);
+    expect(mockedReportError).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('survives a client that fails to load', async () => {
     signedInAs('user-1');
     mockedGetClient.mockRejectedValueOnce(new Error('chunk failed'));
