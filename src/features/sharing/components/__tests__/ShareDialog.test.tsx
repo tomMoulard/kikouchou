@@ -12,7 +12,7 @@
 
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { ShareDialog } from '../ShareDialog';
 import { useTripShareLink } from '../../hooks/useTripShareLink';
@@ -43,6 +43,26 @@ vi.mock('@/features/auth/components/SignInDialog', () => ({
     open ? <div data-testid="sign-in-dialog" /> : null,
 }));
 
+// The roster has its own tests; here it records what the dialog hands it, and
+// offers the one callback the dialog acts on.
+const membersPanel = vi.hoisted(() => ({
+  props: [] as { active: boolean; tripId: string | null; onMemberRemoved?: () => void }[],
+}));
+vi.mock('../TripMembersPanel', () => ({
+  TripMembersPanel: (props: {
+    active: boolean;
+    tripId: string | null;
+    onMemberRemoved?: () => void;
+  }) => {
+    membersPanel.props.push(props);
+    return (
+      <button type="button" data-testid="members-panel" onClick={() => props.onMemberRemoved?.()}>
+        {props.active ? 'members active' : 'members idle'}
+      </button>
+    );
+  },
+}));
+
 const mockedUseTripShareLink = vi.mocked(useTripShareLink);
 
 const baseTrip: Trip = {
@@ -60,6 +80,7 @@ function renderDialog(ui: ReactElement) {
 }
 
 beforeEach(() => {
+  membersPanel.props.length = 0;
   mockedUseTripShareLink.mockReset();
   mockedUseTripShareLink.mockReturnValue({
     state: { kind: 'loading' },
@@ -213,5 +234,26 @@ describe('ShareDialog', () => {
         expect(execCommand).toHaveBeenCalledWith('copy');
       });
     });
+  });
+
+  it('shows the roster once the link exists, and asks for a new link after a removal', async () => {
+    const refresh = vi.fn();
+    mockedUseTripShareLink.mockReturnValue({
+      state: { kind: 'invite', url: 'https://app.test/join/abc', token: 'abc' },
+      refresh,
+    });
+
+    render(<ShareDialog open onOpenChange={() => {}} trip={baseTrip} />);
+
+    await waitFor(() => expect(screen.getByTestId('members-panel')).toHaveTextContent('members active'));
+    expect(membersPanel.props.at(-1)?.tripId).toBe('trip-1');
+
+    fireEvent.click(screen.getByTestId('members-panel'));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it('keeps the roster idle while the link is loading', () => {
+    render(<ShareDialog open onOpenChange={() => {}} trip={baseTrip} />);
+    expect(screen.getByTestId('members-panel')).toHaveTextContent('members idle');
   });
 });

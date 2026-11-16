@@ -1331,6 +1331,29 @@
       "cameraFailedHint": "Réessayez, ou collez les données à la place.",
       "cameraRetry": "Touchez pour réessayer"
     },
+    "members": {
+      "title": "Les personnes du voyage",
+      "unnamed": "Quelqu'un qui n'a pas encore choisi son nom",
+      "unnamedShort": "cette personne",
+      "you": "{{name}} (vous)",
+      "organiser": "{{name}} (organisateur)",
+      "remove": "Retirer",
+      "removeHint": "Retirer quelqu'un retire aussi le lien actuel, pour qu'il ne puisse pas revenir avec. Envoyez le nouveau lien aux autres qui n'ont pas encore rejoint.",
+      "confirmTitle": "Retirer {{name}} ?",
+      "confirmDescription": "Cette personne ne verra plus le voyage et ne pourra plus le modifier, et le lien d'invitation actuel cesse de fonctionner. La copie déjà sur son téléphone y reste.",
+      "removed": "Retiré du voyage",
+      "notOwner": "Seul l'organisateur peut retirer quelqu'un.",
+      "removeFailed": "Impossible de retirer cette personne. Réessayez.",
+      "loadFailed": "Impossible de charger les personnes du voyage."
+    },
+    "revoke": {
+      "action": "Retirer ce lien",
+      "confirmTitle": "Retirer ce lien ?",
+      "confirmDescription": "Personne de nouveau ne pourra rejoindre avec. Les personnes déjà sur le voyage y restent, et vous recevez un nouveau lien à envoyer.",
+      "confirmAction": "Retirer",
+      "done": "Lien retiré. En voici un nouveau.",
+      "failed": "Impossible de retirer le lien. Réessayez."
+    },
     "p2p": {
       "copyLinkAction": "Copier le lien",
       "shareSheetAction": "Envoyer le lien",

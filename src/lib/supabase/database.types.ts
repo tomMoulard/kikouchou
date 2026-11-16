@@ -488,6 +488,10 @@ export type Database = {
       }
       read_trip_template: { Args: { template_token: string }; Returns: Json }
       redeem_invite: { Args: { invite_token: string }; Returns: string }
+      remove_trip_member: {
+        Args: { target_trip_id: string; target_user_id: string }
+        Returns: undefined
+      }
       revoke_invite: { Args: { invite_token: string }; Returns: undefined }
       store_push_subscription: {
         Args: {

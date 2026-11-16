@@ -1,16 +1,15 @@
 /**
- * @fileoverview Share Dialog — generates a P2P collaboration link with QR code.
+ * @fileoverview Share Dialog: the trip's invite link, and who is on the trip.
  *
- * When opened, generates a roomId + encryption key for the trip (if not already set),
- * persists them, and displays the shareable URL with QR code.
- *
- * The URL format is: /trip/:roomId#:encryptionKey
- * The fragment (encryption key) is never sent to any server.
+ * `ShareLinkPanel` renders the link, its QR code and the button that withdraws
+ * it. Once the link exists the trip is on the server, so `TripMembersPanel`
+ * lists the accounts on it, and lets the organiser remove one. A removal
+ * withdraws every live link, so the dialog then asks for a fresh one.
  *
  * @module features/sharing/components/ShareDialog
  */
 
-import { type ReactElement, memo } from 'react';
+import { type ReactElement, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Share2 } from 'lucide-react';
 
@@ -24,6 +23,8 @@ import {
 import { useTripContext } from '@/contexts/TripContext';
 import type { Trip } from '@/types';
 import { ShareLinkPanel } from './ShareLinkPanel';
+import { TripMembersPanel } from './TripMembersPanel';
+import type { ShareLinkState } from '../hooks/useTripShareLink';
 
 // ============================================================================
 // Type Definitions
@@ -60,6 +61,13 @@ const ShareDialog = memo(function ShareDialog({
   const { currentTrip } = useTripContext();
   const effectiveTrip = tripProp ?? currentTrip ?? undefined;
   const hasTrip = Boolean(effectiveTrip);
+  const [linkKind, setLinkKind] = useState<ShareLinkState['kind']>('loading');
+  const [linkRefresh, setLinkRefresh] = useState(0);
+
+  // A removal withdraws every live link, so the one on screen is dead.
+  const handleMemberRemoved = useCallback(() => {
+    setLinkRefresh((current) => current + 1);
+  }, []);
 
   // ============================================================================
   // Render: Empty State (No Trip Selected)
@@ -110,8 +118,19 @@ const ShareDialog = memo(function ShareDialog({
         </DialogHeader>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
-          <div className="px-0 py-2">
-            <ShareLinkPanel trip={effectiveTrip} active={open} />
+          <div className="space-y-6 px-0 py-2">
+            <ShareLinkPanel
+              trip={effectiveTrip}
+              active={open}
+              withRevoke
+              refreshKey={linkRefresh}
+              onStateChange={setLinkKind}
+            />
+            <TripMembersPanel
+              tripId={effectiveTrip?.id ?? null}
+              active={open && linkKind === 'invite'}
+              onMemberRemoved={handleMemberRemoved}
+            />
           </div>
         </div>
       </DialogContent>

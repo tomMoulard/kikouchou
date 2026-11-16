@@ -37,6 +37,13 @@ export {
   type RedeemInviteResult,
   type TripInvite,
 } from './invites';
+export {
+  listTripMembers,
+  removeTripMember,
+  type ListTripMembersResult,
+  type RemoveTripMemberResult,
+  type TripMember,
+} from './members';
 export { syncGuestGroups, type GuestGroupSyncResult } from './guest-groups';
 export {
   canSyncTripArchive,

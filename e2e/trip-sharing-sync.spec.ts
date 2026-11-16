@@ -340,6 +340,56 @@ test.describe('sharing a trip', () => {
     expect(stub.counts.inviteInserts).toBe(1);
   });
 
+  test('withdraws the link on screen and shows a new one', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/trips');
+    await createTrip(page, TRIP.name);
+
+    await openShareDialog(page);
+    const firstUrl = await page.getByTestId('share-url').textContent({ timeout: 20_000 });
+
+    await page.getByRole('button', { name: /withdraw this link/i }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: /^withdraw$/i }).click();
+
+    await expect(page.getByTestId('share-url')).not.toHaveText(firstUrl ?? '', { timeout: 20_000 });
+    const firstToken = (firstUrl ?? '').split('/').pop()?.split('#')[0] ?? '';
+    expect(stub.invites.find((row) => row.token === firstToken)?.revoked_at).not.toBeNull();
+    expect(stub.invites.filter((row) => row.revoked_at === null)).toHaveLength(1);
+  });
+
+  test('lets the organiser remove a member, which withdraws the link', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/trips');
+    await createTrip(page, TRIP.name);
+
+    await openShareDialog(page);
+    const firstUrl = await page.getByTestId('share-url').textContent({ timeout: 20_000 });
+    const remoteTripId = stub.trips[0]?.id ?? '';
+    stub.addMember(remoteTripId, GUEST.id);
+
+    // Reopened, so the roster is read again with the guest on it.
+    await page.keyboard.press('Escape');
+    await openShareDialog(page);
+    const members = page.getByTestId('trip-members');
+    await expect(members.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
+    await expect(members.getByRole('listitem').first()).toContainText(/\(you\)/i);
+
+    await members.getByRole('button', { name: /^remove$/i }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: /^remove$/i }).click();
+
+    await expect(members.getByRole('listitem')).toHaveCount(1, { timeout: 20_000 });
+    expect(stub.members.some((row) => row.user_id === GUEST.id)).toBe(false);
+    // The guest joined through a link that must not let them back in.
+    await expect(page.getByTestId('share-url')).not.toHaveText(firstUrl ?? '', { timeout: 20_000 });
+    expect(stub.invites.filter((row) => row.revoked_at === null)).toHaveLength(1);
+  });
+
   test('explains itself when the build has no backend at all', async ({ page }) => {
     // No stub installed and no session: `isSupabaseConfigured()` is still true
     // for this project, so the request fails rather than being absent. Either

@@ -59,6 +59,15 @@ vi.mock('@/lib/native/share-link', () => ({
 
 vi.mock('@/lib/utils/clipboard', () => ({ copyText: vi.fn(async () => true) }));
 
+const revoke = vi.hoisted(() => ({
+  revokeInvite: vi.fn(async (): Promise<{ ok: boolean; message?: string }> => ({ ok: true })),
+}));
+vi.mock('@/lib/sync/invites', () => revoke);
+vi.mock('@/lib/supabase/client', () => ({ getSupabaseClient: vi.fn(async () => ({})) }));
+
+const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/notifications', () => ({ notify: notifications }));
+
 const mockedLink = vi.mocked(useTripShareLink);
 
 const TRIP: Trip = {
@@ -188,5 +197,58 @@ describe('ShareLinkPanel', () => {
     render(<ShareLinkPanel trip={TRIP} active />);
 
     expect(screen.getByRole('alert')).toHaveTextContent('no sync server configured');
+  });
+
+  describe('withdrawing the link', () => {
+    const invite: ShareLinkState = { kind: 'invite', url: URL, token: 'aBcDeFgHiJkL3456' };
+
+    it('offers nothing unless asked to', () => {
+      giveState(invite);
+      render(<ShareLinkPanel trip={TRIP} active />);
+      expect(screen.queryByRole('button', { name: 'Withdraw this link' })).toBeNull();
+    });
+
+    it('offers nothing on a viewer trip, whose link is not theirs to withdraw', () => {
+      giveState(invite);
+      render(<ShareLinkPanel trip={{ ...TRIP, viewerToken: 'aBcDeFgHiJkL3456' }} active withRevoke />);
+      expect(screen.queryByRole('button', { name: 'Withdraw this link' })).toBeNull();
+    });
+
+    it('withdraws the token on screen after the confirmation, then asks for a new link', async () => {
+      const refresh = vi.fn();
+      mockedLink.mockReturnValue({ state: invite, refresh });
+      render(<ShareLinkPanel trip={TRIP} active withRevoke />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Withdraw this link' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+
+      await waitFor(() => expect(refresh).toHaveBeenCalled());
+      expect(revoke.revokeInvite).toHaveBeenCalledWith(expect.anything(), 'aBcDeFgHiJkL3456');
+      expect(notifications.success).toHaveBeenCalled();
+    });
+
+    it('keeps the link and says so when the server refuses', async () => {
+      const refresh = vi.fn();
+      mockedLink.mockReturnValue({ state: invite, refresh });
+      revoke.revokeInvite.mockResolvedValueOnce({ ok: false, message: 'not a member' });
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      render(<ShareLinkPanel trip={TRIP} active withRevoke />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Withdraw this link' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+
+      await waitFor(() => expect(notifications.error).toHaveBeenCalled());
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it('asks for the link again when its refresh key moves', () => {
+      const refresh = vi.fn();
+      mockedLink.mockReturnValue({ state: invite, refresh });
+      const { rerender } = render(<ShareLinkPanel trip={TRIP} active refreshKey={0} />);
+      expect(refresh).not.toHaveBeenCalled();
+
+      rerender(<ShareLinkPanel trip={TRIP} active refreshKey={1} />);
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
   });
 });

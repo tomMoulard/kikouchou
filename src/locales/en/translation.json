@@ -1331,6 +1331,29 @@
       "cameraFailedHint": "Try again, or paste the data instead.",
       "cameraRetry": "Tap to try again"
     },
+    "members": {
+      "title": "People on this trip",
+      "unnamed": "Someone who has not picked a name yet",
+      "unnamedShort": "this person",
+      "you": "{{name}} (you)",
+      "organiser": "{{name}} (organiser)",
+      "remove": "Remove",
+      "removeHint": "Removing someone also withdraws the current link, so they cannot come back with it. Send the new link to the others who have not joined yet.",
+      "confirmTitle": "Remove {{name}}?",
+      "confirmDescription": "They will no longer see or edit this trip, and the current invite link stops working. The copy already on their phone stays there.",
+      "removed": "Removed from the trip",
+      "notOwner": "Only the organiser can remove someone.",
+      "removeFailed": "Could not remove this person. Try again.",
+      "loadFailed": "Could not load who is on this trip."
+    },
+    "revoke": {
+      "action": "Withdraw this link",
+      "confirmTitle": "Withdraw this link?",
+      "confirmDescription": "Nobody new can join with it. The people already on the trip stay on it, and you get a new link to send.",
+      "confirmAction": "Withdraw",
+      "done": "Link withdrawn. Here is a new one.",
+      "failed": "Could not withdraw the link. Try again."
+    },
     "p2p": {
       "copyLinkAction": "Copy link",
       "shareSheetAction": "Send the link",

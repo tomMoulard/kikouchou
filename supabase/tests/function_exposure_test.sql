@@ -118,6 +118,8 @@ select is(
 -- this half catches the other.
 -- `delete_my_account` joined the list on 2026-10-22: the store apps need an
 -- account to be deletable from inside the app (App Store 5.1.1(v), Google Play).
+-- `remove_trip_member` joined on 2026-11-16: an organiser takes someone off a
+-- trip (App Store 1.2), and the function checks ownership as its first act.
 select is(
   (select coalesce(string_agg(p.proname, ', ' order by p.proname), '')
    from pg_proc p
@@ -125,7 +127,7 @@ select is(
    where n.nspname = 'public'
      and p.prokind = 'f'
      and has_function_privilege('authenticated', p.oid, 'execute')),
-  'delete_my_account, publish_trip_snapshot, read_shared_trip, read_trip_template, redeem_invite, revoke_invite, subscribe_member_reminders, subscribe_trip_reminders, unsubscribe_reminders',
+  'delete_my_account, publish_trip_snapshot, read_shared_trip, read_trip_template, redeem_invite, remove_trip_member, revoke_invite, subscribe_member_reminders, subscribe_trip_reminders, unsubscribe_reminders',
   'authenticated can execute exactly the doors a signed-in client calls, and nothing else'
 );
 

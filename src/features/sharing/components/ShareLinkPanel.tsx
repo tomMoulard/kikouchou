@@ -11,15 +11,20 @@
 
 import { type ReactElement, memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, Link2, Share2 } from 'lucide-react';
+import { Check, Copy, Link2, Share2, Unlink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 import { Button } from '@/components/ui/button';
 import { statusVariants } from '@/components/ui/status.variants';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ProviderList } from '@/features/auth/components/ProviderList';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { canShareLink, shareLink } from '@/lib/native/share-link';
+import { notify } from '@/lib/notifications';
+import { captureEvent } from '@/lib/posthog';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { revokeInvite } from '@/lib/sync/invites';
 import { copyText } from '@/lib/utils/clipboard';
 import { cn } from '@/lib/utils';
 import { type ShareLinkState, useTripShareLink } from '../hooks/useTripShareLink';
@@ -46,6 +51,13 @@ export interface ShareLinkPanelProps {
   readonly withShareSheet?: boolean;
   /** Told each time the link's state changes kind. */
   readonly onStateChange?: ((kind: ShareLinkState['kind']) => void) | undefined;
+  /**
+   * Offers to withdraw the link on screen. The next one is minted at once, so
+   * people who already joined stay on the trip and only the old link dies.
+   */
+  readonly withRevoke?: boolean;
+  /** Asks for the link again when it changes: something withdrew this one. */
+  readonly refreshKey?: number;
 }
 
 // ============================================================================
@@ -64,16 +76,24 @@ export const ShareLinkPanel = memo(function ShareLinkPanel({
   signIn = 'dialog',
   withShareSheet = false,
   onStateChange,
+  withRevoke = false,
+  refreshKey = 0,
 }: ShareLinkPanelProps): ReactElement {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
-  const { state: linkState } = useTripShareLink(trip, active);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+
+  const { state: linkState, refresh } = useTripShareLink(trip, active);
 
   useEffect(() => {
     onStateChange?.(linkState.kind);
   }, [linkState.kind, onStateChange]);
+
+  useEffect(() => {
+    if (refreshKey > 0) refresh();
+  }, [refresh, refreshKey]);
 
   /**
    * The invite link, or nothing.
@@ -106,6 +126,23 @@ export const ShareLinkPanel = memo(function ShareLinkPanel({
       }),
     });
   }, [shareUrl, t, trip?.name]);
+
+  const handleRevoke = useCallback(async () => {
+    if (linkState.kind !== 'invite') return;
+    const client = await getSupabaseClient();
+    const result = client
+      ? await revokeInvite(client, linkState.token)
+      : { ok: false, message: 'No sync server.' };
+    if (result.ok) {
+      captureEvent('trip_invite_revoked');
+      notify.success(t('sharing.revoke.done', 'Link withdrawn. Here is a new one.'));
+      refresh();
+    } else {
+      console.error('Failed to withdraw invite link:', result.message);
+      notify.error(t('sharing.revoke.failed', 'Could not withdraw the link. Try again.'));
+    }
+    setRevokeOpen(false);
+  }, [linkState, refresh, t]);
 
   const signInReason = t(
     'sharing.p2p.signInReason',
@@ -210,6 +247,33 @@ export const ShareLinkPanel = memo(function ShareLinkPanel({
       <p className="px-1 text-center text-xs text-muted-foreground [overflow-wrap:anywhere]">
         {t('sharing.p2p.privacyNotice', 'Anyone with this link can view and edit this trip')}
       </p>
+
+      {withRevoke && trip?.viewerToken === undefined ? (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground"
+            onClick={() => setRevokeOpen(true)}
+          >
+            <Unlink className="size-4" aria-hidden="true" />
+            {t('sharing.revoke.action', 'Withdraw this link')}
+          </Button>
+          <ConfirmDialog
+            open={revokeOpen}
+            onOpenChange={setRevokeOpen}
+            variant="destructive"
+            title={t('sharing.revoke.confirmTitle', 'Withdraw this link?')}
+            description={t(
+              'sharing.revoke.confirmDescription',
+              'Nobody new can join with it. The people already on the trip stay on it, and you get a new link to send.',
+            )}
+            confirmLabel={t('sharing.revoke.confirmAction', 'Withdraw')}
+            onConfirm={handleRevoke}
+          />
+        </>
+      ) : null}
     </div>
   );
 });

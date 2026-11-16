@@ -96,6 +96,8 @@ interface MemberRow {
   trip_id: string;
   user_id: string;
   person_id: string | null;
+  /** Strictly increasing, so `order=joined_at` puts the organiser first. */
+  joined_at: string;
 }
 
 interface InviteRow {
@@ -275,7 +277,12 @@ export class SupabaseStub {
 
   /** Adds a member row directly, standing in for a completed redemption. */
   addMember(tripId: string, userId: string, personId: string | null = null): void {
-    this.members.push({ trip_id: tripId, user_id: userId, person_id: personId });
+    this.members.push({
+      trip_id: tripId,
+      user_id: userId,
+      person_id: personId,
+      joined_at: new Date(Date.UTC(2026, 0, 1) + this.members.length * 1000).toISOString(),
+    });
   }
 
   /** Mints an invite directly, so a test can start from "a link exists". */
@@ -1074,14 +1081,70 @@ export class SupabaseStub {
     }
 
     if (name === 'revoke_invite') {
+      // Member-gated, as the function is: a stranger gets 42501, an unknown
+      // token is quiet.
+      if (invite && !this.isMember(invite.trip_id, caller)) {
+        await this.json(route, 403, { code: '42501', message: 'not a member of this trip' });
+        return;
+      }
       if (invite) {
-        invite.revoked_at = new Date().toISOString();
+        invite.revoked_at ??= new Date().toISOString();
       }
       await this.json(route, 204, null);
       return;
     }
 
+    if (name === 'remove_trip_member') {
+      await this.removeTripMember(route, caller);
+      return;
+    }
+
     await this.fail(route, 404, `stub has no rpc ${name}`);
+  }
+
+  /**
+   * `remove_trip_member()`: the organiser takes an account off the trip.
+   *
+   * The three effects of `20261116090000_remove_trip_member.sql` together: the
+   * roster row, every live invite of the trip, and the account's reminders.
+   * Anybody but the organiser gets 42501, and so does an unknown trip.
+   */
+  private async removeTripMember(route: Route, caller: string): Promise<void> {
+    const body = this.body<{ target_trip_id?: string; target_user_id?: string }>(route);
+    const tripId = body.target_trip_id ?? '';
+    const userId = body.target_user_id ?? '';
+    const trip = this.trips.find((row) => row.id === tripId);
+
+    if (!trip || trip.owner_id !== caller) {
+      await this.json(route, 403, {
+        code: '42501',
+        message: 'only the trip organiser can remove a member',
+        hint: 'not_trip_owner',
+      });
+      return;
+    }
+    if (userId === trip.owner_id) {
+      await this.json(route, 400, {
+        code: '22023',
+        message: 'the trip organiser cannot be removed',
+        hint: 'owner_not_removable',
+      });
+      return;
+    }
+
+    this.members = this.members.filter(
+      (member) => !(member.trip_id === tripId && member.user_id === userId),
+    );
+    const now = new Date().toISOString();
+    for (const invite of this.invites) {
+      if (invite.trip_id === tripId && invite.revoked_at === null) {
+        invite.revoked_at = now;
+      }
+    }
+    this.pushSubscriptions = this.pushSubscriptions.filter(
+      (row) => !(row.trip_id === tripId && row.user_id === userId),
+    );
+    await this.json(route, 204, null);
   }
 
   /**

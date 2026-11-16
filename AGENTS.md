@@ -1180,6 +1180,14 @@ call the REST API with that key.
   template link. That is the whole reason `trip_templates` exists as a separate
   row rather than the read going through `read_shared_trip`. See
   `plans/2026-09-14-enterprise-trip-templates-v1.md`.
+- **Removing a member withdraws the links too.** `remove_trip_member` is the
+  organiser's alone, and does three things in one call: it deletes the roster
+  row, revokes every live invite of the trip, and deletes the account's push
+  subscriptions for it. Without the second, `redeem_invite` lets the removed
+  person back in with the link they joined through; without the third,
+  `live_push_subscriptions` keeps sending them reminders. The share dialog
+  then mints a fresh link (`TripMembersPanel`, `ShareLinkPanel`'s
+  `refreshKey`). The removed device keeps the copy it already had.
 - **`RETURNING` is subject to the SELECT policy.** `.insert().select().single()`
   compiles to `INSERT … RETURNING`, so a row you may create but not read fails
   the insert. This broke trip creation: the owner's roster row comes from an
