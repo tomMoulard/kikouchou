@@ -1,0 +1,4 @@
+Décrivez les lits d'une chambre, et voyez combien de personnes elle accueille dans le planning.
+La description du voyage s'affiche sous le planning.
+Un voyage archivé le reste sur tous vos appareils.
+L'assistant peut modifier tout ce que vous pouvez modifier, et archiver un voyage.

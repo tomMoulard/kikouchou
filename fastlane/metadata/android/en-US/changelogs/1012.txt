@@ -1,0 +1,4 @@
+Describe a room's beds, and see how many people each room sleeps on the planning.
+The trip description now shows under the planning.
+Archived trips stay archived on all your devices.
+The assistant can edit everything you can edit, and archive a trip.
