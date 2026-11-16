@@ -61,8 +61,12 @@ export type TripArchiveSyncResult =
   | {
       readonly status: 'error';
       readonly message: string;
-      /** Same meaning as `GuestGroupSyncResult`'s `reason`. */
-      readonly reason: 'network' | 'clock' | 'server';
+      /**
+       * Same meaning as `GuestGroupSyncResult`'s `reason`, plus
+       * `unavailable`: the server has no `trip_archives` table, because this
+       * build reached a device before its migration reached the project.
+       */
+      readonly reason: 'network' | 'clock' | 'server' | 'unavailable';
     };
 
 /** One server row, after validation. */
@@ -205,6 +209,25 @@ async function pushTripArchive(
 // ============================================================================
 
 /**
+ * Whether PostgREST refused the request because it does not know the table.
+ *
+ * PostgREST answers `PGRST205` ("Could not find the table … in the schema
+ * cache") for a table the database does not have. A store app can carry this
+ * sync before the migration that creates the table is pushed to the project:
+ * nothing on the device can repair that, so it is not a server failure to
+ * report on every pass. The message is matched too, in case the code is lost.
+ */
+function isMissingTableError(error: {
+  readonly code?: string | null;
+  readonly message: string;
+}): boolean {
+  return (
+    error.code === 'PGRST205' ||
+    /\bCould not find the table '[^']+' in the schema cache\b/i.test(error.message)
+  );
+}
+
+/**
  * Reconciles the archived flag of every member trip on this device with the
  * signed-in account.
  *
@@ -240,6 +263,9 @@ export async function syncTripArchives(
       .eq('user_id', userId);
 
     if (error) {
+      if (isMissingTableError(error)) {
+        return { status: 'error', message: error.message, reason: 'unavailable' };
+      }
       throw new Error(error.message);
     }
 

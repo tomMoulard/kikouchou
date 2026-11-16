@@ -72,9 +72,12 @@ export function TripArchiveSync(): null {
   // none runs twice side by side.
   const inFlightRef = useRef(false);
   const rerunRef = useRef(false);
+  // Set when the server has no archive table: the build is ahead of the
+  // project's migrations, and asking again before a reload answers the same.
+  const unavailableRef = useRef(false);
 
   const run = useCallback(async (): Promise<void> => {
-    if (!userId) {
+    if (!userId || unavailableRef.current) {
       return;
     }
     if (inFlightRef.current) {
@@ -94,7 +97,11 @@ export function TripArchiveSync(): null {
           // A lost connection and a fast device clock are not reported, for
           // the reasons `GuestGroupSync` gives.
           console.warn('[trip-archives] sync failed:', result.message);
-          if (result.reason === 'server') {
+          if (result.reason === 'unavailable') {
+            // Not reported: it is a deploy to finish, not a fault on this
+            // device (PostHog issue 01a1e38b).
+            unavailableRef.current = true;
+          } else if (result.reason === 'server') {
             reportError(new Error(result.message), { source: 'TripArchiveSync.sync' });
           }
           break;
