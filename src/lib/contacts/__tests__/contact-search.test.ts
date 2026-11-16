@@ -276,11 +276,32 @@ describe('searchContacts', () => {
     expect(plugin.search).not.toHaveBeenCalled();
   });
 
-  it('answers nothing when the plugin fails', async () => {
-    plugin.search.mockRejectedValue(new Error('Contacts permission not granted'));
+  it('answers nothing when the plugin fails, and reports it as handled', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const failure = new Error('Contacts permission not granted');
+    plugin.search.mockRejectedValue(failure);
 
     await expect(searchContacts('Mar')).resolves.toEqual([]);
+    // console.warn, not console.error: capture_console_errors would send it
+    // to PostHog a second time, flagged unhandled.
+    expect(console.error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    expect(reportError).toHaveBeenCalledWith(failure, { source: 'contact-search.searchContacts' });
   });
+
+  // PostHog "Cannot destructure property 'contacts'": a native layer that
+  // lost its plugin data resolves the call with nothing at all. Reading
+  // `result.contacts` then threw, and the catch logged it with console.error.
+  it.each([undefined, null, 'contacts', {}])(
+    'answers nothing, without throwing or calling console.error, when search resolves %j',
+    async (result) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      plugin.search.mockResolvedValue(result);
+
+      await expect(searchContacts('Mar')).resolves.toEqual([]);
+      expect(console.error).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('the native projects', () => {
