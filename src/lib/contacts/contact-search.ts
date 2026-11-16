@@ -263,10 +263,19 @@ export async function searchContacts(query: string): Promise<readonly ContactSug
     return [];
   }
   try {
-    const result = await ContactSearch.search({ query: trimmed, limit: MAX_CONTACTS });
-    return toContactSuggestions(result.contacts);
+    // Read as untrusted, like a permission answer: a native layer that lost
+    // its plugin data resolves with nothing at all.
+    const result: unknown = await ContactSearch.search({ query: trimmed, limit: MAX_CONTACTS });
+    const contacts: unknown =
+      typeof result === 'object' && result !== null
+        ? (result as { readonly contacts?: unknown }).contacts
+        : undefined;
+    return toContactSuggestions(contacts);
   } catch (error) {
-    console.error('Failed to search the contacts:', error);
+    // console.warn, not console.error: capture_console_errors would report it
+    // a second time, flagged unhandled.
+    console.warn('Failed to search the contacts:', error);
+    reportError(error, { source: 'contact-search.searchContacts' });
     return [];
   }
 }
