@@ -428,3 +428,84 @@ describe('JoinTripPage adding yourself', () => {
   });
 
 });
+
+describe('JoinTripPage opened again on the same device', () => {
+  beforeEach(() => {
+    storedEntries.clear();
+  });
+
+  it('goes back to the last page of the trip without asking for a name', async () => {
+    await seedPersons(TRIP_ID, ['Alice', 'Bob']);
+    storedEntries.set(`kikouchou-last-trip-page:${TRIP_ID}`, 'rooms');
+
+    render(<JoinTripPage />);
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/rooms`, { replace: true });
+    });
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Which one are you?')).not.toBeInTheDocument();
+  });
+
+  it('sends a returning viewer to their last page', async () => {
+    phase({ kind: 'viewing', tripId: TRIP_ID });
+    mockedUseTripContext.mockReturnValue({
+      setCurrentTrip: vi.fn(),
+      trips: [{ id: TRIP_ID, name: '#1', shareId: 'share-1', remoteTripId: 'remote-1' }],
+    } as never);
+    storedEntries.set(`kikouchou-last-trip-page:${TRIP_ID}`, 'transports/vehicles');
+
+    render(<JoinTripPage />);
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/transports/vehicles`, {
+        replace: true,
+      });
+    });
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again when this device never got inside the trip', async () => {
+    await seedPersons(TRIP_ID, ['Alice']);
+
+    render(<JoinTripPage />);
+
+    expect(await screen.findByText('Which one are you?')).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('stays to claim the guest whose arrival day waits for a sign-in', async () => {
+    await seedPersons(TRIP_ID, ['Alice']);
+    storedEntries.set(`kikouchou-last-trip-page:${TRIP_ID}`, 'calendar');
+    storedEntries.set(
+      `kikouchou-pending-arrival:${TRIP_ID}`,
+      JSON.stringify({ personId: 'person-alice', date: '2026-12-01' }),
+    );
+
+    render(<JoinTripPage />);
+
+    await waitFor(() => {
+      expect(mockedClaim).toHaveBeenCalledWith({}, 'remote-1', 'user-1', 'person-alice');
+    });
+    expect(navigate).not.toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`, { replace: true });
+  });
+
+  it('stays on the page for a visitor who came to install the app', () => {
+    phase({ kind: 'viewing', tripId: TRIP_ID });
+    mockedUseTripContext.mockReturnValue({
+      setCurrentTrip: vi.fn(),
+      trips: [{ id: TRIP_ID, name: '#1', shareId: 'share-1', remoteTripId: 'remote-1' }],
+    } as never);
+    storedEntries.set(`kikouchou-last-trip-page:${TRIP_ID}`, 'rooms');
+    installState.installIntent = true;
+
+    try {
+      render(<JoinTripPage />);
+
+      expect(screen.getByTestId('install-here-hint')).toBeInTheDocument();
+      expect(navigate).not.toHaveBeenCalled();
+    } finally {
+      installState.installIntent = false;
+    }
+  });
+});

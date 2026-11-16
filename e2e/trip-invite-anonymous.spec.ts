@@ -505,3 +505,54 @@ test.describe('a viewer who signs in', () => {
     });
   });
 });
+
+// ============================================================================
+// Opening the same link again
+// ============================================================================
+
+test.describe('the same invite link opened again on the device', () => {
+  /** Opens the link, picks Alice, then moves to the rooms page of the trip. */
+  async function joinThenOpenRooms(page: Page, token: string): Promise<string> {
+    await page.goto(`/join/${token}`);
+    await page.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await skipArrivalQuestion(page);
+    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+
+    const roomsUrl = page.url().replace(/\/calendar.*$/, '/rooms');
+    await page.goto(roomsUrl);
+    await expect(page).toHaveURL(/\/rooms$/);
+    return roomsUrl;
+  }
+
+  test('goes back to the last page for a viewer, without asking a name', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const { token } = await shareTripWithGuests(browser, stub);
+
+    const guestPage = await newDevice(browser, stub);
+    const roomsUrl = await joinThenOpenRooms(guestPage, token);
+
+    await guestPage.goto(`/join/${token}`);
+
+    await expect(guestPage).toHaveURL(roomsUrl, { timeout: 30_000 });
+    await expect(guestPage.getByText(/which one are you/i)).toHaveCount(0);
+  });
+
+  test('goes back to the last page for a member, without asking a name', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const { token } = await shareTripWithGuests(browser, stub);
+
+    const guestPage = await newDevice(browser, stub, GUEST);
+    const roomsUrl = await joinThenOpenRooms(guestPage, token);
+
+    await guestPage.goto(`/join/${token}`);
+
+    await expect(guestPage).toHaveURL(roomsUrl, { timeout: 30_000 });
+    await expect(guestPage.getByText(/which one are you/i)).toHaveCount(0);
+    // Still one roster row: the second open did not join the trip twice.
+    expect(stub.members.filter((member) => member.user_id === GUEST.id)).toHaveLength(1);
+  });
+});

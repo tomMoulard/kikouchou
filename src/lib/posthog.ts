@@ -1080,6 +1080,8 @@ export type AnalyticsEvent =
   // Sharing, joining and syncing
   | 'guest_arrival_answered'
   | 'guest_arrival_saved'
+  // An invite link opened again on a device that was inside the trip before
+  | 'invite_link_reopened'
   | 'own_trip_prompt_accepted'
   | 'own_trip_prompt_dismissed'
   | 'own_trip_prompt_shown'

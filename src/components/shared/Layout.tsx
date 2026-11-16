@@ -57,6 +57,7 @@ import { useToday } from '@/hooks/useToday';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { useMobileNavPreferences } from '@/hooks/useMobileNavPreferences';
 import { usePendingArrival } from '@/hooks/usePendingArrival';
+import { useRememberTripPage } from '@/hooks/useRememberTripPage';
 import { OPENED_FROM_NAV, useSampleTripViewReport } from '@/hooks/useSampleTripViewReport';
 import {
   useCompactNavViewport,
@@ -1249,6 +1250,10 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   // Same reason: a guest who answered "when do you arrive" signed out lands
   // on whichever page signing in returns to, and the answer is saved there.
   usePendingArrival();
+
+  // Same reason again: an invite link opened a second time goes back to the
+  // last page of the trip this device showed.
+  useRememberTripPage();
 
   /*
     The bottom stack in `src/index.css` counts the bar's 4rem under every FAB,

@@ -25,6 +25,10 @@
  * claimed in the same tap. A viewer has no write access, so the same button
  * asks them to sign in first — which turns the page into the member flow.
  *
+ * The same link opened again on a device that was inside the trip goes back
+ * to the last page of the trip it showed (`lib/navigation/last-trip-page`),
+ * with no question asked.
+ *
  * @module features/sharing/pages/JoinTripPage
  */
 
@@ -69,6 +73,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
 import { notify } from '@/lib/notifications';
+import { readLastTripPage } from '@/lib/navigation/last-trip-page';
 import { isRunningStandalone } from '@/lib/pwa/display-mode';
 import { useHereManifest } from '@/lib/pwa/use-here-manifest';
 import { getTripGuestPersonId, writeGuestIdentity } from '@/lib/sharing/guest-identity';
@@ -1047,7 +1052,41 @@ export function JoinTripPage(): ReactElement {
     [phase, trips],
   );
 
-  if (phase.kind === 'joining') {
+  /**
+   * The page to go back to, when this device was inside the trip before.
+   *
+   * A second tap on the same invite link must not run the flow again: the
+   * person picked a name, or chose to carry on without one, the first time.
+   * Only a page of the trip writes the record, so somebody who left on "Which
+   * one are you?" has none and is asked again. Two cases still stay here: a
+   * visitor who came to install the app from this page, and a guest whose
+   * arrival day waits for the claim the member step makes.
+   */
+  const returnPage = useMemo(() => {
+    if (!landedTrip || installRequested) {
+      return undefined;
+    }
+    if (phase.kind === 'joined' && readPendingArrival(landedTrip.id) !== undefined) {
+      return undefined;
+    }
+    return readLastTripPage(landedTrip.id);
+  }, [installRequested, landedTrip, phase.kind]);
+
+  const reopenedRef = useRef(false);
+  useEffect(() => {
+    if (returnPage === undefined || !landedTrip || reopenedRef.current) {
+      return;
+    }
+    reopenedRef.current = true;
+    captureEvent('invite_link_reopened', {
+      page: returnPage,
+      mode: phase.kind === 'viewing' ? 'viewer' : 'member',
+    });
+    // Replaced, so Back leaves the trip instead of landing on this page.
+    void navigate(`/trips/${landedTrip.id}/${returnPage}`, { replace: true });
+  }, [landedTrip, navigate, phase.kind, returnPage]);
+
+  if (phase.kind === 'joining' || returnPage !== undefined) {
     return (
       <JoinShell>
         <div className="flex flex-col items-center gap-3 text-center">
