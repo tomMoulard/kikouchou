@@ -1,0 +1,3 @@
+L'organisateur peut retirer quelqu'un d'un voyage partagé, depuis la fenêtre Partager.
+Chaque membre peut retirer un lien d'invitation et en obtenir un nouveau.
+Rouvrir un lien d'invitation vous ramène au voyage.
