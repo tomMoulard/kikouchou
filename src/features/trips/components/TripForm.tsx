@@ -231,6 +231,8 @@ export interface NewTripRoom {
   readonly capacity: number;
   /** Which glyph the room shows in every list and timeline. */
   readonly icon: RoomIcon;
+  /** The room's notes, from a template; the list itself never sets them. */
+  readonly description?: string;
   /** A photo saved with the room: a template's, carried through the wizard. */
   readonly photo?: Blob;
   /** The beds, as a template describes them; the list itself never sets them. */

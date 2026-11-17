@@ -320,6 +320,39 @@ describe('readTripTemplate', () => {
       });
     });
 
+    it("keeps a room's notes, trimmed and bounded to what the room form accepts", async () => {
+      const result = await read({
+        name: 'T',
+        rooms: [
+          { name: 'Attic', capacity: 2, description: '  Ensuite bathroom.  ' },
+          { name: 'Barn', capacity: 2, description: 'n'.repeat(900) },
+        ],
+      });
+
+      expect(result).toMatchObject({
+        template: {
+          rooms: [
+            { name: 'Attic', description: 'Ensuite bathroom.' },
+            { name: 'Barn', description: 'n'.repeat(500) },
+          ],
+        },
+      });
+    });
+
+    it('drops notes that are blank or not text, and keeps the room', async () => {
+      const result = await read({
+        name: 'T',
+        rooms: [
+          { name: 'Attic', capacity: 2, description: '   ' },
+          { name: 'Barn', capacity: 2, description: { evil: true } },
+        ],
+      });
+
+      expect(result).toMatchObject({ template: { rooms: [{ name: 'Attic' }, { name: 'Barn' }] } });
+      const rooms = (result as { template: TripTemplatePayload }).template.rooms;
+      expect(rooms.every((room) => !('description' in room))).toBe(true);
+    });
+
     it('falls back to a bed for an icon this build cannot draw', async () => {
       const result = await read({
         name: 'T',
@@ -670,6 +703,53 @@ describe('the published row is bounded to what the server accepts', () => {
         extraSpots: 1,
       },
     ]);
+  });
+
+  it("publishes a room's notes, clipped to what the room form accepts", async () => {
+    const { client, calls } = stubClient({ updateRows: { data: [{ trip_id: 'remote-1' }] } });
+
+    await refreshTemplatePayload(client, 'remote-1', {
+      ...PAYLOAD,
+      rooms: [
+        { name: 'Attic', capacity: 4, icon: 'bed-double', description: 'Ensuite bathroom.' },
+        { name: 'Barn', capacity: 2, icon: 'bed-double', description: 'n'.repeat(900) },
+        { name: 'Cabin', capacity: 2, icon: 'bed-double' },
+      ],
+    });
+
+    const row = (calls.updates[0] as { row: Record<string, unknown> }).row;
+    expect(row.rooms).toEqual([
+      { name: 'Attic', capacity: 4, icon: 'bed-double', description: 'Ensuite bathroom.' },
+      { name: 'Barn', capacity: 2, icon: 'bed-double', description: 'n'.repeat(500) },
+      { name: 'Cabin', capacity: 2, icon: 'bed-double' },
+    ]);
+  });
+
+  it('leaves out the last rooms notes when the rooms would pass the server byte cap', async () => {
+    const { client, calls } = stubClient({ updateRows: { data: [{ trip_id: 'remote-1' }] } });
+    // 500 three-byte characters are 1,500 bytes of notes per room, and fifty
+    // of them are 75,000 bytes: over the 65,536 the `rooms` column accepts.
+    const notes = '€'.repeat(500);
+
+    await refreshTemplatePayload(client, 'remote-1', {
+      ...PAYLOAD,
+      rooms: Array.from({ length: 50 }, (_, index) => ({
+        name: `Room ${index}`,
+        capacity: 2,
+        icon: 'bed-double' as const,
+        description: notes,
+      })),
+    });
+
+    const rooms = (calls.updates[0] as { row: { rooms: { name: string; description?: string }[] } })
+      .row.rooms;
+    expect(rooms).toHaveLength(50);
+    expect(new TextEncoder().encode(JSON.stringify(rooms)).length).toBeLessThanOrEqual(60_000);
+    // The first rooms keep their notes, and the ones dropped are the last.
+    const kept = rooms.findIndex((room) => room.description === undefined);
+    expect(kept).toBeGreaterThan(0);
+    expect(rooms.slice(0, kept).every((room) => room.description === notes)).toBe(true);
+    expect(rooms.slice(kept).every((room) => room.description === undefined)).toBe(true);
   });
 
   it('keeps a short location as it is, and an absent description as null', async () => {

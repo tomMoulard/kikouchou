@@ -37,7 +37,7 @@ import { nanoid } from 'nanoid';
 
 import { getRoomsByTripId } from '@/lib/db';
 import { getPhoto, toPhotoId } from '@/lib/db/repositories/photo-repository';
-import { normalizeRoomBeds } from '@/lib/db/sanitize';
+import { MAX_LENGTHS, normalizeRoomBeds } from '@/lib/db/sanitize';
 import { fetchTripPhoto } from '@/lib/photos/photo-sync';
 import { PHOTO_BUCKET, templatePhotoPath, uploadPhoto } from '@/lib/photos/storage';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
@@ -92,6 +92,19 @@ const MAX_LOCATION = 200;
 // one boundary ends up looser than the other.
 const MAX_ROOMS = 50;
 const MAX_ROOM_NAME = 100;
+/** A room's notes, bounded like the room form and the sync projection bound them. */
+const MAX_ROOM_DESCRIPTION = MAX_LENGTHS.roomDescription;
+
+/**
+ * The bytes of `rooms` JSON this client sends at most.
+ *
+ * The server refuses a `rooms` value over 65,536 bytes
+ * (`octet_length(rooms::text)`), and a refused write leaves the whole template
+ * stale. Fifty rooms with 500 characters of notes each can pass it, so the
+ * notes are the part given up. The margin covers the spaces `jsonb` puts after
+ * every `:` and `,`, which `JSON.stringify` does not count.
+ */
+const MAX_ROOMS_BYTES = 60_000;
 
 // ============================================================================
 // Type Definitions
@@ -102,6 +115,8 @@ export interface TemplateRoom {
   readonly name: string;
   readonly capacity: number;
   readonly icon: RoomIcon;
+  /** The room's notes ("low ceiling"); absent when the room has none. */
+  readonly description?: string;
   /** The room's photo, read from `templates/<token>/<photoId>`. */
   readonly photoId?: PhotoId;
   /** The ways the beds can be set up; absent when the room describes none. */
@@ -301,6 +316,7 @@ export async function buildTemplatePayload(trip: Trip): Promise<TripTemplatePayl
       name: room.name,
       capacity: room.capacity,
       icon: room.icon ?? DEFAULT_ROOM_ICON,
+      ...(room.description ? { description: room.description } : {}),
       ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
       ...(room.bedLayouts === undefined ? {} : { bedLayouts: room.bedLayouts }),
       ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
@@ -324,6 +340,35 @@ function toBedLayoutsJson(layouts: readonly RoomBedLayout[]) {
 }
 
 /**
+ * Leaves out room notes, last room first, until the rooms fit the server's cap.
+ *
+ * Every room is kept, and so is everything else about it: a room with no notes
+ * is still a room the customer sleeps in, and a template the server refuses
+ * shows nothing new at all. The first rooms keep their notes, because the
+ * owner put them first.
+ *
+ * @param rooms - The rooms as they will be written
+ * @returns The same rooms, with notes dropped from the end as needed
+ */
+function fitRoomsInByteCap<T extends { description?: string }>(rooms: T[]): T[] {
+  const encoder = new TextEncoder();
+  const fitted = [...rooms];
+  for (
+    let index = fitted.length - 1;
+    index >= 0 && encoder.encode(JSON.stringify(fitted)).length > MAX_ROOMS_BYTES;
+    index -= 1
+  ) {
+    const room = fitted[index];
+    if (room?.description !== undefined) {
+      const rest = { ...room };
+      delete rest.description;
+      fitted[index] = rest;
+    }
+  }
+  return fitted;
+}
+
+/**
  * The `trip_templates` columns for a payload, bounded to what the server accepts.
  *
  * One function for the publish and the refresh, so the two writes can never
@@ -338,14 +383,17 @@ function toTemplateRow(payload: TripTemplatePayload) {
     longitude: payload.coordinates?.lon ?? null,
     currency: payload.currency ?? null,
     photo_id: payload.photoId,
-    rooms: payload.rooms.slice(0, MAX_ROOMS).map((room) => ({
-      name: room.name.slice(0, MAX_ROOM_NAME),
-      capacity: room.capacity,
-      icon: room.icon,
-      ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
-      ...(room.bedLayouts === undefined ? {} : { bedLayouts: toBedLayoutsJson(room.bedLayouts) }),
-      ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
-    })),
+    rooms: fitRoomsInByteCap(
+      payload.rooms.slice(0, MAX_ROOMS).map((room) => ({
+        name: room.name.slice(0, MAX_ROOM_NAME),
+        capacity: room.capacity,
+        icon: room.icon,
+        ...(room.description ? { description: room.description.slice(0, MAX_ROOM_DESCRIPTION) } : {}),
+        ...(room.photoId === undefined ? {} : { photoId: room.photoId }),
+        ...(room.bedLayouts === undefined ? {} : { bedLayouts: toBedLayoutsJson(room.bedLayouts) }),
+        ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
+      })),
+    ),
     updated_at: new Date().toISOString(),
   };
 }
@@ -404,10 +452,12 @@ function parseRoom(raw: unknown): TemplateRoom | null {
   });
 
   const photoId = toPhotoId(record.photoId);
+  const description = boundedText(record.description, MAX_ROOM_DESCRIPTION);
   return {
     name,
     icon: normalizeRoomIcon(record.icon),
     ...beds,
+    ...(description === null ? {} : { description }),
     ...(photoId === undefined ? {} : { photoId }),
   };
 }

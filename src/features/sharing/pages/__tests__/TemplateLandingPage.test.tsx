@@ -116,6 +116,33 @@ describe('TemplateLandingPage', () => {
     );
   });
 
+  it("hands the wizard each room's notes, and nothing for a room without any", () => {
+    answering({
+      kind: 'ready',
+      template: {
+        ...TEMPLATE,
+        rooms: [
+          { name: 'Attic', capacity: 4, icon: 'bunk-bed', description: 'Low ceiling.' },
+          { name: 'Suite', capacity: 2, icon: 'bed-double' },
+        ],
+      },
+      photos: new Map(),
+    });
+
+    render(<TemplateLandingPage />, { withProviders: false });
+
+    expect(wizardProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prefill: expect.objectContaining({
+          rooms: [
+            { name: 'Attic', capacity: 4, icon: 'bunk-bed', description: 'Low ceiling.' },
+            { name: 'Suite', capacity: 2, icon: 'bed-double' },
+          ],
+        }),
+      }),
+    );
+  });
+
   it('hands the wizard the photos the template brought, and leaves out one that did not arrive', () => {
     const cover = new Blob(['cover'], { type: 'image/webp' });
     const attic = new Blob(['attic'], { type: 'image/webp' });

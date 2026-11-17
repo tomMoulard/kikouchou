@@ -11,6 +11,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getRoomsByTripId } from '@/lib/db';
 import { getPhoto } from '@/lib/db/repositories/photo-repository';
 import { fetchTripPhoto } from '@/lib/photos/photo-sync';
 import { uploadPhoto } from '@/lib/photos/storage';
@@ -265,5 +266,21 @@ describe('uploadTemplatePhotos', () => {
     const failed = await uploadTemplatePhotos(client, TRIP, PAYLOAD);
 
     expect(failed).toBe(2);
+  });
+});
+
+describe('the payload carries each room\'s notes', () => {
+  it('reads the notes off the room, and leaves out a room that has none', async () => {
+    vi.mocked(getRoomsByTripId).mockResolvedValueOnce([
+      { id: 'r1', name: 'Red room', capacity: 2, description: 'Ensuite bathroom.' },
+      { id: 'r2', name: 'Plain room', capacity: 1 },
+    ] as Awaited<ReturnType<typeof getRoomsByTripId>>);
+
+    const payload = await buildTemplatePayload({ id: 'local-trip', name: 'Chalet' } as Trip);
+
+    expect(payload.rooms).toEqual([
+      { name: 'Red room', capacity: 2, icon: 'bed-double', description: 'Ensuite bathroom.' },
+      { name: 'Plain room', capacity: 1, icon: 'bed-double' },
+    ]);
   });
 });

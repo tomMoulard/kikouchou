@@ -124,6 +124,7 @@ export function TemplateLandingPage(): ReactElement {
           name: room.name,
           capacity: room.capacity,
           icon: room.icon,
+          ...(room.description === undefined ? {} : { description: room.description }),
           ...(photo === undefined ? {} : { photo }),
           ...(room.bedLayouts === undefined ? {} : { bedLayouts: room.bedLayouts }),
           ...(room.extraSpots === undefined ? {} : { extraSpots: room.extraSpots }),
