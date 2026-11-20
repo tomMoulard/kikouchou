@@ -15,12 +15,22 @@
  * settings row, then render an app whose every page said "Failed to load"
  * (PostHog, 2026-10-26, Android Chrome 138).
  *
+ * An IndexedDB that will not open at all is the other one. Some browsers
+ * refuse `indexedDB.open` with `UnknownError: Internal error.` on every try,
+ * the reopen of `retryAfterReopen` included, usually in a private mode or on
+ * an old Android build. It comes back as `unavailable`, logged and reported
+ * the same way, and `main.tsx` says the browser cannot store data here. It
+ * used to log twice with `console.error`, once from the seed and once from
+ * the settings row, then render an app whose every page failed to load
+ * (PostHog issues 01a1f8f9-ce46 and 01a1f8f9-ce44, Samsung Internet 23,
+ * Android 8, 2026-11-20).
+ *
  * @module lib/db/boot
  */
 
 import { captureEvent } from '@/lib/posthog';
 
-import { retryAfterReopen } from './reopen';
+import { isTransientIndexedDbError, retryAfterReopen } from './reopen';
 import { isStorageFullError } from './storage-full';
 
 // ============================================================================
@@ -34,11 +44,19 @@ import { isStorageFullError } from './storage-full';
  * - `storage-full`: the device has no space left for IndexedDB to open in, or
  *   to write the settings row of a first open. Render the storage-full screen,
  *   not the app.
+ * - `unavailable`: IndexedDB still fails internally after a reopen, so the
+ *   browser cannot store anything on this device. Render the unavailable
+ *   screen, not the app.
  * - `failed`: anything else. Already logged; the app renders on defaults.
  * - `timed-out`: still blocked after the timeout, usually behind another tab
  *   on an older schema. The app renders on defaults.
  */
-export type DatabaseBootOutcome = 'ready' | 'storage-full' | 'failed' | 'timed-out';
+export type DatabaseBootOutcome =
+  | 'ready'
+  | 'storage-full'
+  | 'unavailable'
+  | 'failed'
+  | 'timed-out';
 
 /** What the boot sequence runs, so a test can run it without `main.tsx`. */
 export interface DatabaseBootSteps {
@@ -66,7 +84,12 @@ export interface DatabaseBootSteps {
  * the settings row that `ensureSettings` is about to create. A failed seed
  * costs the sample and nothing else. That holds for a full disk too, since the
  * sample's photos can run past a quota the settings row fits in; the settings
- * call decides whether the app can start.
+ * call decides whether the app can start. An internal IndexedDB failure in the
+ * seed gets one reopen, like the settings call: without it, the settings row
+ * of a first open would be written without the seed's decision, and the next
+ * boot would take the device for a returning one and never offer the sample.
+ * If the reopen does not cure it, it is held back the same way as a full disk,
+ * and the settings call's answer says whether IndexedDB works here.
  *
  * @param steps - The seed, the settings call and the timeout
  * @returns How the database came up; never rejects
@@ -76,13 +99,16 @@ export async function prepareDatabase(steps: DatabaseBootSteps): Promise<Databas
 
   const work = (async (): Promise<DatabaseBootOutcome> => {
     let seedStorageFull: unknown;
+    let seedUnavailable: unknown;
     if (steps.seed) {
       try {
-        await steps.seed();
+        await retryAfterReopen(steps.seed);
       } catch (error) {
+        // Both said once, below, whichever way the settings call goes.
         if (isStorageFullError(error)) {
-          // Said once, below, whichever way the settings call goes.
           seedStorageFull = error;
+        } else if (isTransientIndexedDbError(error)) {
+          seedUnavailable = error;
         } else {
           console.error('Failed to seed the sample trip:', error);
         }
@@ -93,6 +119,9 @@ export async function prepareDatabase(steps: DatabaseBootSteps): Promise<Databas
     await retryAfterReopen(steps.ensureSettings);
     if (seedStorageFull !== undefined) {
       console.warn('[db] No space left for the sample trip, skipped:', seedStorageFull);
+    }
+    if (seedUnavailable !== undefined) {
+      console.warn('[db] IndexedDB failed internally, sample trip skipped:', seedUnavailable);
     }
     return 'ready';
   })();
@@ -110,6 +139,11 @@ export async function prepareDatabase(steps: DatabaseBootSteps): Promise<Databas
       console.warn('[db] Device storage is full, the database cannot start:', error);
       captureEvent('database_open_failed', { reason: 'storage_full' });
       return 'storage-full';
+    }
+    if (isTransientIndexedDbError(error)) {
+      console.warn('[db] IndexedDB failed again after a reopen, the database cannot start:', error);
+      captureEvent('database_open_failed', { reason: 'unavailable' });
+      return 'unavailable';
     }
     // Logged, and the app renders anyway: getSettings() returns defaults when
     // the database is unavailable.

@@ -17,6 +17,7 @@
  */
 
 import { db } from './database';
+import { hasErrorNamedInChain } from './error-chain';
 
 /** The two calls this needs from a Dexie database. */
 export interface ReopenableDatabase {
@@ -26,16 +27,15 @@ export interface ReopenableDatabase {
 
 /**
  * Whether an error is IndexedDB's internal failure, which a new connection
- * cures. Dexie keeps the browser's own error on `inner`.
+ * may cure. Dexie keeps the browser's own error on `inner`, and wraps it once
+ * more in a `DatabaseClosedError` for every query after a failed open; a
+ * repository adds `cause`. So the name is looked for down the chain.
  *
  * @param error - Whatever was caught
- * @returns True for an `UnknownError`, at the top or one level down
+ * @returns True for an `UnknownError` anywhere in the first few wrappers
  */
 export function isTransientIndexedDbError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  if ((error as { name?: unknown }).name === 'UnknownError') return true;
-  const inner = (error as { inner?: unknown }).inner;
-  return typeof inner === 'object' && inner !== null && (inner as { name?: unknown }).name === 'UnknownError';
+  return hasErrorNamedInChain(error, 'UnknownError');
 }
 
 /**

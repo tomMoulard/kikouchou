@@ -23,6 +23,7 @@ import { createRoot } from 'react-dom/client';
 import { SplashScreen } from '@capacitor/splash-screen';
 
 import { StorageFullScreen } from '@/components/shared/StorageFullScreen';
+import { StorageUnavailableScreen } from '@/components/shared/StorageUnavailableScreen';
 
 import { storePetEnabled } from '@/features/pet/lib/pet-preferences';
 import {
@@ -98,13 +99,13 @@ function getRootElement(): HTMLElement {
  */
 const DB_READY_TIMEOUT_MS = 3000;
 
-/** Runs the boot again, once the user has freed some space. */
+/** Runs the boot again, once the user has freed some space or left private mode. */
 function reloadPage(): void {
   window.location.reload();
 }
 
 /**
- * Renders the storage-full screen in place of the app.
+ * Renders a storage screen (full, or unavailable) in place of the app.
  *
  * In a store app, `NativeShell` is what takes the splash screen down and tells
  * the live update plugin the bundle painted, and it lives inside `App`. Done
@@ -113,10 +114,17 @@ function reloadPage(): void {
  *
  * @param rootElement - The element to render into
  */
-function renderStorageFullScreen(rootElement: HTMLElement): void {
+function renderStorageScreen(
+  rootElement: HTMLElement,
+  outcome: 'storage-full' | 'unavailable',
+): void {
   createRoot(rootElement, { onCaughtError: logCaughtError }).render(
     <StrictMode>
-      <StorageFullScreen onRetry={reloadPage} />
+      {outcome === 'storage-full' ? (
+        <StorageFullScreen onRetry={reloadPage} />
+      ) : (
+        <StorageUnavailableScreen onRetry={reloadPage} />
+      )}
     </StrictMode>,
   );
   if (isNativeApp()) {
@@ -160,11 +168,11 @@ async function initializeApp(): Promise<void> {
     timeoutMs: DB_READY_TIMEOUT_MS,
   });
 
-  // A full disk: IndexedDB cannot open, so no page of the app can work. Say
-  // so, rather than render pages that each report "Failed to load". The retry
-  // reloads, which runs this whole boot again.
-  if (outcome === 'storage-full') {
-    renderStorageFullScreen(rootElement);
+  // A full disk, or a browser that will not open IndexedDB at all: no page of
+  // the app can work. Say so, rather than render pages that each report
+  // "Failed to load". The retry reloads, which runs this whole boot again.
+  if (outcome === 'storage-full' || outcome === 'unavailable') {
+    renderStorageScreen(rootElement, outcome);
     return;
   }
 

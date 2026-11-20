@@ -1854,6 +1854,10 @@
     "storageFull": {
       "title": "Your device's storage is full",
       "description": "Kikouchou saves your trips on this device and needs some free space to open them. Free some space, for example by deleting photos or apps you no longer use, then retry."
+    },
+    "storageUnavailable": {
+      "title": "This browser cannot store data here",
+      "description": "Kikouchou saves your trips on this device, and this browser would not let it, so the app cannot start. Retry first. If this screen comes back, open Kikouchou in another browser, or leave private or secret mode."
     }
   },
   "pwa": {

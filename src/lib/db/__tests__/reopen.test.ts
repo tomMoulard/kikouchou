@@ -91,6 +91,19 @@ describe('isTransientIndexedDbError', () => {
     ).toBe(true);
   });
 
+  it('recognises it under the wrappers Dexie and a repository add', () => {
+    const closed = Object.assign(new Error('Database has been closed'), {
+      name: 'DatabaseClosedError',
+      inner: Object.assign(new Error('open failed'), {
+        name: 'OpenFailedError',
+        inner: webkitInternalError(),
+      }),
+    });
+
+    expect(isTransientIndexedDbError(closed)).toBe(true);
+    expect(isTransientIndexedDbError(new Error('Failed to load', { cause: closed }))).toBe(true);
+  });
+
   it('ignores everything else', () => {
     expect(isTransientIndexedDbError(new Error('nope'))).toBe(false);
     expect(isTransientIndexedDbError('UnknownError')).toBe(false);

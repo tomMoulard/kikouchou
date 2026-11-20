@@ -177,6 +177,40 @@ describe('prepareDatabase', () => {
     expect(openFailures).toEqual([['database_open_failed', { reason: 'unavailable' }]]);
   });
 
+  it('runs the seed again after a reopen, before the settings row is written', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const seed = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Dexie.OpenFailedError(internalErrorException()))
+      .mockResolvedValueOnce(undefined);
+
+    const outcome = await prepareDatabase({ seed, ensureSettings, timeoutMs: 3000 });
+
+    expect(outcome).toBe('ready');
+    expect(seed).toHaveBeenCalledTimes(2);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('starts the app when only the seed keeps hitting an internal error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const failure = new Dexie.OpenFailedError(internalErrorException());
+    const seed = vi.fn(() => Promise.reject(failure));
+
+    const outcome = await prepareDatabase({ seed, ensureSettings, timeoutMs: 3000 });
+
+    expect(outcome).toBe('ready');
+    expect(seed).toHaveBeenCalledTimes(2);
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenLastCalledWith(
+      '[db] IndexedDB failed internally, sample trip skipped:',
+      failure,
+    );
+    expect(captureEvent).not.toHaveBeenCalled();
+    await expect(db.settings.count()).resolves.toBe(1);
+  });
+
   it('starts the app when only the sample trip ran out of space', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

@@ -1854,6 +1854,10 @@
     "storageFull": {
       "title": "Le stockage de votre appareil est plein",
       "description": "Kikouchou enregistre vos voyages sur cet appareil et a besoin d'un peu d'espace libre pour les ouvrir. Libérez de l'espace, par exemple en supprimant des photos ou des applis dont vous ne vous servez plus, puis réessayez."
+    },
+    "storageUnavailable": {
+      "title": "Ce navigateur ne peut pas enregistrer de données ici",
+      "description": "Kikouchou enregistre vos voyages sur cet appareil, et ce navigateur ne l'a pas permis : l'application ne peut donc pas démarrer. Réessayez d'abord. Si cet écran revient, ouvrez Kikouchou dans un autre navigateur, ou quittez la navigation privée ou secrète."
     }
   },
   "pwa": {
