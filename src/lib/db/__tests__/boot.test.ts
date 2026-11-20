@@ -51,6 +51,24 @@ function fillTheDisk(): void {
   });
 }
 
+/** What Samsung Internet threw from `indexedDB.open` on an Android 8 phone. */
+function internalErrorException(): DOMException {
+  return new DOMException('Internal error.', 'UnknownError');
+}
+
+/**
+ * Makes every open of the app's database fail the way it did in production
+ * (PostHog issues 01a1f8f9-ce46 and 01a1f8f9-ce44, Samsung Internet 23,
+ * Android 8, 2026-11-20): the browser refuses `indexedDB.open` with an
+ * `UnknownError`, the reopen of `retryAfterReopen` included.
+ */
+function breakIndexedDb(): void {
+  db.close({ disableAutoOpen: false });
+  vi.spyOn(indexedDB, 'open').mockImplementation(() => {
+    throw internalErrorException();
+  });
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.mocked(captureEvent).mockClear();
@@ -133,6 +151,30 @@ describe('prepareDatabase', () => {
     expect(captureEvent).toHaveBeenCalledWith('database_open_failed', {
       reason: 'storage_full',
     });
+  });
+
+  it('reports an IndexedDB that never opens once, as a warning, and tells the caller', async () => {
+    // PostHog issues 01a1f8f9-ce46 (the seed) and 01a1f8f9-ce44 (the settings
+    // row): both logged with console.error, then the app rendered on defaults
+    // and every page said "Failed to load".
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    breakIndexedDb();
+
+    const outcome = await prepareDatabase({
+      seed: async () => {
+        await seedSampleTripOnce('en');
+      },
+      ensureSettings,
+      timeoutMs: 3000,
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(outcome).toBe('unavailable');
+    const openFailures = vi
+      .mocked(captureEvent)
+      .mock.calls.filter(([event]) => event === 'database_open_failed');
+    expect(openFailures).toEqual([['database_open_failed', { reason: 'unavailable' }]]);
   });
 
   it('starts the app when only the sample trip ran out of space', async () => {
