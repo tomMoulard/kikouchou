@@ -267,8 +267,8 @@ in step 2.3, and the F-Droid key in step 2.7. Separate them with commas.
    Apple refreshes that copy on its own schedule, sometimes after a day.
 
 3. Make sure that the landing page pages answer. Both stores need these URLs:
-   * <https://www.kikouchou.app/privacy.html>
-   * <https://www.kikouchou.app/delete-account.html>
+   * <https://kikouchou.app/privacy.html>
+   * <https://kikouchou.app/delete-account.html>
 
 4. Make sure that the contact address `admin@kikouchou.app` on the privacy
    page reaches you. It must work before the first review.
@@ -384,7 +384,7 @@ and under Grow users, then Store presence.
    * Tablet screenshots: at least one 7 inch and one 10 inch, because the app
      supports tablets.
    * Category: Travel & Local.
-2. Privacy policy: <https://www.kikouchou.app/privacy.html>.
+2. Privacy policy: <https://kikouchou.app/privacy.html>.
 3. App access: say that the app works without an account. Say that sharing
    needs a sign-in with Google, Spotify, Apple or an email link.
 4. Ads: the app contains no ads.
@@ -398,8 +398,8 @@ and under Grow users, then Store presence.
    * a device identifier, for the push token
 
    Data is encrypted in transit. A user can ask for deletion, at
-   <https://www.kikouchou.app/delete-account.html>.
-8. Account deletion: <https://www.kikouchou.app/delete-account.html>.
+   <https://kikouchou.app/delete-account.html>.
+8. Account deletion: <https://kikouchou.app/delete-account.html>.
 
 ### 2.5 Google Play: the closed test
 
@@ -428,7 +428,7 @@ A personal account needs this step before production.
    that the app does not track. The Meta pixel and the Google tags do not run
    in the app.
 5. Open App Information:
-   * privacy policy URL: <https://www.kikouchou.app/privacy.html>
+   * privacy policy URL: <https://kikouchou.app/privacy.html>
    * category: Travel
    * age rating: fill in the questionnaire
 6. Open Pricing and Availability. Set the price to free.

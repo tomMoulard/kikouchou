@@ -1,7 +1,18 @@
-Kikouchou works without an account. On the first launch, the app opens a sample trip that shows every feature: rooms, guests, travel, activities, meals and money.
+1. Screen recording: a recording made on an iPhone was attached to our reply of 16 November 2026 in the App Review messages (submission 00822744-3cb4-4f4a-be39-afc15ef2f6f4).
+2. Purpose and audience: Kikouchou helps a group of friends or a family organise a stay in a shared holiday house. It answers "who sleeps where, and who arrives when": rooms and beds for each night, arrivals and departures with pickups, activities, meals with a shopping list, and shared expenses. The audience is adults who organise or join a private group trip.
 
-An account is needed only to share a trip and to use the assistant. To test sharing, sign in with Sign in with Apple from Settings, then open a trip and choose Share.
+3. Access: the app works without an account. On the first launch it opens a sample trip that shows every feature: rooms, guests, travel, activities, meals and money. An account is needed only to share a trip and to use the assistant. To test them, open Settings and sign in with Sign in with Apple, then open a trip and choose Share. The account can be deleted inside the app: Settings, then Account, then Delete my account.
 
-The account can be deleted inside the app: Settings, then Account, then Delete my account.
+4. External services:
+- Supabase: accounts, trip sync between members, photo storage.
+- Sign in with Apple, Google sign-in, Spotify sign-in and email links, through Supabase Auth.
+- OpenRouter, reached through our own server (api.kikouchou.app), for the optional AI assistant. The app shows this before the first question.
+- PostHog: product analytics. No advertising and no tracking across apps.
+- Apple Push Notification service: trip reminders.
+- OpenStreetMap (Nominatim place search and map tiles): the trip's location.
 
-The assistant sends questions through the project's server to OpenRouter. The app shows this before the first question.
+5. Regions: the app works the same in every region. It is available in English and French.
+
+6. Regulated industry: none. The app has no payments, no in-app purchases and no protected third-party content. The photos of the sample trip are public domain.
+
+User content: a trip is visible only to the people its organiser invites with a link, who are friends and family the organiser chose. There is no public content, no feed, no profiles and no messaging between strangers. In the Share dialog, the organiser can remove any member from the trip and withdraw the invite link, and every member can withdraw the link. Anyone can report a problem to contact@kikouchou.app, which is also on the Privacy page.
