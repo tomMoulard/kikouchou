@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
-import type { Trip } from '@/types';
+import type { Person, Trip } from '@/types';
 
 // Must be before imports that use them
 const mockNavigate = vi.fn();
@@ -123,15 +123,23 @@ vi.mock('@/lib/db', () => ({
   setTripArchived: (...args: unknown[]) => mockSetTripArchived(...args),
 }));
 
+// The guests behind the badges, read once per run of the live query. Each test
+// starts from an empty list; `close`/`open` are what a reopen calls.
+const mockPersonsToArray = vi.fn<() => Promise<Person[]>>(() => Promise.resolve([]));
+const mockDbClose = vi.fn();
+const mockDbOpen = vi.fn(() => Promise.resolve(undefined));
+
 vi.mock('@/lib/db/database', () => ({
   db: {
     persons: {
       where: () => ({
         anyOf: () => ({
-          toArray: () => Promise.resolve([]),
+          toArray: () => mockPersonsToArray(),
         }),
       }),
     },
+    close: () => mockDbClose(),
+    open: () => mockDbOpen(),
   },
 }));
 
@@ -143,6 +151,8 @@ import { useTripContext } from '@/contexts/TripContext';
 describe('TripListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPersonsToArray.mockReset();
+    mockPersonsToArray.mockResolvedValue([]);
     mockResolveTripPresenceProfile.mockResolvedValue(null);
     vi.mocked(useTripContext).mockReturnValue({
       trips: [mockTrip],
@@ -703,4 +713,77 @@ describe('TripListPage', () => {
     });
   });
 
+  /**
+   * PostHog issue `01a1f5a2` (release 912cd2d8, Mobile Safari, iOS 18.7, on
+   * `/trips`): the guests read failed with "UnknownError: Attempt to open a
+   * cursor in database without an in-progress transaction". WebKit's
+   * IndexedDB server no longer knew the connection the page held, so a
+   * transaction the page had just created was unknown to it. The catch logged
+   * it with `console.error` (an exception in PostHog), and the cards kept no
+   * guests until something else changed. A new connection cures that error,
+   * the way it cures boot's `ensureSettings()` (issue `01a13061`).
+   */
+  describe('when IndexedDB loses the connection', () => {
+    const alice: Person = {
+      id: 'person-1' as Person['id'],
+      tripId: mockTrip.id,
+      name: 'Alice',
+      color: '#ef4444' as Person['color'],
+    };
+
+    /** What Dexie rejects with: its own error, the browser's on `inner`. */
+    function lostConnectionError(): Error {
+      const message = 'Attempt to open a cursor in database without an in-progress transaction';
+      return Object.assign(new Error(message), {
+        name: 'UnknownError',
+        inner: new DOMException(message, 'UnknownError'),
+      });
+    }
+
+    it('shows the guests after reopening the database, without logging an error', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      mockPersonsToArray
+        .mockRejectedValueOnce(lostConnectionError())
+        .mockResolvedValue([alice]);
+
+      try {
+        render(<TripListPage />, { withProviders: false });
+
+        await waitFor(() => {
+          expect(screen.getByText('Alice')).toBeInTheDocument();
+        });
+        expect(mockDbClose).toHaveBeenCalledTimes(1);
+        expect(mockDbOpen).toHaveBeenCalledTimes(1);
+        expect(consoleError).not.toHaveBeenCalledWith(
+          'Failed to load persons for trips:',
+          expect.anything(),
+        );
+        expect(consoleWarn).toHaveBeenCalled();
+      } finally {
+        consoleError.mockRestore();
+        consoleWarn.mockRestore();
+      }
+    });
+
+    it('still logs an error that a new connection does not cure, and shows the trips', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockPersonsToArray.mockRejectedValue(new DOMException('blocked', 'QuotaExceededError'));
+
+      try {
+        render(<TripListPage />, { withProviders: false });
+
+        await waitFor(() => {
+          expect(consoleError).toHaveBeenCalledWith(
+            'Failed to load persons for trips:',
+            expect.objectContaining({ name: 'QuotaExceededError' }),
+          );
+        });
+        expect(screen.getByText('Test Trip')).toBeInTheDocument();
+        expect(mockDbClose).not.toHaveBeenCalled();
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+  });
 });
