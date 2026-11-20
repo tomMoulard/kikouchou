@@ -13,6 +13,21 @@
  * connection is broken for this page, and the caller's own error handling is
  * the right place for that.
  *
+ * The same dead connection also answers "UnknownError: Attempt to open a
+ * cursor in database without an in-progress transaction": the page created
+ * the transaction a moment before, but WebKit's server no longer knows it
+ * (PostHog issue `01a1f5a2`, the trip list's guest badges).
+ *
+ * It is safe inside a `liveQuery` querier, which is where the trip list calls
+ * it. Dexie does the same close and open from inside its own transactions
+ * (its `PR1398` path), and `Dexie.open()` runs in the global zone, so the
+ * querier's zone does not leak into the open. The retried read is still one
+ * the live query observes (`reopen.test.ts` adds a row after a reopen and
+ * watches the query answer again). Several callers meet the dead connection
+ * at about the same moment, so they share one reopen: a caller that fails
+ * while a reopen runs joins it, and a caller whose call started before the
+ * last reopen just runs again, rather than closing the new connection.
+ *
  * @module lib/db/reopen
  */
 
@@ -21,8 +36,46 @@ import { hasErrorNamedInChain } from './error-chain';
 
 /** The two calls this needs from a Dexie database. */
 export interface ReopenableDatabase {
-  close(): void;
+  close(options?: { disableAutoOpen: boolean }): void;
   open(): Promise<unknown>;
+}
+
+/** The reopen under way for each database, shared by every caller. */
+const reopening = new WeakMap<ReopenableDatabase, Promise<unknown>>();
+
+/** How many reopens each database has started: which connection a call met. */
+const generations = new WeakMap<ReopenableDatabase, number>();
+
+function generationOf(database: ReopenableDatabase): number {
+  return generations.get(database) ?? 0;
+}
+
+/**
+ * Closes the database and opens it again, or joins the reopen under way.
+ *
+ * `disableAutoOpen: false` is how Dexie closes a connection it means to
+ * reopen: a query that arrives meanwhile waits for the open, and if the open
+ * fails, the next query tries again. The default `close()` turns auto-open
+ * off, so after a failed open every query failed with `DatabaseClosedError`,
+ * which a live query swallows: its screen stayed on its loading state.
+ *
+ * @param database - The database to reopen
+ * @param failedOn - The generation the failed call started on
+ */
+function reopen(database: ReopenableDatabase, failedOn: number): Promise<unknown> {
+  const pending = reopening.get(database);
+  if (pending !== undefined) return pending;
+  if (generationOf(database) !== failedOn) {
+    // The call started on a connection that has been replaced since.
+    return Promise.resolve();
+  }
+  generations.set(database, failedOn + 1);
+  database.close({ disableAutoOpen: false });
+  const opened = database.open().finally(() => {
+    reopening.delete(database);
+  });
+  reopening.set(database, opened);
+  return opened;
 }
 
 /**
@@ -50,6 +103,7 @@ export async function retryAfterReopen<T>(
   operation: () => Promise<T>,
   database: ReopenableDatabase = db,
 ): Promise<T> {
+  const generation = generationOf(database);
   try {
     return await operation();
   } catch (error) {
@@ -59,8 +113,7 @@ export async function retryAfterReopen<T>(
     // A warning: the retry is expected to cure it, and if it does not, the
     // caller reports what the retry threw.
     console.warn('[db] IndexedDB failed internally, reopening once:', error);
-    database.close();
-    await database.open();
+    await reopen(database, generation);
     return operation();
   }
 }

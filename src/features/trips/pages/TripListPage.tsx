@@ -29,6 +29,7 @@ import { PlanOwnTripPrompt } from '../components/PlanOwnTripPrompt';
 import { RemoteTripsSection } from '../components/RemoteTripsSection';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
+import { retryAfterReopen } from '@/lib/db/reopen';
 import type { Person, Trip, TripId } from '@/types';
 import { TripCard } from '../components/TripCard';
 import { TripsLocationMap } from '../components/TripsLocationMap';
@@ -158,7 +159,20 @@ const TripListPage = memo(function TripListPage() {
       }
 
       try {
-        const persons = await db.persons.where('tripId').anyOf(tripIds).toArray();
+        // iOS Safari can lose the IndexedDB connection under the page: the
+        // read then fails with "UnknownError: Attempt to open a cursor in
+        // database without an in-progress transaction" (PostHog issue
+        // 01a1f5a2). The transaction is not stale on our side: Dexie creates
+        // a fresh one for this read and opens the cursor on it at once, and
+        // this querier awaits nothing before it. WebKit's IndexedDB server is
+        // what no longer knows the connection, or the transaction on it.
+        // So the cure is a new connection, not a different query, and
+        // `retryAfterReopen` is safe inside a querier (see lib/db/reopen).
+        // It warns; only a failure the reopen does not cure reaches the catch.
+        const persons = await retryAfterReopen(
+          () => db.persons.where('tripId').anyOf(tripIds).toArray(),
+          db,
+        );
         for (const person of persons) {
           // A person whose trip is not on screen is not an error: the query is
           // keyed on ids that were current when it started.
