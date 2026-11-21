@@ -17,6 +17,7 @@ import * as Y from 'yjs';
 import { db } from '@/lib/db/database';
 import { hasErrorNamedInChain } from '@/lib/db/error-chain';
 import { retryAfterReopen } from '@/lib/db/reopen';
+import { isStorageFullError } from '@/lib/db/storage-full';
 import { toSharedLegIdOrUndefined } from '@/lib/db/shared-legs';
 import { toPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
@@ -1153,8 +1154,11 @@ export async function syncDocToDexie(
     return null;
   }
 
-  const project = (): Promise<void> =>
-    db.transaction(
+  // Counted, so the retries below never run the projection a third time.
+  let runs = 0;
+  const project = (): Promise<boolean> => {
+    runs += 1;
+    return db.transaction(
       'rw',
       [
         db.trips,
@@ -1175,10 +1179,15 @@ export async function syncDocToDexie(
         // row, and the first upload links the trip while a projection can be
         // running: writing the earlier copy dropped the link, so the next sweep
         // inserted the trip again and pulled down a second local copy of it.
+        //
+        // A trip deleted since the read above stays deleted. Writing `nextTrip`
+        // here would bring it back as a row with no guests, and a retry after
+        // an abort widens that window.
         const latest = await db.trips.get(tripId);
-        await db.trips.put(
-          latest === undefined ? nextTrip : (buildTripRecord(doc, tripId, latest) ?? nextTrip),
-        );
+        if (latest === undefined) {
+          return false;
+        }
+        await db.trips.put(buildTripRecord(doc, tripId, latest) ?? nextTrip);
 
         const currentGuests = await db.persons.where('tripId').equals(tripId).toArray();
         // Read through the plain `tripId` index (schema 12), not the compound
@@ -1313,18 +1322,21 @@ export async function syncDocToDexie(
           (rows) => db.shoppingItems.bulkPut(rows),
           (ids) => db.shoppingItems.bulkDelete([...ids]),
         );
+        return true;
       },
     );
+  };
 
+  let projected: boolean;
   try {
     // An UnknownError means the connection is dead: `retryAfterReopen` gets
     // a new one and projects again.
-    await retryAfterReopen(project);
+    projected = await retryAfterReopen(project);
   } catch (firstError) {
     // Withdrawn before any retry, so nothing deletes on the strength of a
     // projection that is not finished (see `reportProjectionFailure`).
     unmarkProjected(doc, tripId);
-    if (doc.isDestroyed || !hasErrorNamedInChain(firstError, 'AbortError')) {
+    if (!isRetryableAbort(firstError) || runs > 1 || doc.isDestroyed) {
       reportProjectionFailure(doc, tripId, firstError);
       return tripId;
     }
@@ -1335,11 +1347,18 @@ export async function syncDocToDexie(
     // PostHog records console.error as an exception.
     console.warn('[yjs-bridge] Projection aborted, trying once more:', firstError);
     try {
-      await project();
+      projected = await project();
     } catch (error) {
       reportProjectionFailure(doc, tripId, error);
       return tripId;
     }
+  }
+
+  if (!projected) {
+    // The trip was deleted while the projection ran: there is nothing to
+    // mirror, and no flag to grant.
+    unmarkProjected(doc, tripId);
+    return null;
   }
 
   // Dexie now mirrors this document for this trip, which is the only basis on
@@ -1350,6 +1369,21 @@ export async function syncDocToDexie(
 }
 
 /**
+ * Whether a projection failed because the browser aborted its transaction,
+ * for a reason a second try can outlive.
+ *
+ * Dexie reports every abort as an `AbortError`, with the browser's reason on
+ * `inner`. A full disk is one of those reasons, and a second try writes the
+ * same rows into the same full disk, so it is left out.
+ *
+ * @param error - What the projection threw
+ * @returns True for an abort that is not a full disk
+ */
+function isRetryableAbort(error: unknown): boolean {
+  return hasErrorNamedInChain(error, 'AbortError') && !isStorageFullError(error);
+}
+
+/**
  * Withdraws the trust flag and reports a projection that failed for good.
  *
  * @param doc - The document that could not be projected
@@ -1357,10 +1391,10 @@ export async function syncDocToDexie(
  * @param error - What the last try threw
  */
 function reportProjectionFailure(doc: Y.Doc, tripId: TripId, error: unknown): void {
-  // Not projected, so not marked — and un-marked if an earlier projection
+  // Not projected, so not marked, and un-marked if an earlier projection
   // had succeeded. This used to log and fall through to `markProjected`
   // in `syncDocToDexie`, which handed out the right to delete on the strength of a
-  // projection that had just failed — the precise situation the flag exists
+  // projection that had just failed: the precise situation the flag exists
   // to withhold it in. A half-written or aborted transaction leaves Dexie
   // holding less than the document does, and the next Dexie-to-document sync
   // would then read those absences as deletions and remove the rows from the
