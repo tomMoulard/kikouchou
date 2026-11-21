@@ -22,8 +22,9 @@ export default defineConfig({
     // Enable global test APIs (describe, it, expect, etc.)
     globals: true,
 
-    // Setup files to run before each test file
-    setupFiles: ['./src/test/setup.ts'],
+    // Setup files to run before each test file. The channel isolation comes
+    // first: Dexie opens its BroadcastChannel when its module is evaluated.
+    setupFiles: ['./src/test/isolate-broadcast-channel.ts', './src/test/setup.ts'],
 
     /**
      * Blank the Supabase and PostHog configuration for the whole suite.
