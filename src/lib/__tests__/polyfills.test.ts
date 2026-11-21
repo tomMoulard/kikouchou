@@ -96,6 +96,17 @@ describe('lib/polyfills', () => {
     expect(Array.prototype.at).toBe(nativeAt);
   });
 
+  // CI run 44784791634 (main, 545d525c): Vitest's own RPC proxy calls
+  // `Object.hasOwn` when it reports a hook's state, from `callSuiteHook`. A
+  // native removed in `beforeEach` stays removed while the runner runs between
+  // the hook and the test, and the run ended with "TypeError: Object.hasOwn is
+  // not a function" as an unhandled error, failing the job with every test
+  // green. The runner must find both natives in place whenever it has control.
+  it('leaves the natives to the runner between the hooks and the test', () => {
+    expect(Object.hasOwn).toBe(nativeHasOwn);
+    expect(Array.prototype.at).toBe(nativeAt);
+  });
+
   it('logs and does not throw when a definition is refused', () => {
     const refusal = new TypeError('Cannot define property');
     // Only the two polyfills are refused: nothing else may break mid-test.
