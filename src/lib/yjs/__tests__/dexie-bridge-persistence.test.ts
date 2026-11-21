@@ -330,6 +330,36 @@ describe('syncDocToDexie: a projection that fails', () => {
     );
   });
 
+  it('does not bring back a trip deleted between the abort and the retry', async () => {
+    const tripId = await makeTrip();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(db, 'transaction').mockImplementationOnce((async () => {
+      await db.trips.delete(tripId);
+      throw chromiumAbort();
+    }) as never);
+    const doc = makeDoc();
+
+    await expect(syncDocToDexie(doc, tripId)).resolves.toBeNull();
+
+    expect(await db.trips.get(tripId)).toBeUndefined();
+    expect(isDexieTrustedMirror(doc, tripId)).toBe(false);
+    expect(mockReportError).not.toHaveBeenCalled();
+  });
+
+  it('does not retry an abort caused by a full disk', async () => {
+    const tripId = await makeTrip();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const quota = new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    const transaction = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Dexie.AbortError('Transaction aborted', quota) as never);
+
+    await syncDocToDexie(makeDoc(), tripId);
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(mockReportError).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry a failure that is not a transient IndexedDB one', async () => {
     const tripId = await makeTrip();
     vi.spyOn(console, 'error').mockImplementation(() => {});
