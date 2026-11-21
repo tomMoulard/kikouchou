@@ -1,5 +1,6 @@
 /**
- * Pins that Dexie's change broadcasts stay inside one Vitest worker thread.
+ * @fileoverview Pins that Dexie's change broadcasts stay inside one Vitest
+ * worker thread.
  *
  * Dexie posts every committed write on a `BroadcastChannel` named
  * `x-storagemutated-1`, so the tabs of one origin can refresh their live
@@ -67,6 +68,16 @@ describe('Dexie change broadcasts in the test suite', () => {
     const received = vi.fn();
     Dexie.on('storagemutated', received);
     try {
+      // Control: the same message posted in this thread does arrive, so the
+      // silence below means the other thread was kept out, not a dead channel.
+      const sameThread = new BroadcastChannel(DEXIE_CHANNEL);
+      sameThread.postMessage(parts);
+      sameThread.close();
+      await vi.waitFor(() => {
+        expect(received).toHaveBeenCalledTimes(1);
+      });
+      received.mockClear();
+
       await postFromAnotherThread(parts);
       await new Promise((resolve) => setTimeout(resolve, 100));
 

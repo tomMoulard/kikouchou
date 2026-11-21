@@ -6,9 +6,9 @@
  * calls `Object.hasOwn` itself between a hook and the test, and a native
  * missing there crashed the run (see the test about the runner below).
  *
- * It calls `installPolyfills` rather than importing the module afresh: the test runner's module loader calls both built-ins, so
- * an import with them removed fails inside the loader, not in the code under
- * test.
+ * It calls `installPolyfills` rather than importing the module afresh: the
+ * test runner's module loader calls both built-ins, so an import with them
+ * removed fails inside the loader, not in the code under test.
  *
  * @module lib/__tests__/polyfills.test
  */
@@ -120,6 +120,8 @@ describe('lib/polyfills', () => {
   // the hook and the test, and the run ended with "TypeError: Object.hasOwn is
   // not a function" as an unhandled error, failing the job with every test
   // green. The runner must find both natives in place whenever it has control.
+  // This test cannot see the runner's own crash; it fails if a hook of this
+  // file removes the natives again, which is how that crash came about.
   it('leaves the natives to the runner between the hooks and the test', () => {
     expect(Object.hasOwn).toBe(nativeHasOwn);
     expect(Array.prototype.at).toBe(nativeAt);
@@ -128,19 +130,28 @@ describe('lib/polyfills', () => {
   it('logs and does not throw when a definition is refused', () => {
     const refusal = new TypeError('Cannot define property');
     // Only the two polyfills are refused: nothing else may break mid-test.
-    vi.spyOn(Object, 'defineProperty').mockImplementation((target, key, attributes) => {
-      if (key === 'hasOwn' || key === 'at') {
-        throw refusal;
-      }
-      return nativeDefineProperty(target, key, attributes);
-    });
+    const defineProperty = vi
+      .spyOn(Object, 'defineProperty')
+      .mockImplementation((target, key, attributes) => {
+        if (key === 'hasOwn' || key === 'at') {
+          throw refusal;
+        }
+        return nativeDefineProperty(target, key, attributes);
+      });
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    withoutNatives(() => {
-      expect(() => installPolyfills()).not.toThrow();
-    });
+    try {
+      withoutNatives(() => {
+        expect(() => installPolyfills()).not.toThrow();
+      });
 
-    expect(consoleError).toHaveBeenCalledWith('Failed to polyfill hasOwn:', refusal);
-    expect(consoleError).toHaveBeenCalledWith('Failed to polyfill at:', refusal);
+      expect(consoleError).toHaveBeenCalledWith('Failed to polyfill hasOwn:', refusal);
+      expect(consoleError).toHaveBeenCalledWith('Failed to polyfill at:', refusal);
+    } finally {
+      // Restored here, not in a hook: the stub refuses `hasOwn` and `at`, and
+      // the runner must never have control while it is installed.
+      defineProperty.mockRestore();
+      consoleError.mockRestore();
+    }
   });
 });
