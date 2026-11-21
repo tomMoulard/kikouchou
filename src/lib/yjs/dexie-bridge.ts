@@ -15,6 +15,8 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
+import { hasErrorNamedInChain } from '@/lib/db/error-chain';
+import { retryAfterReopen } from '@/lib/db/reopen';
 import { toSharedLegIdOrUndefined } from '@/lib/db/shared-legs';
 import { toPhotoId } from '@/lib/db/repositories/photo-repository';
 import {
@@ -1151,8 +1153,8 @@ export async function syncDocToDexie(
     return null;
   }
 
-  try {
-    await db.transaction(
+  const project = (): Promise<void> =>
+    db.transaction(
       'rw',
       [
         db.trips,
@@ -1313,24 +1315,31 @@ export async function syncDocToDexie(
         );
       },
     );
-  } catch (error) {
-    // Not projected, so not marked — and un-marked if an earlier projection
-    // had succeeded. This used to log and fall through to `markProjected`
-    // below, which handed out the right to delete on the strength of a
-    // projection that had just failed — the precise situation the flag exists
-    // to withhold it in. A half-written or aborted transaction leaves Dexie
-    // holding less than the document does, and the next Dexie-to-document sync
-    // would then read those absences as deletions and remove the rows from the
-    // shared trip. Keeping a flag granted by a previous success has exactly the
-    // same effect, one update later.
+
+  try {
+    // An UnknownError means the connection is dead: `retryAfterReopen` gets
+    // a new one and projects again.
+    await retryAfterReopen(project);
+  } catch (firstError) {
+    // Withdrawn before any retry, so nothing deletes on the strength of a
+    // projection that is not finished (see `reportProjectionFailure`).
     unmarkProjected(doc, tripId);
-    reportFailure(
-      'dexie-bridge.syncDocToDexie',
-      error,
-      i18n.t('errors.syncFailed', 'Could not save the trip to this device'),
-      { trip_id: tripId },
-    );
-    return tripId;
+    if (doc.isDestroyed || !hasErrorNamedInChain(firstError, 'AbortError')) {
+      reportProjectionFailure(doc, tripId, firstError);
+      return tripId;
+    }
+    // The browser aborted the transaction while a request was pending
+    // (PostHog issues 01a1faae-...ef433 and ...31818, Chrome 95 on Android).
+    // An aborted transaction writes nothing, and the projection re-reads the
+    // document and Dexie, so a second try is safe. A warning, not an error:
+    // PostHog records console.error as an exception.
+    console.warn('[yjs-bridge] Projection aborted, trying once more:', firstError);
+    try {
+      await project();
+    } catch (error) {
+      reportProjectionFailure(doc, tripId, error);
+      return tripId;
+    }
   }
 
   // Dexie now mirrors this document for this trip, which is the only basis on
@@ -1338,6 +1347,32 @@ export async function syncDocToDexie(
   markProjected(doc, tripId);
 
   return tripId;
+}
+
+/**
+ * Withdraws the trust flag and reports a projection that failed for good.
+ *
+ * @param doc - The document that could not be projected
+ * @param tripId - The local trip it was projected into
+ * @param error - What the last try threw
+ */
+function reportProjectionFailure(doc: Y.Doc, tripId: TripId, error: unknown): void {
+  // Not projected, so not marked — and un-marked if an earlier projection
+  // had succeeded. This used to log and fall through to `markProjected`
+  // in `syncDocToDexie`, which handed out the right to delete on the strength of a
+  // projection that had just failed — the precise situation the flag exists
+  // to withhold it in. A half-written or aborted transaction leaves Dexie
+  // holding less than the document does, and the next Dexie-to-document sync
+  // would then read those absences as deletions and remove the rows from the
+  // shared trip. Keeping a flag granted by a previous success has exactly the
+  // same effect, one update later.
+  unmarkProjected(doc, tripId);
+  reportFailure(
+    'dexie-bridge.syncDocToDexie',
+    error,
+    i18n.t('errors.syncFailed', 'Could not save the trip to this device'),
+    { trip_id: tripId },
+  );
 }
 
 export const applyDocToDexie = syncDocToDexie;
