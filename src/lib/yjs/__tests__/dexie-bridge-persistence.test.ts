@@ -10,13 +10,16 @@
  * @module lib/yjs/__tests__/dexie-bridge-persistence.test
  */
 
+import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
+import { describeCause } from '@/lib/db/repository-error';
 import {
   ORIGIN_DEXIE_SYNC,
+  isDexieTrustedMirror,
   loadPersistedUpdates,
   populateDocFromDexie,
   subscribeToUpdates,
@@ -268,6 +271,76 @@ describe('syncDocToDexie: a projection that fails', () => {
       expect.any(Error),
       expect.objectContaining({ source: 'dexie-bridge.syncDocToDexie', trip_id: tripId }),
     );
+  });
+
+  // PostHog issues 01a1faae-...ef433 and 01a1faae-...31818 (release 912cd2d8,
+  // Chrome 95 on Android, /assistant): the browser aborted the projection's
+  // transaction while a request was pending. Dexie wraps the request's
+  // DOMException in its own AbortError, which is what this builds.
+  const CHROMIUM_ABORT = 'The transaction was aborted, so the request cannot be fulfilled.';
+
+  function chromiumAbort(): Error {
+    return new Dexie.AbortError(CHROMIUM_ABORT, new DOMException(CHROMIUM_ABORT, 'AbortError'));
+  }
+
+  it('builds the abort exactly as PostHog reported it', () => {
+    expect(describeCause(chromiumAbort())).toBe(
+      `AbortError: ${CHROMIUM_ABORT}\n AbortError: ${CHROMIUM_ABORT}`,
+    );
+  });
+
+  it('projects on a second try when the browser aborts the transaction once', async () => {
+    const tripId = await makeTrip();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(db, 'transaction').mockRejectedValueOnce(chromiumAbort() as never);
+    const doc = makeDoc();
+    upsertDocEntity(doc, 'rooms', { id: 'room-1', name: 'Attic', capacity: 2, order: 0 });
+
+    await syncDocToDexie(doc, tripId);
+
+    expect(await db.rooms.where('tripId').equals(tripId).count()).toBe(1);
+    expect(isDexieTrustedMirror(doc, tripId)).toBe(true);
+    expect(mockNotifyError).not.toHaveBeenCalled();
+    expect(mockReportError).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('reports the abort once when the second try is aborted too', async () => {
+    const tripId = await makeTrip();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(db, 'transaction')
+      .mockRejectedValueOnce(chromiumAbort() as never)
+      .mockRejectedValueOnce(chromiumAbort() as never);
+    const doc = makeDoc();
+
+    await syncDocToDexie(doc, tripId);
+
+    expect(isDexieTrustedMirror(doc, tripId)).toBe(false);
+    expect(mockNotifyError).toHaveBeenCalledTimes(1);
+    expect(mockReportError).toHaveBeenCalledTimes(1);
+    expect(mockReportError).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'AbortError' }),
+      expect.objectContaining({
+        source: 'dexie-bridge.syncDocToDexie',
+        reason: `AbortError: ${CHROMIUM_ABORT}\n AbortError: ${CHROMIUM_ABORT}`,
+        trip_id: tripId,
+      }),
+    );
+  });
+
+  it('does not retry a failure that is not a transient IndexedDB one', async () => {
+    const tripId = await makeTrip();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const transaction = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Error('disk full') as never);
+
+    await syncDocToDexie(makeDoc(), tripId);
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(mockReportError).toHaveBeenCalledTimes(1);
   });
 });
 
