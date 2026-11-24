@@ -1371,6 +1371,24 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
     },
   },
   {
+    action: 'inviteActivity',
+    label: 'Invite a guest to one',
+    fields: {
+      activityId: {
+        type: 'string',
+        required: true,
+        description: 'Activity ID',
+        example: '<activity id>',
+      },
+      personId: {
+        type: 'string',
+        required: true,
+        description: 'Guest ID',
+        example: '<guest id>',
+      },
+    },
+  },
+  {
     action: 'updateExpense',
     label: 'Edit a line',
     fields: {
@@ -1889,7 +1907,7 @@ export function generateActionPrompt(
     'After createTrip, the rest applies to the new trip.',
     // Covers rides as well as activities: membership is a join/leave verb in
     // both, and updateRide has no passenger field for the model to reach for.
-    'Change who is in an activity or a car with join / leave, never with update. Updates never create.',
+    'Who is in an activity or a car: join / leave / invite, never update. Updates never create.',
   );
 
   return lines;

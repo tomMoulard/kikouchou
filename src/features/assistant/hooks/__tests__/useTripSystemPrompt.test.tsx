@@ -313,6 +313,39 @@ describe('useTripSystemPrompt', () => {
     expect(prompt).toContain('notes: 10 € entry');
   });
 
+  it('names who is invited and who said no, only when someone is', async () => {
+    const { tripId, personId } = await seedTrip();
+    const invited = await createActivity(tripId, {
+      title: 'Exposition',
+      category: 'culture',
+      startDatetime: '2024-07-18T10:00:00.000Z' as ISODateTimeString,
+      allDay: false,
+      participantIds: [],
+    });
+    await db.activities.update(invited.id, {
+      invitedIds: [personId],
+      declinedIds: [personId],
+    });
+    await createActivity(tripId, {
+      title: 'Beach',
+      category: 'beach',
+      startDatetime: '2024-07-19T10:00:00.000Z' as ISODateTimeString,
+      allDay: false,
+      participantIds: [],
+    });
+
+    const result = await renderWithTrip(tripId);
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('Exposition');
+    });
+
+    const prompt = result.current.prompt.systemPrompt;
+    expect(prompt).toContain('invited, no answer: Alice');
+    expect(prompt).toContain('declined: Alice');
+    const beachLine = prompt.split('\n').find((line) => line.includes('Beach'));
+    expect(beachLine).not.toContain('invited');
+  });
+
   it('tags activities happening today', async () => {
     const { tripId } = await seedTrip();
     await createActivity(tripId, {

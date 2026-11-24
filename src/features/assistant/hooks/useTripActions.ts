@@ -78,6 +78,7 @@ import {
   getTransportById,
   getTripById,
   setActivityParticipation,
+  inviteToActivity,
   setCurrentTrip,
   setTransportRide,
   setTripArchived,
@@ -2051,6 +2052,47 @@ async function executeActionBatch(
                   : '{{person}} left {{title}}',
               },
             ),
+          );
+          break;
+        }
+
+        case 'inviteActivity': {
+          const tid = activeTripId;
+          if (!tid) {
+            notify.error(t('assistant.noTripForAction'));
+            break;
+          }
+          const aid = action.data.activityId as ActivityId;
+          const pid = action.data.personId as PersonId;
+
+          const activity = await getActivityById(aid);
+          if (!activity || activity.tripId !== tid) {
+            notify.error(t('assistant.activityNotFound'));
+            break;
+          }
+          // Same reason as joinActivity: the repository checks the activity's
+          // trip only, and an invented guest id must not be invited.
+          const person = await getPersonById(pid);
+          if (!person || person.tripId !== tid) {
+            notify.error(t('assistant.guestNotFound'));
+            break;
+          }
+
+          const added = await inviteToActivity(aid, tid, [pid], authorIn(tid));
+          if (added.length === 0) {
+            // Already in, or already asked: nothing new to report or to tell.
+            break;
+          }
+          tellOthersAbout(tid, { kind: 'activity_invite', subjectId: aid });
+
+          notifySuccess(t('activities.invite.sent', { count: 1 }));
+          executedCount++;
+          summaries.push(
+            t('assistant.actionDetails.inviteActivity', {
+              person: person.name,
+              title: activity.title,
+              defaultValue: '{{person}} invited to {{title}}',
+            }),
           );
           break;
         }

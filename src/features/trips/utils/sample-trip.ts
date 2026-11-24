@@ -936,6 +936,11 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       endDatetime: at(day(3), 12, 0),
       organizerId: ids.jules,
       participantIds: [ids.jules, ids.samAlex, ids.camille],
+      // Invitations, both ways: Jules asked Hugo, who has not answered yet,
+      // and Nora, who cannot come.
+      invitedIds: [ids.hugo],
+      declinedIds: [ids.nora],
+      invitedBy: ids.jules,
     }),
     activity({
       title: copy.activities.village.title,
@@ -1017,6 +1022,8 @@ export function buildSampleTrip(language: Language, today: Date): SampleTripRows
       payerId: ids.camille,
       splitMode: 'nights',
       splits: equally([...everyone, ids.jules]),
+      // Who typed it in: the others on the line are told of a change, not her.
+      updatedBy: ids.camille,
     },
     {
       id: createExpenseId(),

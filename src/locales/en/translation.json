@@ -1613,6 +1613,7 @@
       "removeActivity": "Removed activity: {{title}}",
       "joinActivity": "{{person}} joined {{title}}",
       "leaveActivity": "{{person}} left {{title}}",
+      "inviteActivity": "{{person}} invited to {{title}}",
       "addRooms": "Added {{count}} rooms: {{name}} ({{capacity}} guests max)",
       "addRide": "Added {{direction}} ride at {{location}}",
       "updateRide": "Updated ride to {{location}} ({{fields}})",

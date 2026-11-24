@@ -126,6 +126,48 @@ async function run(
 // Tests
 // ============================================================================
 
+describe('useTripActions — activity invitations', () => {
+  async function withActivity() {
+    const seeded = await seedTrip();
+    const activity = await createActivity(seeded.tripId, {
+      title: 'Exposition',
+      category: 'culture',
+      startDatetime: '2024-07-18T10:00:00.000Z',
+      allDay: false,
+      participantIds: [],
+    });
+    return { ...seeded, activityId: activity.id };
+  }
+
+  it('invites a guest of the trip, once', async () => {
+    const { tripId, personId, activityId } = await withActivity();
+    const result = await renderWithTrip(tripId);
+    const block = actionBlock({ action: 'inviteActivity', data: { activityId, personId } });
+
+    const first = await run(result.current.actions.executeActions, block);
+    expect(first.count).toBe(1);
+    expect((await db.activities.get(activityId))?.invitedIds).toEqual([personId]);
+
+    // Asked already: nothing changed, nothing reported.
+    const again = await run(result.current.actions.executeActions, block);
+    expect(again.count).toBe(0);
+  });
+
+  it('refuses a guest from another trip', async () => {
+    const { tripId, activityId } = await withActivity();
+    const other = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'inviteActivity', data: { activityId, personId: other.personId } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.activities.get(activityId))?.invitedIds).toBeUndefined();
+  });
+});
+
 describe('useTripActions — activities', () => {
   it('creates an activity from an addActivity block', async () => {
     const { tripId, personId } = await seedTrip();

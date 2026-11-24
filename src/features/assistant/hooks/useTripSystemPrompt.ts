@@ -393,6 +393,14 @@ function formatActivityLine(
     participants.length > 0
       ? `signed up (${participants.length}${cap}): ${participants.map(nameOf).join(', ')}`
       : `signed up (0${cap}): nobody yet`,
+    // Only when there are any: most activities invite nobody, and the prompt
+    // is paid for on every question.
+    activity.invitedIds && activity.invitedIds.length > 0
+      ? `invited, no answer: ${activity.invitedIds.map(nameOf).join(', ')}`
+      : '',
+    activity.declinedIds && activity.declinedIds.length > 0
+      ? `declined: ${activity.declinedIds.map(nameOf).join(', ')}`
+      : '',
     activity.notes ? `notes: ${toPromptText(activity.notes)}` : '',
   ].filter(Boolean);
 

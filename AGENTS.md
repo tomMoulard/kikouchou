@@ -739,6 +739,20 @@ turns either into the one event and strips the parameter back off the URL. A new
 kind of notification must put a `kind` on the notification's `data`, or its
 clicks all count as `unknown`.
 
+**Two kinds are told at once, not on the sweep: `activity_invite` and
+`money_line`.** The device that made the change asks `POST /push/notify`
+(`lib/notifications/trip-notify.ts` to `notify.rs`) with the member's access
+token, and the server reads who to tell from the live document. Two things
+keep it right, and a new kind needs both:
+
+- **The change records who made it** (`invitedBy` on the activity,
+  `updatedBy` on the line, from `useTripIdentity` / `getTripGuestPersonId`),
+  and the server never tells that guest. A write path that skips it notifies
+  the author about their own change.
+- **The ask is queued, and sent once the change is on the server**
+  (`TripNotificationFlush`, under the sync provider). Sent straight from the
+  click, it reached the server before the change did and found nothing.
+
 ### A feature flag is a three-state answer, and it can be forced locally
 
 `useFeatureFlag(key)` returns `undefined` while PostHog is asked, then `true`
