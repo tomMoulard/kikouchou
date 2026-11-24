@@ -14,7 +14,7 @@ import { InstallPromptProvider } from '@/contexts/InstallPromptContext';
 import { Toaster } from '@/components/ui/sonner';
 import { PaletteSync } from '@/components/shared/PaletteSync';
 import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
-import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
+import { InstallPrompt } from '@/components/pwa';
 import { PetMount } from '@/features/pet/components/PetMount';
 import { PendingInviteDialog } from '@/features/sharing/components/PendingInviteDialog';
 import { applyStoredPalette } from '@/lib/palette';
@@ -107,7 +107,6 @@ function useIsCreatingTrip(): boolean {
  * - Toaster: error and warning toasts via Sonner
  * - StatusAnnouncer: the live region that speaks OS-notified confirmations
  * - InstallPrompt: PWA install prompt
- * - OfflineIndicator: Network status indicator
  *
  * @returns The root application element with all providers and global UI
  *
@@ -228,7 +227,6 @@ function App(): ReactElement {
         visitor is filling in. It comes back on the next page.
       */}
       <InstallPrompt suppressed={isCreatingTrip} />
-      <OfflineIndicator />
       {/*
         The pet, when the user turned it on in Settings. Out here with the
         rest of the global chrome so that selecting a trip does not remount it

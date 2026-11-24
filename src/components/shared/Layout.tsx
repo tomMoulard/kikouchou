@@ -82,6 +82,7 @@ import { SyncStatusBadge } from './SyncStatusBadge';
 import { ViewerUnlockCard } from './ViewerUnlockCard';
 import { ReminderCard } from './ReminderCard';
 import { InstallNudgeCard } from '@/components/pwa/InstallNudgeCard';
+import { OfflineIndicator } from '@/components/pwa/OfflineIndicator';
 import { isPushSupported } from '@/lib/notifications/push';
 
 // ============================================================================
@@ -370,6 +371,9 @@ const Header = memo(function Header({
       </Link>
 
       <div className="ml-auto flex min-w-0 max-w-full items-center gap-3">
+        {/* An icon, not a banner: offline is most of a stay at a rural
+            house, and the banner covered the top of every page meanwhile. */}
+        <OfflineIndicator />
         <div className="shrink-0 md:hidden">
           <SyncStatusBadge />
         </div>

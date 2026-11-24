@@ -34,6 +34,8 @@ import { AlertCircle, Check, Eye, Loader2, Users } from 'lucide-react';
 
 import { statusVariants } from '@/components/ui/status.variants';
 
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +60,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
 }: SyncStatusBadgeProps): ReactElement | null {
   const { t } = useTranslation();
   const { state, syncNow } = useSyncStatus();
+  const { isOnline } = useOnlineStatus();
 
   // Not a syncing trip: say nothing rather than reporting the absence of a
   // feature nobody asked for on this trip.
@@ -66,6 +69,15 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
   }
 
   const pending = state.pendingCount;
+
+  // The phone itself is offline. The sync connection can take a while to
+  // notice, and meanwhile this badge said "everyone is up to date" in airplane
+  // mode. The header's offline icon (`OfflineIndicator`) says the connection
+  // is down, so the badge speaks only for what that costs: changes not sent.
+  if (!isOnline && pending === 0) {
+    return null;
+  }
+  const status = isOnline ? state.status : 'offline';
 
   /**
    * Whether the head count may take the badge over.
@@ -77,7 +89,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
   const showCount =
     state.onlineCount !== null &&
     state.onlineCount > 1 &&
-    state.status !== 'offline' &&
+    status !== 'offline' &&
     pending === 0;
 
   /**
@@ -87,7 +99,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
    * date", which would promise a two-way sync. Offline and syncing keep their
    * ordinary wording: they describe the connection, not the copy.
    */
-  const isReadOnlyCurrent = state.readOnly === true && state.status === 'synced';
+  const isReadOnlyCurrent = state.readOnly === true && status === 'synced';
 
   const appearance = isReadOnlyCurrent
     ? {
@@ -113,7 +125,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
           defaultValue_other: '{{count}} people online',
         }),
       }
-    : state.status === 'offline'
+    : status === 'offline'
       ? {
           icon: <AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />,
           tone: statusVariants({ tone: 'warning', emphasis: 'text' }),
@@ -127,7 +139,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
                 })
               : t('nav.syncOffline', 'Not connected'),
         }
-      : state.status === 'syncing'
+      : status === 'syncing'
         ? {
             icon: (
               <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
@@ -147,8 +159,9 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
     ? t('nav.syncPresenceRegion', 'Collaboration status')
     : t('nav.syncStatusRegion', 'Sync status');
 
-  // Only worth offering when something is actually stuck.
-  const canRetry = state.status === 'offline';
+  // Only worth offering when something is actually stuck, and something can
+  // be done about it: a retry while the phone is offline cannot succeed.
+  const canRetry = status === 'offline' && isOnline;
 
   const body = collapsed ? (
     <div className="flex justify-center" aria-live="polite">

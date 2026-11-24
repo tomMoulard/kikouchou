@@ -12,7 +12,7 @@
  * @module components/shared/__tests__/SyncStatusBadge.test
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { SyncStatusBadge } from '../SyncStatusBadge';
@@ -54,6 +54,12 @@ vi.mock('@/lib/sync/SupabaseTripSync', () => ({
 }));
 
 const mockedUseSyncStatus = vi.mocked(useSyncStatus);
+
+/** The phone's own connection, separate from the sync's view of it. */
+const connection = vi.hoisted(() => ({ isOnline: true }));
+vi.mock('@/hooks/useOnlineStatus', () => ({
+  useOnlineStatus: () => ({ isOnline: connection.isOnline, hasRecentlyChanged: false }),
+}));
 
 function withState(state: SyncState): void {
   mockedUseSyncStatus.mockReturnValue({ state, syncNow: vi.fn() });
@@ -299,5 +305,33 @@ describe('SyncStatusBadge faces', () => {
 
     render(<SyncStatusBadge />);
     expect(screen.getByRole('status')).not.toHaveClass('border-t');
+  });
+
+  // Reported from the app: in airplane mode the badge still said everyone was
+  // up to date, beside the header's offline icon.
+  describe('while the phone itself is offline', () => {
+    afterEach(() => {
+      connection.isOnline = true;
+    });
+
+    it('says nothing when nothing is waiting, and leaves it to the offline icon', () => {
+      connection.isOnline = false;
+      withState({ status: 'synced', pendingCount: 0, onlineCount: 3 });
+
+      const { container } = render(<SyncStatusBadge />);
+
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    it('still counts the changes not sent, without offering a retry that cannot work', () => {
+      connection.isOnline = false;
+      withState({ status: 'synced', pendingCount: 2, onlineCount: 3 });
+
+      render(<SyncStatusBadge />);
+
+      expect(screen.getByText('2 changes not sent yet')).toBeInTheDocument();
+      expect(screen.queryByText('Everyone is up to date')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    });
   });
 });
