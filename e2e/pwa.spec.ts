@@ -872,9 +872,13 @@ test.describe('App Updates', () => {
 test.describe('The update button in Settings', () => {
   /**
    * The real worker, the real preview build: the check asks the server, finds
-   * the same build, and says so. Only then is the hard reload offered.
+   * the same build, and says so. It is the only button, and a check that finds
+   * nothing newer reloads nothing: the page, its worker and its caches stay.
+   * (A newer build that does not take over is loaded from the server at once;
+   * a preview build has no newer build, so the unit tests of
+   * `AppUpdateControl` cover that path.)
    */
-  test('says the app is current, then reloads it from the server', async ({ page }) => {
+  test('says the app is current, and reloads nothing', async ({ page }) => {
     await page.goto('/settings');
     await page.waitForLoadState('load');
     await waitForActivatedServiceWorker(page);
@@ -884,10 +888,10 @@ test.describe('The update button in Settings', () => {
       })
       .toBe(true);
 
-    const reloadButton = page.getByRole('button', {
-      name: /^(reload from the server|recharger depuis le serveur)$/i,
+    // A reload would drop this marker.
+    await page.evaluate(() => {
+      (window as unknown as Record<string, string>).__updateSession = 'before';
     });
-    await expect(reloadButton).toHaveCount(0);
 
     await page
       .getByRole('button', { name: /^(check for updates|rechercher une mise à jour)$/i })
@@ -896,39 +900,20 @@ test.describe('The update button in Settings', () => {
     await expect(page.getByRole('status').filter({ hasText: /latest version|dernière version/i }))
       .toBeVisible({ timeout: SW_READY_TIMEOUT });
 
-    // Both survive the hard reload: it drops the worker and Cache Storage only.
-    await page.evaluate(() => {
-      (window as unknown as Record<string, string>).__updateSession = 'before';
-      localStorage.setItem('e2e-update-probe', 'kept');
-    });
+    // The second button, "Reload from the server", is gone.
+    await expect(
+      page.getByRole('button', {
+        name: /^(reload from the server|recharger depuis le serveur)$/i,
+      }),
+    ).toHaveCount(0);
+
+    expect(
+      await page.evaluate(
+        () => (window as unknown as Record<string, string | undefined>).__updateSession,
+      ),
+    ).toBe('before');
+    expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
     expect(await page.evaluate(async () => (await caches.keys()).length)).toBeGreaterThan(0);
-
-    await reloadButton.click();
-
-    await expect
-      .poll(
-        async () => {
-          try {
-            return await page.evaluate(
-              () => (window as unknown as Record<string, string | undefined>).__updateSession ?? 'gone',
-            );
-          } catch {
-            return 'navigating';
-          }
-        },
-        { timeout: SW_READY_TIMEOUT },
-      )
-      .toBe('gone');
-
-    expect(await page.evaluate(() => localStorage.getItem('e2e-update-probe'))).toBe('kept');
-
-    // The fresh load registers the worker again, and it takes control.
-    await expect
-      .poll(
-        () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? null),
-        { timeout: SW_READY_TIMEOUT },
-      )
-      .toContain('sw.js');
   });
 });
 
