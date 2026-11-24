@@ -30,6 +30,16 @@ import type { ActivityId, PersonId } from '@/types';
 // Type Definitions
 // ============================================================================
 
+/** Options of {@link UseActivityInvitationsResult.invite}. */
+export interface InviteOptions {
+  /**
+   * Leaves the "N guests invited" confirmation to the caller, which folds it
+   * into its own (the activity dialog: "Activity created, 2 guests invited").
+   * A failure is still reported here.
+   */
+  readonly quiet?: boolean;
+}
+
 /** What a view gets back to invite guests and answer an invitation. */
 export interface UseActivityInvitationsResult {
   /** The guest this device is, or undefined when nobody has said. */
@@ -40,7 +50,11 @@ export interface UseActivityInvitationsResult {
    * Invites guests. Resolves to how many were newly invited; a failure is
    * reported to the user here and resolves to 0.
    */
-  invite: (activityId: ActivityId, personIds: readonly PersonId[]) => Promise<number>;
+  invite: (
+    activityId: ActivityId,
+    personIds: readonly PersonId[],
+    options?: InviteOptions,
+  ) => Promise<number>;
   /** Declines, for everybody, an invitation to this device's guest. */
   decline: (activityId: ActivityId) => Promise<boolean>;
 }
@@ -64,7 +78,11 @@ export function useActivityInvitations(): UseActivityInvitationsResult {
   const { canEdit } = useTripAccess();
 
   const invite = useCallback(
-    async (activityId: ActivityId, personIds: readonly PersonId[]): Promise<number> => {
+    async (
+      activityId: ActivityId,
+      personIds: readonly PersonId[],
+      options?: InviteOptions,
+    ): Promise<number> => {
       if (!currentTrip || personIds.length === 0) {
         return 0;
       }
@@ -72,7 +90,9 @@ export function useActivityInvitations(): UseActivityInvitationsResult {
         const added = await inviteToActivity(activityId, currentTrip.id, personIds, myPersonId);
         if (added.length > 0) {
           requestTripNotification(currentTrip, { kind: 'activity_invite', subjectId: activityId });
-          notifySuccess(t('activities.invite.sent', { count: added.length }));
+          if (!options?.quiet) {
+            notifySuccess(t('activities.invite.sent', { count: added.length }));
+          }
         }
         return added.length;
       } catch (error) {

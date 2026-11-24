@@ -61,8 +61,9 @@ export interface ActivityDialogProps {
  * - Closes automatically on successful submission
  * - In edit mode, a one-tap join/leave for the guest holding this device, so
  *   signing yourself up does not mean editing the participant list
- * - In create mode, guests picked to invite are invited once the activity
- *   exists, through the same path as the detail dialog's "Invite guests"
+ * - Guests picked to invite are invited once the activity is saved, through
+ *   the same path as the detail dialog's "Invite guests", and the one
+ *   confirmation names them
  *
  * @param props - Component props
  * @returns The activity dialog element
@@ -117,23 +118,37 @@ const ActivityDialog = memo(function ActivityDialog({
 
   const handleSubmit = useCallback(
     async (data: ActivityFormSubmission) => {
-      // The guests to invite are not part of the activity write. Edit mode
-      // never offers them; create mode invites them once the activity exists.
+      // The guests to invite are not part of the activity write: they are
+      // invited once it is saved, by the same call as "Invite guests", so
+      // they are told the same way. A failed invitation is reported by
+      // `invite` itself, and the saved activity stays.
       const { invitedIds = [], ...activityData } = data;
+      const inviteTo = async (id: ActivityId): Promise<number> =>
+        invitedIds.length > 0 ? invite(id, invitedIds, { quiet: true }) : 0;
+
       if (activityId) {
         await updateActivity(activityId, activityData);
-        notifySuccess(t('activities.updateSuccess'));
+        const invited = await inviteTo(activityId);
+        notifySuccess(
+          invited > 0
+            ? t('activities.updatedAndInvited', { count: invited })
+            : t('activities.updateSuccess'),
+        );
         captureUsage('activity_saved', {
           operation: 'updated',
           category: data.category,
           is_all_day: data.allDay,
           participant_count: data.participantIds.length,
+          invited_count: invitedIds.length,
         });
       } else {
-        // Invited by the same call as "Invite guests", so the invited guests
-        // are told the same way.
         const created = await createActivity(activityData);
-        notifySuccess(t('activities.createSuccess'));
+        const invited = await inviteTo(created.id);
+        notifySuccess(
+          invited > 0
+            ? t('activities.createdAndInvited', { count: invited })
+            : t('activities.createSuccess'),
+        );
         captureUsage('activity_saved', {
           operation: 'created',
           category: data.category,
@@ -141,10 +156,6 @@ const ActivityDialog = memo(function ActivityDialog({
           participant_count: data.participantIds.length,
           invited_count: invitedIds.length,
         });
-        if (invitedIds.length > 0) {
-          // A failure is reported by `invite` itself; the activity stays.
-          await invite(created.id, invitedIds);
-        }
       }
       onOpenChange(false);
     },

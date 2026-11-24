@@ -768,6 +768,7 @@
       "button": "Invite guests",
       "pickTitle": "Who do you want to invite?",
       "formDescription": "They are asked to join when they next open the trip.",
+      "alreadyInvited": "Already invited: {{names}}",
       "send_one": "Invite {{count}}",
       "send_other": "Invite {{count}}",
       "sent_one": "{{count}} guest invited",
@@ -805,6 +806,10 @@
     "pastActivitiesWithCount_other": "Past activities ({{count}})",
     "createSuccess": "Activity created successfully",
     "updateSuccess": "Activity updated successfully",
+    "createdAndInvited_one": "Activity created, {{count}} guest invited",
+    "createdAndInvited_other": "Activity created, {{count}} guests invited",
+    "updatedAndInvited_one": "Activity updated, {{count}} guest invited",
+    "updatedAndInvited_other": "Activity updated, {{count}} guests invited",
     "deleteSuccess": "Activity deleted successfully",
     "participationUpdated": "Sign-ups updated",
     "view": {

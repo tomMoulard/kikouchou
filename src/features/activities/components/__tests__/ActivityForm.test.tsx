@@ -3,7 +3,7 @@
  * @module features/activities/components/__tests__/ActivityForm.test
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isoDate, render, screen, within } from '@/test/utils';
 import type { Activity, Person } from '@/types';
 
@@ -106,6 +106,15 @@ async function fillRequired(user: ReturnType<typeof renderForm>['user']): Promis
 // ============================================================================
 
 describe('ActivityForm', () => {
+  // The organizer select is Radix, which asks for pointer capture and
+  // scrolling that jsdom does not have.
+  beforeAll(() => {
+    Element.prototype.hasPointerCapture ??= (): boolean => false;
+    Element.prototype.setPointerCapture ??= (): void => undefined;
+    Element.prototype.releasePointerCapture ??= (): void => undefined;
+    Element.prototype.scrollIntoView ??= (): void => undefined;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -346,7 +355,25 @@ describe('ActivityForm', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('is not offered in edit mode, where the detail dialog invites', () => {
+    it('drops a guest from the list once they are picked as organizer', async () => {
+      const { user, onSubmit } = renderForm({ allowInvitations: true });
+      await fillRequired(user);
+
+      await user.click(inviteList().getByRole('button', { name: /Bob/ }));
+      await user.click(screen.getByLabelText('activities.organizer'));
+      await user.click(screen.getByRole('option', { name: /Bob/ }));
+
+      // The organizer is going, so Bob is no longer someone to invite.
+      expect(inviteList().queryByRole('button', { name: /Bob/ })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      const data = submittedData(onSubmit);
+      expect(data.organizerId).toBe('p2');
+      expect(data.participantIds).toEqual(['p2']);
+      expect(data).not.toHaveProperty('invitedIds');
+    });
+
+    describe('in edit mode', () => {
       const activity: Activity = {
         id: 'a1' as Activity['id'],
         tripId: 't1' as Activity['tripId'],
@@ -355,12 +382,35 @@ describe('ActivityForm', () => {
         startDatetime: new Date(2026, 6, 16, 9, 0).toISOString(),
         allDay: false,
         participantIds: [],
+        invitedIds: ['p1' as Person['id']],
       };
-      renderForm({ activity, allowInvitations: true });
 
-      expect(
-        screen.queryByRole('group', { name: 'activities.invite.pickTitle' }),
-      ).not.toBeInTheDocument();
+      it('offers only the guests not yet asked, and names those already invited', () => {
+        renderForm({ activity, allowInvitations: true });
+
+        expect(inviteList().queryByRole('button', { name: /Alice/ })).not.toBeInTheDocument();
+        expect(inviteList().getByRole('button', { name: /Bob/ })).toBeInTheDocument();
+        expect(inviteList().getByText('activities.invite.alreadyInvited')).toBeInTheDocument();
+      });
+
+      it('submits only the guests newly picked', async () => {
+        const { user, onSubmit } = renderForm({ activity, allowInvitations: true });
+
+        await user.click(inviteList().getByRole('button', { name: /Bob/ }));
+        await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+        expect(submittedData(onSubmit).invitedIds).toEqual(['p2']);
+      });
+
+      it('keeps the list, with its "already invited" line, when nobody is left to ask', () => {
+        renderForm({
+          activity: { ...activity, invitedIds: ['p1', 'p2'] as Person['id'][] },
+          allowInvitations: true,
+        });
+
+        expect(inviteList().queryAllByRole('button')).toHaveLength(0);
+        expect(inviteList().getByText('activities.invite.alreadyInvited')).toBeInTheDocument();
+      });
     });
   });
 });

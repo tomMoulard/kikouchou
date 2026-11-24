@@ -768,6 +768,7 @@
       "button": "Inviter des participants",
       "pickTitle": "Qui voulez-vous inviter ?",
       "formDescription": "On leur demande s'ils viennent la prochaine fois qu'ils ouvrent le voyage.",
+      "alreadyInvited": "Déjà invités : {{names}}",
       "send_one": "Inviter {{count}} personne",
       "send_other": "Inviter {{count}} personnes",
       "sent_one": "{{count}} personne invitée",
@@ -805,6 +806,10 @@
     "pastActivitiesWithCount_other": "Activités passées ({{count}})",
     "createSuccess": "Activité créée avec succès",
     "updateSuccess": "Activité mise à jour avec succès",
+    "createdAndInvited_one": "Activité créée, {{count}} personne invitée",
+    "createdAndInvited_other": "Activité créée, {{count}} personnes invitées",
+    "updatedAndInvited_one": "Activité mise à jour, {{count}} personne invitée",
+    "updatedAndInvited_other": "Activité mise à jour, {{count}} personnes invitées",
     "deleteSuccess": "Activité supprimée avec succès",
     "participationUpdated": "Inscriptions mises à jour",
     "view": {

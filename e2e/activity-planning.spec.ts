@@ -116,7 +116,7 @@ test.describe('activity planning', () => {
   });
 });
 
-test.describe('inviting guests while creating an activity', () => {
+test.describe('inviting guests from the activity form', () => {
   test('a guest picked in the new activity form is invited to it', async ({ page }) => {
     const { tripId } = await seedTrip(page, {
       name: 'Invite Trip',
@@ -160,5 +160,40 @@ test.describe('inviting guests while creating an activity', () => {
     await expect(answers.getByRole('listitem').filter({ hasText: 'Jules' })).toContainText(
       /going|participe/i,
     );
+  });
+
+  test('a guest is invited from the edit form on the activities page', async ({ page }) => {
+    const { tripId } = await seedTrip(page, {
+      name: 'Edit Invite Trip',
+      startDate: fixtureDate(1),
+      endDate: fixtureDate(6),
+    });
+    await seedPerson(page, tripId, 'Maud');
+    await seedActivity(page, {
+      tripId,
+      title: 'Boat trip',
+      category: 'sport',
+      startDatetime: `${fixtureDate(3)}T10:00:00`,
+    });
+
+    await page.goto(`/trips/${tripId}/activities`);
+    await waitForRoute(page);
+    await agendaDay(page, fixtureDate(3)).getByRole('button', { name: /Boat trip/ }).click();
+
+    const form = page.getByRole('dialog');
+    await form
+      .getByRole('group', { name: /who do you want to invite\?|qui voulez-vous inviter \?/i })
+      .getByRole('button', { name: /Maud/ })
+      .click();
+    await form.getByRole('button', { name: /^(save|enregistrer)$/i }).click();
+    await expect(form).toBeHidden();
+
+    // Reopened, Maud is named as already invited and is not offered again.
+    await agendaDay(page, fixtureDate(3)).getByRole('button', { name: /Boat trip/ }).click();
+    const invites = page
+      .getByRole('dialog')
+      .getByRole('group', { name: /who do you want to invite\?|qui voulez-vous inviter \?/i });
+    await expect(invites).toContainText(/already invited: Maud|déjà invités : Maud/i);
+    await expect(invites.getByRole('button', { name: /Maud/ })).toHaveCount(0);
   });
 });

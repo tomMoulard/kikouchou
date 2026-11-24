@@ -11,7 +11,7 @@ import type {
   TripId,
 } from '@/types';
 
-const mockCreateActivity = vi.fn().mockResolvedValue(undefined);
+const mockCreateActivity = vi.fn().mockResolvedValue({ id: 'new-0' });
 const mockUpdateActivity = vi.fn().mockResolvedValue(undefined);
 const mockSuccessToast = vi.fn();
 const mockCaptureUsage = vi.fn();
@@ -56,7 +56,8 @@ const mockActivityParticipation = vi.fn(() => ({
   toggleParticipation: mockToggleParticipation,
 }));
 
-const mockInvite = vi.fn(async () => 1);
+// Answers how many guests it invited, as the real hook does.
+const mockInvite = vi.fn(async (...args: unknown[]) => (args[1] as readonly string[]).length);
 const invitations = { canInvite: false };
 
 vi.mock('@/features/activities/hooks/useActivityInvitations', () => ({
@@ -243,8 +244,39 @@ describe('ActivityDialog', () => {
       category: 'horticulture',
       is_all_day: false,
       participant_count: 2,
+      invited_count: 0,
     });
+    expect(mockInvite).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('offers invitations to the form in edit mode too', () => {
+    invitations.canInvite = true;
+    render(<ActivityDialog activityId={'a1' as ActivityId} open onOpenChange={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    expect(screen.getByTestId('allow-invitations')).toHaveTextContent('true');
+  });
+
+  it('saves the edit without the invited guests, then invites them, in one confirmation', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    invitations.canInvite = true;
+    render(<ActivityDialog activityId={'a1' as ActivityId} open onOpenChange={onOpenChange} />, {
+      withProviders: false,
+    });
+
+    await user.click(screen.getByTestId('submit-invites-btn'));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(mockUpdateActivity).toHaveBeenCalledWith('a1', submittedData);
+    expect(mockInvite).toHaveBeenCalledWith('a1', ['p3', 'p4'], { quiet: true });
+    expect(mockSuccessToast).toHaveBeenCalledTimes(1);
+    expect(mockSuccessToast).toHaveBeenCalledWith('activities.updatedAndInvited');
   });
 
   it('offers invitations to the form in create mode, where this device may invite', () => {
@@ -276,7 +308,10 @@ describe('ActivityDialog', () => {
     // The activity write never carries the invitations: `invite` writes them,
     // and tells the invited guests.
     expect(mockCreateActivity).toHaveBeenCalledWith(submittedData);
-    expect(mockInvite).toHaveBeenCalledWith('new-1', ['p3', 'p4']);
+    expect(mockInvite).toHaveBeenCalledWith('new-1', ['p3', 'p4'], { quiet: true });
+    // One confirmation for the save and the invitations together.
+    expect(mockSuccessToast).toHaveBeenCalledTimes(1);
+    expect(mockSuccessToast).toHaveBeenCalledWith('activities.createdAndInvited');
     expect(mockCreateActivity.mock.invocationCallOrder[0]).toBeLessThan(
       mockInvite.mock.invocationCallOrder[0] ?? 0,
     );
@@ -287,6 +322,25 @@ describe('ActivityDialog', () => {
       participant_count: 2,
       invited_count: 2,
     });
+  });
+
+  it('confirms the save alone when no invitation went out', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    invitations.canInvite = true;
+    // `invite` answers 0 when it failed (and reported it) or nobody was new.
+    mockInvite.mockResolvedValueOnce(0);
+    mockCreateActivity.mockResolvedValueOnce({ ...submittedData, id: 'new-2', tripId: 't1' });
+    render(<ActivityDialog open onOpenChange={onOpenChange} />, { withProviders: false });
+
+    await user.click(screen.getByTestId('submit-invites-btn'));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(mockSuccessToast).toHaveBeenCalledTimes(1);
+    expect(mockSuccessToast).toHaveBeenCalledWith('activities.createSuccess');
   });
 
   it('closes straight away when cancel is clicked on a clean form', async () => {

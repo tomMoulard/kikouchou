@@ -81,9 +81,11 @@ interface ActivityFormProps {
   /** Callback when the form dirty state changes (for the unsaved changes guard). */
   readonly onDirtyChange?: (isDirty: boolean) => void;
   /**
-   * Offers "Who do you want to invite?" in create mode. The picked guests
-   * come back in `invitedIds`, for the caller to invite once the activity
-   * exists. Never offered in edit mode: the detail dialog invites there.
+   * Offers "Who do you want to invite?": every guest who is neither going nor
+   * already invited (a guest who said no can be asked again). The picked
+   * guests come back in `invitedIds`, for the caller to invite once the
+   * activity is saved. In edit mode the guests already invited are named
+   * under the list.
    */
   readonly allowInvitations?: boolean;
 }
@@ -125,7 +127,7 @@ interface FormState {
   coordinates: Coordinates | undefined;
   organizerId: PersonId | '';
   participantIds: PersonId[];
-  /** Guests to invite once the activity is created (create mode only). */
+  /** Guests newly picked to invite once the activity is saved. */
   invitedIds: PersonId[];
   maxParticipants: string;
   notes: string;
@@ -283,7 +285,7 @@ const GuestToggleChip = memo(function GuestToggleChip({
  * - Title, category, all-day toggle and start/end pickers
  * - Location with map lookup via LocationPicker
  * - Organizer select and a togglable participant list
- * - In create mode, when allowed, a list of guests to invite
+ * - When allowed, a list of guests to invite
  * - Optional participant cap, validated against the current sign-ups
  * - Validation on submit, with inline field errors
  *
@@ -582,11 +584,14 @@ const ActivityForm = memo(function ActivityForm({
   const endValue = formState.allDay ? formState.endDate : formState.endDatetime;
   const dateInputType = formState.allDay ? 'date' : 'datetime-local';
 
-  // Anyone not already going can be invited. Edit mode never offers it.
-  const inviteCandidates =
-    allowInvitations && !activity
-      ? persons.filter((person) => !formState.participantIds.includes(person.id))
-      : [];
+  // Anyone neither going nor already invited can be invited. A guest who is
+  // going is not listed even if an old invitation still names them.
+  const alreadyInvitedIds = new Set(activity?.invitedIds ?? []);
+  const notGoing = allowInvitations
+    ? persons.filter((person) => !formState.participantIds.includes(person.id))
+    : [];
+  const inviteCandidates = notGoing.filter((person) => !alreadyInvitedIds.has(person.id));
+  const alreadyInvited = notGoing.filter((person) => alreadyInvitedIds.has(person.id));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -766,8 +771,8 @@ const ActivityForm = memo(function ActivityForm({
         )}
       </fieldset>
 
-      {/* Invitations (create mode) */}
-      {inviteCandidates.length > 0 && (
+      {/* Invitations */}
+      {(inviteCandidates.length > 0 || alreadyInvited.length > 0) && (
         <fieldset className="space-y-3" data-testid="activity-invite-list">
           <legend className="text-sm font-medium leading-none">
             {t('activities.invite.pickTitle', 'Who do you want to invite?')}
@@ -778,17 +783,27 @@ const ActivityForm = memo(function ActivityForm({
               'They are asked to join when they next open the trip.',
             )}
           </p>
-          <div className="flex flex-wrap gap-2">
-            {inviteCandidates.map((person) => (
-              <GuestToggleChip
-                key={person.id}
-                person={person}
-                isSelected={formState.invitedIds.includes(person.id)}
-                disabled={isSubmitting}
-                onToggle={handleInviteToggle}
-              />
-            ))}
-          </div>
+          {inviteCandidates.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {inviteCandidates.map((person) => (
+                <GuestToggleChip
+                  key={person.id}
+                  person={person}
+                  isSelected={formState.invitedIds.includes(person.id)}
+                  disabled={isSubmitting}
+                  onToggle={handleInviteToggle}
+                />
+              ))}
+            </div>
+          )}
+          {alreadyInvited.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {t('activities.invite.alreadyInvited', {
+                names: alreadyInvited.map((person) => person.name).join(', '),
+                defaultValue: 'Already invited: {{names}}',
+              })}
+            </p>
+          )}
         </fieldset>
       )}
 
