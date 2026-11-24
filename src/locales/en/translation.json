@@ -1977,6 +1977,7 @@
     "tilesCount_other": "{{count}} tiles",
     "cacheSize": "Cache size: {{size}}",
     "openInMaps": "Open in Maps",
+    "openAddressInMaps": "Open {{location}} in your maps app",
     "copyAddress": "Copy address",
     "addressCopied": "Address copied"
   },

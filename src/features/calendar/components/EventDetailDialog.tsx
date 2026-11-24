@@ -12,7 +12,6 @@ import { type Locale, differenceInDays, format, parseISO } from 'date-fns';
 import {
   Calendar,
   Clock,
-  MapPin,
   Moon,
   Pencil,
   Trash2,
@@ -33,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { statusVariants } from '@/components/ui/status.variants';
 import { Separator } from '@/components/ui/separator';
 import { ActivityCategoryIcon } from '@/components/shared/ActivityCategoryIcon';
+import { AddressLink } from '@/components/shared/AddressLink';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -326,10 +326,7 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
                     </span>
                   </div>
                   {tr.location ? (
-                    <div className="flex items-start gap-2 text-sm">
-                      <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      <span>{tr.location}</span>
-                    </div>
+                    <AddressLink address={tr.location} coordinates={tr.coordinates} size="sm" />
                   ) : null}
                   {tr.coordinates ? (
                     <DirectionsButton
@@ -496,10 +493,7 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
 
       {/* Location */}
       {transport.location && (
-        <div className="flex items-center gap-3">
-          <MapPin className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
-          <span className="text-sm">{transport.location}</span>
-        </div>
+        <AddressLink address={transport.location} coordinates={transport.coordinates} />
       )}
 
       {/* Get Directions */}
@@ -607,11 +601,10 @@ const ActivityDetails = memo(function ActivityDetails({
       </div>
 
       {/* Location */}
+      {/* The address opens the maps app, coordinates or not: an address
+          typed by hand has none, and so no Directions button below. */}
       {activity.location && (
-        <div className="flex items-center gap-3">
-          <MapPin className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
-          <span className="text-sm">{activity.location}</span>
-        </div>
+        <AddressLink address={activity.location} coordinates={activity.coordinates} />
       )}
 
       {/* Get Directions */}

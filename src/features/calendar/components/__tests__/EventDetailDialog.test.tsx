@@ -17,6 +17,8 @@ import {
   type TransportEventData,
 } from '../EventDetailDialog';
 import { resolveRides } from '@/features/transports/utils/ride-model';
+import { openExternalUrl } from '@/lib/native/external-links';
+import { buildMapsSearchUrl, buildMapsUrl } from '@/lib/utils/maps-link';
 import { STALL_TIMEOUT_MS } from '@/hooks/useStalled';
 import { notify } from '@/lib/notifications';
 import type { GuestOverview } from '../../utils/guest-overview';
@@ -52,6 +54,10 @@ vi.mock('react-i18next', () => ({
     },
     i18n: { language: 'en' },
   }),
+}));
+
+vi.mock('@/lib/native/external-links', () => ({
+  openExternalUrl: vi.fn(),
 }));
 
 vi.mock('@/features/transports/components/DirectionsButton', () => ({
@@ -853,6 +859,45 @@ describe('an activity', () => {
 
     expect(screen.getByText('Saint-Jean')).toBeInTheDocument();
     expect(screen.getByText('directions')).toHaveAttribute('data-location', 'Saint-Jean');
+  });
+
+  // Reported from the app: an address typed by hand has no coordinates, so no
+  // Directions button, and the address was text with nothing to tap.
+  it('opens an address typed by hand in the maps app, by its text', async () => {
+    const user = userEvent.setup();
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({ location: '335 avenue des Dardanelles, Toulon' }),
+        })}
+      />,
+    );
+
+    expect(screen.queryByText('directions')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /in your maps app/ }));
+
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      buildMapsSearchUrl('335 avenue des Dardanelles, Toulon'),
+    );
+  });
+
+  it('opens a geocoded address in the maps app at its point', async () => {
+    const user = userEvent.setup();
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeActivityEvent({
+          activity: makeActivity({ location: 'Saint-Jean', coordinates: { lat: 45.7, lon: 4.8 } }),
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /in your maps app/ }));
+
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      buildMapsUrl({ lat: 45.7, lon: 4.8 }, 'Saint-Jean'),
+    );
   });
 
   it('gives directions under the title when the place has no name', () => {

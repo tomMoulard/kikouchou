@@ -1977,6 +1977,7 @@
     "tilesCount_other": "{{count}} tuiles",
     "cacheSize": "Taille du cache : {{size}}",
     "openInMaps": "Ouvrir dans Plans",
+    "openAddressInMaps": "Ouvrir {{location}} dans votre application de cartes",
     "copyAddress": "Copier l’adresse",
     "addressCopied": "Adresse copiée"
   },
