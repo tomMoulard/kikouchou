@@ -32,7 +32,8 @@ use crate::trip_preview::TripRow;
 // Types
 // ============================================================================
 
-/// The three things worth a push.
+/// The things worth a push: three the sweep finds, two a device asks for
+/// (`notify`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ReminderKind {
     /// The trip begins tomorrow (or today, if the evening tick was missed).
@@ -41,10 +42,21 @@ pub enum ReminderKind {
     OwnArrival,
     /// A ride this guest drives or rides in leaves within the window.
     Pickup,
+    /// This guest was invited to an activity. Asked for, never swept.
+    ActivityInvite,
+    /// A money line this guest is on was added or changed. Asked for, never
+    /// swept.
+    MoneyLine,
 }
 
 impl ReminderKind {
-    pub const ALL: [ReminderKind; 3] = [Self::TripStart, Self::OwnArrival, Self::Pickup];
+    pub const ALL: [ReminderKind; 5] = [
+        Self::TripStart,
+        Self::OwnArrival,
+        Self::Pickup,
+        Self::ActivityInvite,
+        Self::MoneyLine,
+    ];
 
     /// The `reminder_log.kind` value, and the `kind` property on every event.
     pub fn as_str(self) -> &'static str {
@@ -52,6 +64,8 @@ impl ReminderKind {
             Self::TripStart => "trip_start",
             Self::OwnArrival => "own_arrival",
             Self::Pickup => "pickup",
+            Self::ActivityInvite => "activity_invite",
+            Self::MoneyLine => "money_line",
         }
     }
 

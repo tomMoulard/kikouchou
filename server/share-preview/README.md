@@ -101,6 +101,27 @@ How a reminder travels:
    is gone, and the subscription is deleted. Every send is stamped in
    `reminder_log` and reported as `reminder_sent`.
 
+### Instant notifications
+
+Two kinds cannot wait for the next pass, and are asked for by the device that
+made the change, the moment the change has reached the server:
+`activity_invite` (guests invited to an activity) and `money_line` (a money
+line added or changed). The app calls `POST /push/notify` with
+`{ "trip_id", "kind", "subject_id" }` and the signed-in member's Supabase
+access token as `Authorization: Bearer <token>`.
+
+The service asks Supabase whose token it is (`/auth/v1/user`), checks that
+account is in `trip_members`, and reads the live document for who to tell: the
+invited guests not yet in, or everybody on the line (its payer and its
+shares). The guest who made the change, `invitedBy` or `updatedBy` in the
+document, is never told. Each device is told once per invitation, and once
+per version of a line: a `money_line` subject is the line's id and a digest of
+what it says. Replies: `sent` (200, with a count), `not-yet` (409: the
+document does not hold the activity or the line yet, the app asks again),
+`unauthorized` (401), `not-a-member` (403), `failed` (502). The route answers
+CORS preflights for `NOTIFY_ALLOWED_ORIGINS`, by default the website and the
+store apps' origins.
+
 The service never prints a clock time: it does not know the house's time zone.
 "Tomorrow" is decided on the UTC calendar from `REMINDER_EVE_HOUR_UTC` on, and
 a pickup is announced as a duration ("in about 2 h").
@@ -161,6 +182,7 @@ and `SELECT, INSERT, UPDATE` on `reminder_log`, granted in
 | `POSTHOG_KEY` | no | | Project key, for `reminder_due` and `reminder_sent` |
 | `POSTHOG_HOST` | no | `https://eu.i.posthog.com` | PostHog ingestion host or proxy |
 | `REMINDER_INTERVAL_SECONDS` | no | `3600` | Seconds between two passes (at least 60) |
+| `NOTIFY_ALLOWED_ORIGINS` | no | the website and the store apps' origins | Comma-separated origins whose pages may call `POST /push/notify` |
 | `REMINDER_EVE_HOUR_UTC` | no | `17` | UTC hour from which "tomorrow" reminders go out |
 | `REMINDER_PICKUP_WINDOW_MINUTES` | no | `180` | How far ahead a pickup is announced |
 | `APPLE_TEAM_ID` | no | | Apple Developer team id. Names the iOS app in the app-link file and signs APNs tokens |

@@ -34,6 +34,7 @@ use web_push::{
 
 use crate::config::{Config, SendMode};
 use crate::native_push::{NativeError, NativePush};
+use crate::notify::{holds_subject, is_version_of_line, notice_for, render, NotifyRequest};
 use crate::posthog::PostHog;
 use crate::reminders::{
     due_reminders, read_trip_facts, Clock, DueReminder, ReminderKind, Subscription,
@@ -43,6 +44,19 @@ use crate::trip_source::TripSource;
 // ============================================================================
 // Types
 // ============================================================================
+
+/// What a `POST /push/notify` came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotifyOutcome {
+    /// This many devices were told; 0 when everybody concerned already was,
+    /// or nobody but the author is concerned.
+    Sent(usize),
+    /// The document does not hold the activity or the line: the change has
+    /// not reached the server yet. The device asks again later.
+    NotYet,
+    /// The database or the document could not be read.
+    Failed,
+}
 
 /// What `POST /push/send` reports back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -299,6 +313,69 @@ impl PushSender {
             .await;
 
         self.deliver_and_record(&subscription, &reminder, now).await
+    }
+
+    /// Tells every device of the guests a change is about, now, once each.
+    ///
+    /// For `POST /push/notify`, after the caller was checked to be a member
+    /// of the trip. Reads the live document, so the guests and the words are
+    /// what the trip says now, never what the request claims.
+    pub async fn notify(&self, request: &NotifyRequest, now: OffsetDateTime) -> NotifyOutcome {
+        let Some(trip) = self.source.load_trip_row(&request.trip_id).await else {
+            return NotifyOutcome::Failed;
+        };
+        let Some(doc) = self.source.load_document(&request.trip_id).await else {
+            return NotifyOutcome::NotYet;
+        };
+        if !holds_subject(&doc, request) {
+            // The change has not reached the server yet, or was undone since.
+            return NotifyOutcome::NotYet;
+        }
+        let Some(notice) = notice_for(&doc, request) else {
+            return NotifyOutcome::Sent(0);
+        };
+        let Some(subscriptions) = self.source.subscriptions_for_trip(&request.trip_id).await else {
+            return NotifyOutcome::Failed;
+        };
+
+        let mut sent = 0;
+        for subscription in subscriptions.iter().filter(|subscription| {
+            subscription
+                .person_id
+                .as_deref()
+                .is_some_and(|person| notice.recipients.contains(person))
+        }) {
+            let Some(log) = self.source.reminder_log_for(&subscription.id).await else {
+                continue;
+            };
+            if log.iter().any(|row| {
+                row.kind == notice.kind.as_str()
+                    && row.subject == notice.subject
+                    && row.sent_at.is_some()
+            }) {
+                continue;
+            }
+            let seen_before = notice.kind == ReminderKind::MoneyLine
+                && log.iter().any(|row| {
+                    row.kind == notice.kind.as_str()
+                        && row.sent_at.is_some()
+                        && is_version_of_line(&row.subject, &request.subject_id)
+                });
+            let reminder = render(
+                &notice,
+                &request.trip_id,
+                &trip.name,
+                subscription.language(),
+                seen_before,
+            );
+            self.source
+                .record_due(&subscription.id, notice.kind, &notice.subject)
+                .await;
+            if self.deliver_and_record(subscription, &reminder, now).await == SendOutcome::Sent {
+                sent += 1;
+            }
+        }
+        NotifyOutcome::Sent(sent)
     }
 
     /// Pushes, stamps the log, tells PostHog, prunes a dead subscription.

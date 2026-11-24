@@ -159,6 +159,7 @@ pub struct ReminderLogRow {
 pub struct TripSource {
     client: Client,
     rest_url: String,
+    auth_url: String,
     service_role_key: String,
 }
 
@@ -266,6 +267,7 @@ impl TripSource {
                 .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
                 .build()?,
             rest_url: format!("{}/rest/v1", config.supabase_url),
+            auth_url: format!("{}/auth/v1", config.supabase_url),
             service_role_key: config.service_role_key.clone(),
         })
     }
@@ -493,6 +495,75 @@ impl TripSource {
             "live_push_subscriptions\
              ?select=id,trip_id,person_id,transport,endpoint,p256dh,auth,locale,analytics_id\
              &order=trip_id.asc,id.asc",
+        )
+        .await
+    }
+
+    /// The account a Supabase access token belongs to, asked of Supabase.
+    ///
+    /// For `POST /push/notify`, which a signed-in device calls. Asking the auth
+    /// server rather than checking the token's signature here keeps one place
+    /// that knows how Supabase signs, and a revoked session is refused at once.
+    /// The token never reaches a log line.
+    pub async fn user_for_token(&self, token: &str) -> Option<String> {
+        #[derive(Deserialize)]
+        struct User {
+            id: String,
+        }
+
+        if token.is_empty() || token.len() > 8192 {
+            return None;
+        }
+        let response = self
+            .client
+            .get(format!("{}/user", self.auth_url))
+            .header("apikey", &self.service_role_key)
+            .header("authorization", format!("Bearer {token}"))
+            .header("accept", "application/json")
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let user: User = response.json().await.ok()?;
+        is_uuid_shaped(&user.id).then_some(user.id)
+    }
+
+    /// Whether an account is a member of a shared trip. `None` when the
+    /// database could not say.
+    pub async fn is_trip_member(&self, trip_id: &str, user_id: &str) -> Option<bool> {
+        #[derive(Deserialize)]
+        struct Member {
+            #[allow(dead_code)]
+            user_id: String,
+        }
+
+        if !is_uuid_shaped(trip_id) || !is_uuid_shaped(user_id) {
+            return Some(false);
+        }
+        let rows = self
+            .get::<Member>(
+                "trip_members",
+                &format!(
+                    "trip_members?trip_id=eq.{trip_id}&user_id=eq.{user_id}&select=user_id&limit=1"
+                ),
+            )
+            .await?;
+        Some(!rows.is_empty())
+    }
+
+    /// Every live push subscription of one trip.
+    pub async fn subscriptions_for_trip(&self, trip_id: &str) -> Option<Vec<Subscription>> {
+        if !is_uuid_shaped(trip_id) {
+            return Some(Vec::new());
+        }
+        self.get::<Subscription>(
+            "live_push_subscriptions",
+            &format!(
+                "live_push_subscriptions?trip_id=eq.{trip_id}\
+                 &select=id,trip_id,person_id,transport,endpoint,p256dh,auth,locale,analytics_id"
+            ),
         )
         .await
     }

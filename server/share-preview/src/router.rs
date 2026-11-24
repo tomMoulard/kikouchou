@@ -456,6 +456,7 @@ mod tests {
             reminder_interval_secs: 3600,
             reminder_eve_hour_utc: 17,
             reminder_pickup_window_minutes: 180,
+            notify_allowed_origins: vec!["https://app.kikouchou.app".to_owned()],
             native: crate::config::NativeAppsConfig::default(),
         }
     }

@@ -56,6 +56,11 @@ pub struct Config {
     pub reminder_eve_hour_utc: u8,
     /// How far ahead a pickup is announced, in minutes.
     pub reminder_pickup_window_minutes: u64,
+    /// Origins whose pages may call `POST /push/notify`: the website, and the
+    /// store apps' web views (`capacitor://localhost` on iOS; on Android
+    /// `https://app.kikouchou.app`, and `https://localhost` for installs not
+    /// yet updated).
+    pub notify_allowed_origins: Vec<String>,
 
     /// The iOS and Android store apps: their push credentials, and what the
     /// `.well-known` files say about them.
@@ -209,6 +214,14 @@ impl Config {
             reminder_interval_secs: number("REMINDER_INTERVAL_SECONDS", 3600u64)?.max(60),
             reminder_eve_hour_utc: number("REMINDER_EVE_HOUR_UTC", 17u8)?.min(23),
             reminder_pickup_window_minutes: number("REMINDER_PICKUP_WINDOW_MINUTES", 180u64)?,
+            notify_allowed_origins: optional(
+                "NOTIFY_ALLOWED_ORIGINS",
+                "https://app.kikouchou.app,capacitor://localhost,https://localhost",
+            )
+            .split(',')
+            .map(|origin| origin.trim().trim_end_matches('/').to_owned())
+            .filter(|origin| !origin.is_empty())
+            .collect(),
             native: NativeAppsConfig {
                 apple_team_id: maybe("APPLE_TEAM_ID"),
                 ios_bundle_id: optional("IOS_BUNDLE_ID", "app.kikouchou"),

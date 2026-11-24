@@ -14,6 +14,7 @@ mod config;
 mod dates;
 mod i18n;
 mod native_push;
+mod notify;
 mod page;
 mod posthog;
 mod push_sender;
@@ -72,6 +73,10 @@ struct App {
 
 /// The path a PostHog workflow calls back on.
 const PUSH_SEND_PATH: &str = "/push/send";
+
+/// The path a member's device asks on, the moment its change reached the
+/// server (`notify`).
+const PUSH_NOTIFY_PATH: &str = "/push/notify";
 
 impl Backend for App {
     async fn load_trip(&self, token: &str) -> LoadResult {
@@ -241,10 +246,122 @@ async fn handle_push_send(
     reply(webhook::status_for(outcome), outcome.as_str())
 }
 
+/// Answers `POST /push/notify` (and its CORS preflight).
+///
+/// The caller is a page in the app, holding the signed-in member's Supabase
+/// access token. Who to tell, and what to say, are read from the live
+/// document; the request only names the change.
+async fn handle_push_notify(
+    app: &App,
+    method: &str,
+    request: Request,
+) -> (u16, String, &'static str) {
+    fn reply(status: u16, outcome: &'static str) -> (u16, String, &'static str) {
+        (
+            status,
+            serde_json::json!({ "outcome": outcome }).to_string(),
+            outcome,
+        )
+    }
+
+    let Some(sender) = &app.sender else {
+        return reply(404, "reminders-not-configured");
+    };
+    if method == "OPTIONS" {
+        return (204, String::new(), "preflight");
+    }
+    if method != "POST" {
+        return reply(405, "method-not-allowed");
+    }
+
+    let token = request
+        .headers()
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::to_owned);
+    let Some(token) = token else {
+        return reply(401, "unauthorized");
+    };
+
+    let Ok(body) = axum::body::to_bytes(request.into_body(), notify::MAX_BODY_BYTES).await else {
+        return reply(413, "body-too-large");
+    };
+    let ask = match notify::parse_request(&body) {
+        Ok(ask) => ask,
+        Err(reason) => {
+            return (
+                400,
+                serde_json::json!({ "outcome": "bad-request", "error": reason }).to_string(),
+                "bad-request",
+            )
+        }
+    };
+
+    let Some(user_id) = app.source.user_for_token(&token).await else {
+        return reply(401, "unauthorized");
+    };
+    match app.source.is_trip_member(&ask.trip_id, &user_id).await {
+        Some(true) => {}
+        Some(false) => return reply(403, "not-a-member"),
+        None => return reply(502, "failed"),
+    }
+
+    match sender.notify(&ask, OffsetDateTime::now_utc()).await {
+        push_sender::NotifyOutcome::Sent(count) => (
+            200,
+            serde_json::json!({ "outcome": "sent", "sent": count }).to_string(),
+            "sent",
+        ),
+        push_sender::NotifyOutcome::NotYet => reply(409, "not-yet"),
+        push_sender::NotifyOutcome::Failed => reply(502, "failed"),
+    }
+}
+
 async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
     let started_at = Instant::now();
     let method = request.method().as_str().to_owned();
     let path = request.uri().path().to_owned();
+
+    if path == PUSH_NOTIFY_PATH {
+        let origin = request
+            .headers()
+            .get("origin")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let allowed = notify::allowed_origin(origin.as_deref(), &app.config.notify_allowed_origins)
+            .map(str::to_owned);
+        let (status, body, outcome) = if allowed.is_none() && origin.is_some() {
+            (
+                403,
+                serde_json::json!({ "outcome": "origin-not-allowed" }).to_string(),
+                "origin-not-allowed",
+            )
+        } else {
+            handle_push_notify(app.as_ref(), &method, request).await
+        };
+        log_line(&method, &path, status, started_at, outcome);
+        let mut builder = Response::builder()
+            .status(StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR))
+            .header("cache-control", "no-store")
+            .header("vary", "origin");
+        if status != 204 {
+            builder = builder.header("content-type", "application/json");
+        }
+        if let Some(origin) = allowed {
+            builder = builder
+                .header("access-control-allow-origin", origin)
+                .header("access-control-allow-methods", "POST, OPTIONS")
+                .header(
+                    "access-control-allow-headers",
+                    "authorization, content-type",
+                )
+                .header("access-control-max-age", "600");
+        }
+        return builder
+            .body(body.into())
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
 
     if path == PUSH_SEND_PATH {
         let (status, body, outcome) = handle_push_send(app.as_ref(), &method, request).await;
