@@ -767,6 +767,7 @@
     "invite": {
       "button": "Inviter des participants",
       "pickTitle": "Qui voulez-vous inviter ?",
+      "formDescription": "On leur demande s'ils viennent la prochaine fois qu'ils ouvrent le voyage.",
       "send_one": "Inviter {{count}} personne",
       "send_other": "Inviter {{count}} personnes",
       "sent_one": "{{count}} personne invitée",

@@ -4,8 +4,10 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { isoDate, render, screen } from '@/test/utils';
-import type { Activity, ActivityFormData, Person } from '@/types';
+import { isoDate, render, screen, within } from '@/test/utils';
+import type { Activity, Person } from '@/types';
+
+import type { ActivityFormSubmission } from '../ActivityForm';
 
 // ============================================================================
 // Fixtures
@@ -81,8 +83,22 @@ function renderForm(props: Partial<Parameters<typeof ActivityForm>[0]> = {}) {
 }
 
 /** Reads the single call's payload from a mocked onSubmit. */
-function submittedData(onSubmit: ReturnType<typeof vi.fn>): ActivityFormData {
-  return onSubmit.mock.calls[0]![0] as ActivityFormData;
+function submittedData(onSubmit: ReturnType<typeof vi.fn>): ActivityFormSubmission {
+  return onSubmit.mock.calls[0]![0] as ActivityFormSubmission;
+}
+
+/** The participant chips and the invite chips, which name the same guests. */
+function participantList() {
+  return within(screen.getByRole('group', { name: 'activities.participants' }));
+}
+function inviteList() {
+  return within(screen.getByRole('group', { name: 'activities.invite.pickTitle' }));
+}
+
+/** Types the two required fields. */
+async function fillRequired(user: ReturnType<typeof renderForm>['user']): Promise<void> {
+  await user.type(screen.getByLabelText(/activities.title_field/), 'Hike');
+  await user.type(screen.getByLabelText(/activities.start/), '2026-07-16T09:00');
 }
 
 // ============================================================================
@@ -262,5 +278,89 @@ describe('ActivityForm', () => {
     await user.click(screen.getByRole('button', { name: 'common.cancel' }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  describe('inviting guests while creating', () => {
+    it('submits the guests picked to invite', async () => {
+      const { user, onSubmit } = renderForm({ allowInvitations: true });
+      await fillRequired(user);
+
+      const bob = inviteList().getByRole('button', { name: /Bob/ });
+      await user.click(bob);
+      expect(bob).toHaveAttribute('aria-pressed', 'true');
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      const data = submittedData(onSubmit);
+      expect(data.invitedIds).toEqual(['p2']);
+      expect(data.participantIds).toEqual([]);
+    });
+
+    it('submits no invitedIds when nobody was picked', async () => {
+      const { user, onSubmit } = renderForm({ allowInvitations: true });
+      await fillRequired(user);
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      expect(submittedData(onSubmit)).not.toHaveProperty('invitedIds');
+    });
+
+    it('does not offer a guest who is going, and drops one who joins', async () => {
+      const { user, onSubmit } = renderForm({ allowInvitations: true });
+      await fillRequired(user);
+
+      await user.click(inviteList().getByRole('button', { name: /Alice/ }));
+      await user.click(participantList().getByRole('button', { name: /Alice/ }));
+
+      expect(inviteList().queryByRole('button', { name: /Alice/ })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      const data = submittedData(onSubmit);
+      expect(data.participantIds).toEqual(['p1']);
+      expect(data).not.toHaveProperty('invitedIds');
+    });
+
+    it('hides the list once every guest is going', async () => {
+      const { user } = renderForm({ allowInvitations: true });
+
+      await user.click(participantList().getByRole('button', { name: /Alice/ }));
+      await user.click(participantList().getByRole('button', { name: /Bob/ }));
+
+      expect(
+        screen.queryByRole('group', { name: 'activities.invite.pickTitle' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('counts a picked invitation as an unsaved change', async () => {
+      const onDirtyChange = vi.fn();
+      const { user } = renderForm({ allowInvitations: true, onDirtyChange });
+
+      await user.click(inviteList().getByRole('button', { name: /Bob/ }));
+
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('is not offered unless the caller allows it', () => {
+      renderForm();
+
+      expect(
+        screen.queryByRole('group', { name: 'activities.invite.pickTitle' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('is not offered in edit mode, where the detail dialog invites', () => {
+      const activity: Activity = {
+        id: 'a1' as Activity['id'],
+        tripId: 't1' as Activity['tripId'],
+        title: 'Existing fair',
+        category: 'market',
+        startDatetime: new Date(2026, 6, 16, 9, 0).toISOString(),
+        allDay: false,
+        participantIds: [],
+      };
+      renderForm({ activity, allowInvitations: true });
+
+      expect(
+        screen.queryByRole('group', { name: 'activities.invite.pickTitle' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

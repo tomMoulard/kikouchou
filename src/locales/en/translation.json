@@ -767,6 +767,7 @@
     "invite": {
       "button": "Invite guests",
       "pickTitle": "Who do you want to invite?",
+      "formDescription": "They are asked to join when they next open the trip.",
       "send_one": "Invite {{count}}",
       "send_other": "Invite {{count}}",
       "sent_one": "{{count}} guest invited",

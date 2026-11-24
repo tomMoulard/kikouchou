@@ -56,11 +56,14 @@ const mockActivityParticipation = vi.fn(() => ({
   toggleParticipation: mockToggleParticipation,
 }));
 
+const mockInvite = vi.fn(async () => 1);
+const invitations = { canInvite: false };
+
 vi.mock('@/features/activities/hooks/useActivityInvitations', () => ({
   useActivityInvitations: () => ({
     myPersonId: undefined,
-    canInvite: false,
-    invite: vi.fn(async () => 0),
+    canInvite: invitations.canInvite,
+    invite: mockInvite,
     decline: vi.fn(async () => false),
   }),
 }));
@@ -87,6 +90,11 @@ const submittedData: ActivityFormData = {
   participantIds: ['p1' as PersonId, 'p2' as PersonId],
 };
 
+const submittedWithInvites = {
+  ...submittedData,
+  invitedIds: ['p3' as PersonId, 'p4' as PersonId],
+};
+
 vi.mock('@/features/activities/components/ActivityForm', () => ({
   ActivityForm: ({
     activity,
@@ -94,12 +102,14 @@ vi.mock('@/features/activities/components/ActivityForm', () => ({
     onCancel,
     onSubmit,
     onDirtyChange,
+    allowInvitations,
   }: {
     activity?: Activity;
     defaultDate?: ISODateString;
     onCancel: () => void;
-    onSubmit: (data: ActivityFormData) => Promise<void>;
+    onSubmit: (data: ActivityFormData & { invitedIds?: readonly PersonId[] }) => Promise<void>;
     onDirtyChange?: (dirty: boolean) => void;
+    allowInvitations?: boolean;
   }) => (
     <div data-testid="activity-form">
       {activity ? (
@@ -108,6 +118,7 @@ vi.mock('@/features/activities/components/ActivityForm', () => ({
         <span data-testid="create-mode">New</span>
       )}
       <span data-testid="default-date">{defaultDate ?? 'none'}</span>
+      <span data-testid="allow-invitations">{String(allowInvitations ?? false)}</span>
       {/* Uncontrolled, so it only goes back to empty when the form remounts. */}
       <input data-testid="form-draft" defaultValue="" aria-label="draft" />
       <button data-testid="cancel-btn" onClick={onCancel}>
@@ -115,6 +126,9 @@ vi.mock('@/features/activities/components/ActivityForm', () => ({
       </button>
       <button data-testid="submit-btn" onClick={() => void onSubmit(submittedData)}>
         Submit
+      </button>
+      <button data-testid="submit-invites-btn" onClick={() => void onSubmit(submittedWithInvites)}>
+        Submit with invites
       </button>
       <button data-testid="dirty-btn" onClick={() => onDirtyChange?.(true)}>
         Mark Dirty
@@ -128,6 +142,7 @@ import { ActivityDialog } from '../ActivityDialog';
 describe('ActivityDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    invitations.canInvite = false;
   });
 
   it('renders create mode when activityId is undefined', () => {
@@ -202,7 +217,9 @@ describe('ActivityDialog', () => {
       category: 'horticulture',
       is_all_day: false,
       participant_count: 2,
+      invited_count: 0,
     });
+    expect(mockInvite).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -228,6 +245,48 @@ describe('ActivityDialog', () => {
       participant_count: 2,
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('offers invitations to the form in create mode, where this device may invite', () => {
+    invitations.canInvite = true;
+    render(<ActivityDialog open onOpenChange={vi.fn()} />, { withProviders: false });
+
+    expect(screen.getByTestId('allow-invitations')).toHaveTextContent('true');
+  });
+
+  it('does not offer invitations where this device may not invite', () => {
+    render(<ActivityDialog open onOpenChange={vi.fn()} />, { withProviders: false });
+
+    expect(screen.getByTestId('allow-invitations')).toHaveTextContent('false');
+  });
+
+  it('creates the activity without the invited guests, then invites them to it', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    invitations.canInvite = true;
+    mockCreateActivity.mockResolvedValueOnce({ ...submittedData, id: 'new-1', tripId: 't1' });
+    render(<ActivityDialog open onOpenChange={onOpenChange} />, { withProviders: false });
+
+    await user.click(screen.getByTestId('submit-invites-btn'));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    // The activity write never carries the invitations: `invite` writes them,
+    // and tells the invited guests.
+    expect(mockCreateActivity).toHaveBeenCalledWith(submittedData);
+    expect(mockInvite).toHaveBeenCalledWith('new-1', ['p3', 'p4']);
+    expect(mockCreateActivity.mock.invocationCallOrder[0]).toBeLessThan(
+      mockInvite.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mockCaptureUsage).toHaveBeenCalledWith('activity_saved', {
+      operation: 'created',
+      category: 'horticulture',
+      is_all_day: false,
+      participant_count: 2,
+      invited_count: 2,
+    });
   });
 
   it('closes straight away when cancel is clicked on a clean form', async () => {

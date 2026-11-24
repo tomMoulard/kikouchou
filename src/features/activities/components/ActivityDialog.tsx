@@ -19,11 +19,15 @@ import {
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
-import { ActivityForm } from '@/features/activities/components/ActivityForm';
+import {
+  ActivityForm,
+  type ActivityFormSubmission,
+} from '@/features/activities/components/ActivityForm';
 import { ActivityParticipationButton } from '@/features/activities/components/ActivityParticipationButton';
+import { useActivityInvitations } from '@/features/activities/hooks/useActivityInvitations';
 import { useActivityParticipation } from '@/features/activities/hooks/useActivityParticipation';
 import { captureUsage } from '@/lib/posthog';
-import type { Activity, ActivityFormData, ActivityId, ISODateString } from '@/types';
+import type { Activity, ActivityId, ISODateString } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -57,6 +61,8 @@ export interface ActivityDialogProps {
  * - Closes automatically on successful submission
  * - In edit mode, a one-tap join/leave for the guest holding this device, so
  *   signing yourself up does not mean editing the participant list
+ * - In create mode, guests picked to invite are invited once the activity
+ *   exists, through the same path as the detail dialog's "Invite guests"
  *
  * @param props - Component props
  * @returns The activity dialog element
@@ -77,6 +83,7 @@ const ActivityDialog = memo(function ActivityDialog({
   const { persons } = usePersonContext();
   const { notifySuccess } = useOfflineAwareNotify();
   const { myPersonId, canToggle, toggleParticipation } = useActivityParticipation();
+  const { canInvite, invite } = useActivityInvitations();
 
   const [isDirty, setIsDirty] = useState(false);
   const [isTogglingParticipation, setIsTogglingParticipation] = useState(false);
@@ -109,9 +116,12 @@ const ActivityDialog = memo(function ActivityDialog({
     : t('activities.newDescription');
 
   const handleSubmit = useCallback(
-    async (data: ActivityFormData) => {
+    async (data: ActivityFormSubmission) => {
+      // The guests to invite are not part of the activity write. Edit mode
+      // never offers them; create mode invites them once the activity exists.
+      const { invitedIds = [], ...activityData } = data;
       if (activityId) {
-        await updateActivity(activityId, data);
+        await updateActivity(activityId, activityData);
         notifySuccess(t('activities.updateSuccess'));
         captureUsage('activity_saved', {
           operation: 'updated',
@@ -120,18 +130,25 @@ const ActivityDialog = memo(function ActivityDialog({
           participant_count: data.participantIds.length,
         });
       } else {
-        await createActivity(data);
+        // Invited by the same call as "Invite guests", so the invited guests
+        // are told the same way.
+        const created = await createActivity(activityData);
         notifySuccess(t('activities.createSuccess'));
         captureUsage('activity_saved', {
           operation: 'created',
           category: data.category,
           is_all_day: data.allDay,
           participant_count: data.participantIds.length,
+          invited_count: invitedIds.length,
         });
+        if (invitedIds.length > 0) {
+          // A failure is reported by `invite` itself; the activity stays.
+          await invite(created.id, invitedIds);
+        }
       }
       onOpenChange(false);
     },
-    [activityId, updateActivity, createActivity, t, onOpenChange, notifySuccess],
+    [activityId, updateActivity, createActivity, invite, t, onOpenChange, notifySuccess],
   );
 
   /**
@@ -227,6 +244,7 @@ const ActivityDialog = memo(function ActivityDialog({
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             onDirtyChange={setIsDirty}
+            allowInvitations={canInvite}
           />
         </DialogContent>
       </Dialog>

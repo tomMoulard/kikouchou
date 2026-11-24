@@ -115,3 +115,50 @@ test.describe('activity planning', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
   });
 });
+
+test.describe('inviting guests while creating an activity', () => {
+  test('a guest picked in the new activity form is invited to it', async ({ page }) => {
+    const { tripId } = await seedTrip(page, {
+      name: 'Invite Trip',
+      startDate: fixtureDate(1),
+      endDate: fixtureDate(6),
+    });
+    await seedPerson(page, tripId, 'Jules');
+    await seedPerson(page, tripId, 'Maud');
+
+    await page.goto(`/trips/${tripId}/activities`);
+    await waitForRoute(page);
+
+    await page.getByRole('button', { name: /^(new activity|nouvelle activité)$/i }).first().click();
+    const form = page.getByRole('dialog');
+    await form.getByLabel(/^(title|titre)/i).fill('Picnic');
+    await form.getByLabel(/^(start|début)/i).fill(`${fixtureDate(3)}T12:00`);
+
+    // Jules goes; Maud is invited, from the form, before the activity exists.
+    await form
+      .getByRole('group', { name: /^participants$/i })
+      .getByRole('button', { name: /Jules/ })
+      .click();
+    const invites = form.getByRole('group', {
+      name: /who do you want to invite\?|qui voulez-vous inviter \?/i,
+    });
+    await expect(invites.getByRole('button', { name: /Jules/ })).toHaveCount(0);
+    await invites.getByRole('button', { name: /Maud/ }).click();
+    await form.getByRole('button', { name: /^(save|enregistrer)$/i }).click();
+    await expect(form).toBeHidden();
+
+    await page.goto(`/trips/${tripId}/calendar?view=timeline`);
+    await waitForRoute(page);
+    await agendaDay(page, fixtureDate(3)).getByRole('button', { name: /Picnic/ }).click();
+
+    const answers = page
+      .getByRole('dialog')
+      .getByRole('list', { name: /guests and their answers|invités et leurs réponses/i });
+    await expect(answers.getByRole('listitem').filter({ hasText: 'Maud' })).toContainText(
+      /invited, no answer yet|invité, pas encore de réponse/i,
+    );
+    await expect(answers.getByRole('listitem').filter({ hasText: 'Jules' })).toContainText(
+      /going|participe/i,
+    );
+  });
+});

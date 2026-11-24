@@ -56,6 +56,15 @@ import type {
 // ============================================================================
 
 /**
+ * What the form submits: the activity, plus the guests picked to invite.
+ * `invitedIds` is not part of the activity write; the caller invites them
+ * once the activity exists.
+ */
+export type ActivityFormSubmission = ActivityFormData & {
+  readonly invitedIds?: readonly PersonId[];
+};
+
+/**
  * Props for the ActivityForm component.
  */
 interface ActivityFormProps {
@@ -66,11 +75,25 @@ interface ActivityFormProps {
   /** Day pre-selected in create mode (YYYY-MM-DD), e.g. the clicked calendar cell. */
   readonly defaultDate?: ISODateString;
   /** Callback when the form is successfully submitted with validated data. */
-  readonly onSubmit: (data: ActivityFormData) => Promise<void>;
+  readonly onSubmit: (data: ActivityFormSubmission) => Promise<void>;
   /** Callback when the cancel button is clicked. */
   readonly onCancel: () => void;
   /** Callback when the form dirty state changes (for the unsaved changes guard). */
   readonly onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * Offers "Who do you want to invite?" in create mode. The picked guests
+   * come back in `invitedIds`, for the caller to invite once the activity
+   * exists. Never offered in edit mode: the detail dialog invites there.
+   */
+  readonly allowInvitations?: boolean;
+}
+
+/** Props for the guest chip shared by the participant and invite lists. */
+interface GuestToggleChipProps {
+  readonly person: Person;
+  readonly isSelected: boolean;
+  readonly disabled: boolean;
+  readonly onToggle: (personId: PersonId) => void;
 }
 
 /**
@@ -102,6 +125,8 @@ interface FormState {
   coordinates: Coordinates | undefined;
   organizerId: PersonId | '';
   participantIds: PersonId[];
+  /** Guests to invite once the activity is created (create mode only). */
+  invitedIds: PersonId[];
   maxParticipants: string;
   notes: string;
 }
@@ -190,6 +215,7 @@ function getInitialFormState(
     coordinates: activity?.coordinates,
     organizerId: activity?.organizerId ?? '',
     participantIds: [...(activity?.participantIds ?? [])],
+    invitedIds: [],
     maxParticipants:
       activity?.maxParticipants === undefined ? '' : String(activity.maxParticipants),
     notes: activity?.notes ?? '',
@@ -215,12 +241,49 @@ function areParticipantsEqual(
 // ============================================================================
 
 /**
+ * One guest as a toggle chip, in the participant list and the invite list.
+ */
+const GuestToggleChip = memo(function GuestToggleChip({
+  person,
+  isSelected,
+  disabled,
+  onToggle,
+}: GuestToggleChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(person.id)}
+      disabled={disabled}
+      aria-pressed={isSelected}
+      className={cn(
+        'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm',
+        'transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'disabled:opacity-50',
+        isSelected
+          ? 'border-primary bg-primary/10 text-foreground'
+          : 'border-input text-muted-foreground hover:bg-muted',
+      )}
+    >
+      <span
+        className="size-3 rounded-full shrink-0"
+        style={{ backgroundColor: person.color }}
+        aria-hidden="true"
+      />
+      {person.name}
+      {isSelected && <Check className="size-3.5 shrink-0" aria-hidden="true" />}
+    </button>
+  );
+});
+
+/**
  * Form for creating and editing an activity.
  *
  * Features:
  * - Title, category, all-day toggle and start/end pickers
  * - Location with map lookup via LocationPicker
  * - Organizer select and a togglable participant list
+ * - In create mode, when allowed, a list of guests to invite
  * - Optional participant cap, validated against the current sign-ups
  * - Validation on submit, with inline field errors
  *
@@ -243,6 +306,7 @@ const ActivityForm = memo(function ActivityForm({
   onSubmit,
   onCancel,
   onDirtyChange,
+  allowInvitations = false,
 }: ActivityFormProps) {
   const { t } = useTranslation();
 
@@ -272,7 +336,8 @@ const ActivityForm = memo(function ActivityForm({
       formState.organizerId !== initialFormState.organizerId ||
       formState.maxParticipants !== initialFormState.maxParticipants ||
       formState.notes !== initialFormState.notes ||
-      !areParticipantsEqual(formState.participantIds, initialFormState.participantIds),
+      !areParticipantsEqual(formState.participantIds, initialFormState.participantIds) ||
+      !areParticipantsEqual(formState.invitedIds, initialFormState.invitedIds),
     [formState, initialFormState],
   );
 
@@ -405,6 +470,8 @@ const ActivityForm = memo(function ActivityForm({
         organizerId && !prev.participantIds.includes(organizerId)
           ? [...prev.participantIds, organizerId]
           : prev.participantIds,
+      // A guest who is going is not also invited.
+      invitedIds: prev.invitedIds.filter((candidate) => candidate !== organizerId),
     }));
   }, []);
 
@@ -414,10 +481,21 @@ const ActivityForm = memo(function ActivityForm({
       participantIds: prev.participantIds.includes(personId)
         ? prev.participantIds.filter((candidate) => candidate !== personId)
         : [...prev.participantIds, personId],
+      // A guest who is going is not also invited.
+      invitedIds: prev.invitedIds.filter((candidate) => candidate !== personId),
     }));
     setErrors((prev) =>
       prev.maxParticipants ? { ...prev, maxParticipants: undefined } : prev,
     );
+  }, []);
+
+  const handleInviteToggle = useCallback((personId: PersonId) => {
+    setFormState((prev) => ({
+      ...prev,
+      invitedIds: prev.invitedIds.includes(personId)
+        ? prev.invitedIds.filter((candidate) => candidate !== personId)
+        : [...prev.invitedIds, personId],
+    }));
   }, []);
 
   const handleMaxParticipantsChange = useCallback(
@@ -446,7 +524,7 @@ const ActivityForm = memo(function ActivityForm({
   );
 
   const { isSubmitting, submitError, handleSubmit: doSubmit } =
-    useFormSubmission<ActivityFormData>(onSubmit);
+    useFormSubmission<ActivityFormSubmission>(onSubmit);
 
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
@@ -471,7 +549,7 @@ const ActivityForm = memo(function ActivityForm({
 
       const cap = Number(formState.maxParticipants);
 
-      const data: ActivityFormData = {
+      const data: ActivityFormSubmission = {
         title: formState.title.trim(),
         category: formState.category,
         startDatetime,
@@ -484,6 +562,7 @@ const ActivityForm = memo(function ActivityForm({
         maxParticipants:
           formState.maxParticipants && Number.isFinite(cap) ? cap : undefined,
         notes: formState.notes.trim() || undefined,
+        ...(formState.invitedIds.length > 0 ? { invitedIds: [...formState.invitedIds] } : {}),
       };
 
       try {
@@ -502,6 +581,12 @@ const ActivityForm = memo(function ActivityForm({
   const startValue = formState.allDay ? formState.startDate : formState.startDatetime;
   const endValue = formState.allDay ? formState.endDate : formState.endDatetime;
   const dateInputType = formState.allDay ? 'date' : 'datetime-local';
+
+  // Anyone not already going can be invited. Edit mode never offers it.
+  const inviteCandidates =
+    allowInvitations && !activity
+      ? persons.filter((person) => !formState.participantIds.includes(person.id))
+      : [];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -668,38 +753,44 @@ const ActivityForm = memo(function ActivityForm({
           <p className="text-sm text-muted-foreground">{t('persons.empty')}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {persons.map((person) => {
-              const isSelected = formState.participantIds.includes(person.id);
-              return (
-                <button
-                  key={person.id}
-                  type="button"
-                  onClick={() => handleParticipantToggle(person.id)}
-                  disabled={isSubmitting}
-                  aria-pressed={isSelected}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm',
-                    'transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                    'disabled:opacity-50',
-                    isSelected
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-input text-muted-foreground hover:bg-muted',
-                  )}
-                >
-                  <span
-                    className="size-3 rounded-full shrink-0"
-                    style={{ backgroundColor: person.color }}
-                    aria-hidden="true"
-                  />
-                  {person.name}
-                  {isSelected && <Check className="size-3.5 shrink-0" aria-hidden="true" />}
-                </button>
-              );
-            })}
+            {persons.map((person) => (
+              <GuestToggleChip
+                key={person.id}
+                person={person}
+                isSelected={formState.participantIds.includes(person.id)}
+                disabled={isSubmitting}
+                onToggle={handleParticipantToggle}
+              />
+            ))}
           </div>
         )}
       </fieldset>
+
+      {/* Invitations (create mode) */}
+      {inviteCandidates.length > 0 && (
+        <fieldset className="space-y-3" data-testid="activity-invite-list">
+          <legend className="text-sm font-medium leading-none">
+            {t('activities.invite.pickTitle', 'Who do you want to invite?')}
+          </legend>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              'activities.invite.formDescription',
+              'They are asked to join when they next open the trip.',
+            )}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {inviteCandidates.map((person) => (
+              <GuestToggleChip
+                key={person.id}
+                person={person}
+                isSelected={formState.invitedIds.includes(person.id)}
+                disabled={isSubmitting}
+                onToggle={handleInviteToggle}
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       {/* Participant cap */}
       <div className="space-y-2">
