@@ -1742,9 +1742,7 @@
       "installing": "Une nouvelle version s'installe. L'application redémarre dès qu'elle est prête.",
       "offline": "Vous êtes hors ligne. Connectez-vous à Internet pour mettre à jour l'application.",
       "failed": "Impossible de rechercher une mise à jour. Réessayez plus tard.",
-      "reloading": "Mise à jour de l'application...",
-      "reload": "Recharger depuis le serveur",
-      "reloadDescription": "Toujours sur une ancienne version ? Téléchargez de nouveau toute l'application. Vos voyages restent sur cet appareil."
+      "reloading": "Mise à jour de l'application..."
     },
     "dataManagement": "Gestion des données",
     "dataManagementDescription": "Gérez les données de l'application",

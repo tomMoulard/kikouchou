@@ -49,12 +49,21 @@ describe('AppUpdateControl', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('offers only the check before anything was asked', () => {
+  // One button: a second "Reload from the server" sat under it whenever a
+  // check ended without the page moving onto the new build.
+  it('is one button, before and after a check', async () => {
+    doubles.check.mockResolvedValue('current');
     render(<AppUpdateControl />);
 
-    expect(checkButton()).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'settings.update.reload' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toEqual([checkButton()]);
     expect(screen.getByRole('status')).toHaveTextContent('');
+
+    await userEvent.click(checkButton());
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('settings.update.current');
+    });
+    expect(screen.getAllByRole('button')).toEqual([checkButton()]);
   });
 
   it('disables the button while it checks', async () => {
@@ -66,23 +75,22 @@ describe('AppUpdateControl', () => {
     expect(checkButton()).toBeDisabled();
   });
 
-  it('says the app is current, reports it, and offers the hard reload', async () => {
+  it('says the app is current, reports it, and reloads nothing', async () => {
     doubles.check.mockResolvedValue('current');
     render(<AppUpdateControl />);
 
     await userEvent.click(checkButton());
 
     expect(await screen.findByRole('status')).toHaveTextContent('settings.update.current');
-    expect(screen.getByRole('button', { name: 'settings.update.reload' })).toBeEnabled();
     expect(doubles.capture).toHaveBeenCalledWith('app_update_checked', { outcome: 'current' });
+    expect(doubles.reloadFromServer).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['failed', 'settings.update.failed', true],
-    ['installing', 'settings.update.installing', true],
-    ['offline', 'settings.update.offline', false],
-    ['reloading', 'settings.update.reloading', false],
-  ] as const)('after %s, says %s', async (outcome, message, offersReload) => {
+    ['failed', 'settings.update.failed'],
+    ['offline', 'settings.update.offline'],
+    ['reloading', 'settings.update.reloading'],
+  ] as const)('after %s, says %s and reloads nothing more', async (outcome, message) => {
     doubles.check.mockResolvedValue(outcome);
     render(<AppUpdateControl />);
 
@@ -91,7 +99,7 @@ describe('AppUpdateControl', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(message);
     });
-    expect(screen.queryByRole('button', { name: 'settings.update.reload' }) !== null).toBe(offersReload);
+    expect(doubles.reloadFromServer).not.toHaveBeenCalled();
   });
 
   it('treats a check that throws as failed', async () => {
@@ -108,43 +116,45 @@ describe('AppUpdateControl', () => {
     warn.mockRestore();
   });
 
-  it('never offers the hard reload in a store app', async () => {
-    doubles.canReload = false;
-    doubles.check.mockResolvedValue('current');
+  // Reported from the app: "a new version is installing, the app restarts
+  // when it is ready", and it did not. A found build is loaded now.
+  it('loads a newer build from the server when it is found but does not take over', async () => {
+    doubles.check.mockResolvedValue('installing');
+    doubles.reloadFromServer.mockReturnValue(new Promise(() => undefined));
     render(<AppUpdateControl />);
 
     await userEvent.click(checkButton());
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('settings.update.current');
+      expect(doubles.reloadFromServer).toHaveBeenCalledTimes(1);
     });
-    expect(screen.queryByRole('button', { name: 'settings.update.reload' })).not.toBeInTheDocument();
-  });
-
-  it('reloads from the server on the second button', async () => {
-    doubles.check.mockResolvedValue('current');
-    doubles.reloadFromServer.mockReturnValue(new Promise(() => undefined));
-    render(<AppUpdateControl />);
-
-    await userEvent.click(checkButton());
-    await userEvent.click(await screen.findByRole('button', { name: 'settings.update.reload' }));
-
-    expect(doubles.reloadFromServer).toHaveBeenCalledTimes(1);
     expect(doubles.capture).toHaveBeenCalledWith('app_reloaded_from_server');
     expect(screen.getByRole('status')).toHaveTextContent('settings.update.reloading');
     expect(checkButton()).toBeDisabled();
   });
 
-  it('says offline when the hard reload refuses to run', async () => {
-    doubles.check.mockResolvedValue('failed');
+  it('says offline when that reload refuses to run', async () => {
+    doubles.check.mockResolvedValue('installing');
     doubles.reloadFromServer.mockResolvedValue(false);
     render(<AppUpdateControl />);
 
     await userEvent.click(checkButton());
-    await userEvent.click(await screen.findByRole('button', { name: 'settings.update.reload' }));
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('settings.update.offline');
     });
+  });
+
+  it('waits for the store app to restart rather than reloading a page it does not have', async () => {
+    doubles.canReload = false;
+    doubles.check.mockResolvedValue('installing');
+    render(<AppUpdateControl />);
+
+    await userEvent.click(checkButton());
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('settings.update.installing');
+    });
+    expect(doubles.reloadFromServer).not.toHaveBeenCalled();
   });
 });

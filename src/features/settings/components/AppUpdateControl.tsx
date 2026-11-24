@@ -1,11 +1,13 @@
 /**
  * @fileoverview "Check for updates" in the About card of Settings.
  *
- * One tap asks for a newer build and moves onto it at once
- * (`lib/pwa/app-update`). When the check finds nothing, or fails, the website
- * also offers "Reload from the server": it drops the service worker and its
- * caches, and loads everything again from the network. That second button only
- * appears after a check, so the gentle path is always tried first.
+ * One tap, one button: it asks for a newer build and moves onto it at once
+ * (`lib/pwa/app-update`). On the website, a newer build that is found but does
+ * not take over in time (`installing`) used to leave the page where it was,
+ * with "it restarts when it is ready" and a second button, "Reload from the
+ * server", for when it did not. The tap now goes that step itself: it drops
+ * the service worker and its caches and loads the new build from the network.
+ * A check that finds nothing newer, or fails, says so and reloads nothing.
  *
  * The answer is written into a `role="status"` region, so a screen reader hears
  * "You have the latest version" as well as seeing it.
@@ -15,7 +17,7 @@
 
 import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CloudDownload, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -38,9 +40,6 @@ type UpdateState = 'idle' | 'checking' | 'reloading-from-server' | 'offline-for-
 // Constants
 // ============================================================================
 
-/** The answers after which the hard reload is offered. */
-const OFFER_HARD_RELOAD: ReadonlySet<UpdateState> = new Set(['current', 'failed', 'installing']);
-
 /** The states in which a tap would start a second request. */
 const BUSY: ReadonlySet<UpdateState> = new Set(['checking', 'reloading', 'reloading-from-server']);
 
@@ -49,7 +48,7 @@ const BUSY: ReadonlySet<UpdateState> = new Set(['checking', 'reloading', 'reload
 // ============================================================================
 
 /**
- * The button, its answer, and the hard reload fallback.
+ * The button and its answer.
  *
  * Renders nothing in a store app without live updates (the F-Droid build),
  * where no build can arrive outside a release.
@@ -76,18 +75,24 @@ export const AppUpdateControl = memo(function AppUpdateControl(): ReactElement |
       outcome = 'failed';
     }
     captureEvent('app_update_checked', { outcome });
-    if (isMountedRef.current) {
-      setState(outcome);
+    if (!isMountedRef.current) {
+      return;
     }
-  }, []);
 
-  const handleReloadFromServer = useCallback(async (): Promise<void> => {
-    setState('reloading-from-server');
-    captureEvent('app_reloaded_from_server');
-    const started = await reloadFromServer();
-    if (!started && isMountedRef.current) {
-      setState('offline-for-reload');
+    // A newer build exists but its worker did not take over in time. Waiting
+    // for it is what left the page on the old version: load it from the
+    // server instead, now, as the person asked.
+    if (outcome === 'installing' && canReloadFromServer()) {
+      setState('reloading-from-server');
+      captureEvent('app_reloaded_from_server');
+      const started = await reloadFromServer();
+      if (!started && isMountedRef.current) {
+        setState('offline-for-reload');
+      }
+      return;
     }
+
+    setState(outcome);
   }, []);
 
   if (!canCheckForAppUpdate()) {
@@ -121,26 +126,6 @@ export const AppUpdateControl = memo(function AppUpdateControl(): ReactElement |
       <p role="status" className="text-sm text-muted-foreground empty:hidden">
         {message}
       </p>
-
-      {canReloadFromServer() && OFFER_HARD_RELOAD.has(state) && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="text-sm text-muted-foreground">
-            {t(
-              'settings.update.reloadDescription',
-              'Still on an old version? Download the whole app again. Your trips stay on this device.',
-            )}
-          </span>
-          <Button
-            variant="secondary"
-            onClick={() => void handleReloadFromServer()}
-            disabled={busy}
-            className="w-full sm:w-auto"
-          >
-            <CloudDownload className="mr-2 size-4" aria-hidden="true" />
-            {t('settings.update.reload', 'Reload from the server')}
-          </Button>
-        </div>
-      )}
     </div>
   );
 });
