@@ -56,6 +56,15 @@ const mockActivityParticipation = vi.fn(() => ({
   toggleParticipation: mockToggleParticipation,
 }));
 
+vi.mock('@/features/activities/hooks/useActivityInvitations', () => ({
+  useActivityInvitations: () => ({
+    myPersonId: undefined,
+    canInvite: false,
+    invite: vi.fn(async () => 0),
+    decline: vi.fn(async () => false),
+  }),
+}));
+
 vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
   useActivityParticipation: () => mockActivityParticipation(),
 }));

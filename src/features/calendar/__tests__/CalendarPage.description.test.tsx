@@ -95,6 +95,15 @@ vi.mock('@/hooks/useToday', () => ({
   useToday: () => ({ today: new Date(2026, 3, 4) }),
 }));
 
+vi.mock('@/features/activities/hooks/useActivityInvitations', () => ({
+  useActivityInvitations: () => ({
+    myPersonId: undefined,
+    canInvite: false,
+    invite: vi.fn(async () => 0),
+    decline: vi.fn(async () => false),
+  }),
+}));
+
 vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
   useActivityParticipation: () => ({
     myPersonId: undefined,

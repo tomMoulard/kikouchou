@@ -13,6 +13,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
+import { TripNotificationFlush } from '@/lib/notifications/TripNotificationFlush';
 import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
 import type {
   Activity,
@@ -437,6 +438,7 @@ const TripYjsSyncBinding = memo(function TripYjsSyncBinding({
         remoteTripId={remoteTripId}
         viewerToken={viewerToken}
       >
+        <TripNotificationFlush />
         {children}
       </SupabaseTripSync>
     </YjsProvider>

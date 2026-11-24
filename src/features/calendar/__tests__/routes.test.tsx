@@ -155,6 +155,15 @@ vi.mock('@/features/activities/components/ActivityDialog', () => ({
 }));
 
 // Anonymous device: these tests are about which route renders, not who joins.
+vi.mock('@/features/activities/hooks/useActivityInvitations', () => ({
+  useActivityInvitations: () => ({
+    myPersonId: undefined,
+    canInvite: false,
+    invite: vi.fn(async () => 0),
+    decline: vi.fn(async () => false),
+  }),
+}));
+
 vi.mock('@/features/activities/hooks/useActivityParticipation', () => ({
   useActivityParticipation: () => ({
     myPersonId: undefined,

@@ -64,6 +64,12 @@ const { fixedToday, clock } = vi.hoisted(() => {
   return { fixedToday, clock: { today: fixedToday } };
 });
 
+// The invitation prompt has its own tests, and reads contexts this file does
+// not provide.
+vi.mock('@/features/activities/components/ActivityInvitationPrompt', () => ({
+  ActivityInvitationPrompt: () => null,
+}));
+
 vi.mock('@/hooks/useToday', () => ({
   useToday: () => ({ today: clock.today }),
 }));

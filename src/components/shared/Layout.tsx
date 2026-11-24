@@ -83,6 +83,7 @@ import { ViewerUnlockCard } from './ViewerUnlockCard';
 import { ReminderCard } from './ReminderCard';
 import { InstallNudgeCard } from '@/components/pwa/InstallNudgeCard';
 import { OfflineIndicator } from '@/components/pwa/OfflineIndicator';
+import { ActivityInvitationPrompt } from '@/features/activities/components/ActivityInvitationPrompt';
 import { isPushSupported } from '@/lib/notifications/push';
 
 // ============================================================================
@@ -1355,6 +1356,8 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
           )}
         >
           {showViewerCard ? <ViewerUnlockCard className="mb-4" /> : null}
+          {/* Asks this device's guest about an activity they were invited to. */}
+          {currentTrip ? <ActivityInvitationPrompt /> : null}
           {showReminderOffer && canReceivePush ? (
             <ReminderCard trip={currentTrip} className="mb-4" />
           ) : null}

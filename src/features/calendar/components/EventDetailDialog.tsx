@@ -43,6 +43,7 @@ import {
   formatActivityDayRange,
   formatActivityTimeRange,
 } from '@/features/activities/utils/activity-utils';
+import { ActivityInvitations } from '@/features/activities/components/ActivityInvitations';
 import { ActivityParticipationButton } from '@/features/activities/components/ActivityParticipationButton';
 import { RideSummary } from '@/features/transports/components/RideSummary';
 import { GuestOverviewSection } from './GuestOverviewSection';
@@ -167,6 +168,10 @@ export interface EventDetailDialogProps {
   readonly currentPersonId?: PersonId;
   /** Joins (`true`) or leaves (`false`) an activity as `currentPersonId`. */
   readonly onToggleParticipation?: (activityId: ActivityId, joining: boolean) => void;
+  /** Every guest of the trip, for an activity's invitations. */
+  readonly guests?: readonly Person[];
+  /** Invites guests to an activity; absent where this device cannot write. */
+  readonly onInvite?: (activityId: ActivityId, personIds: readonly PersonId[]) => Promise<number>;
 }
 
 // ============================================================================
@@ -554,6 +559,8 @@ interface ActivityDetailsProps {
   readonly dateLocale: Locale;
   readonly currentPersonId?: PersonId;
   readonly onToggleParticipation?: (activityId: ActivityId, joining: boolean) => void;
+  readonly guests?: readonly Person[];
+  readonly onInvite?: (activityId: ActivityId, personIds: readonly PersonId[]) => Promise<number>;
 }
 
 /**
@@ -564,6 +571,8 @@ const ActivityDetails = memo(function ActivityDetails({
   dateLocale,
   currentPersonId,
   onToggleParticipation,
+  guests = EMPTY_PERSONS,
+  onInvite,
 }: ActivityDetailsProps) {
   const { t } = useTranslation();
   const { activity, participants, organizer } = event;
@@ -658,6 +667,9 @@ const ActivityDetails = memo(function ActivityDetails({
         ) : null}
       </div>
 
+      {/* Invitations: who was asked, who said no, and asking more */}
+      <ActivityInvitations activity={activity} guests={guests} onInvite={onInvite} />
+
       {/* Organizer */}
       {organizer && (
         <div className="flex items-center gap-3">
@@ -715,6 +727,8 @@ const EventDetailDialog = memo(function EventDetailDialog({
   canEdit = true,
   currentPersonId,
   onToggleParticipation,
+  guests,
+  onInvite,
 }: EventDetailDialogProps) {
   const { t, i18n } = useTranslation();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -821,6 +835,8 @@ const EventDetailDialog = memo(function EventDetailDialog({
                 dateLocale={dateLocale}
                 currentPersonId={currentPersonId}
                 onToggleParticipation={onToggleParticipation}
+                guests={guests}
+                onInvite={onInvite}
               />
             ) : (
               <TransportDetails event={event} dateLocale={dateLocale} />

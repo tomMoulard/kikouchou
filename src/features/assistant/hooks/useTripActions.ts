@@ -25,6 +25,10 @@ import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
+import {
+  requestTripNotification,
+  type TripNotificationRequest,
+} from '@/lib/notifications/trip-notify';
 import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
 import { stayFollowingTravel } from '@/features/persons/utils/stay-from-travel';
 import { parseBedsText } from '@/features/rooms/utils/bed-text';
@@ -618,6 +622,13 @@ async function executeActionBatch(
     currentTrip !== null && currentTrip.id === tripId
       ? getTripGuestPersonId(currentTrip)
       : undefined;
+
+  /** Asks the push server to tell the others on a change, on the current trip. */
+  const tellOthersAbout = (tripId: TripId, request: TripNotificationRequest): void => {
+    if (currentTrip !== null && currentTrip.id === tripId) {
+      requestTripNotification(currentTrip, request);
+    }
+  };
 
   /**
    * Guest ids per trip, resolved once per reply. Invalidated whenever this
@@ -2102,7 +2113,8 @@ async function executeActionBatch(
             break;
           }
 
-          await createExpense(tid, formData, { updatedBy: authorIn(tid) });
+          const line = await createExpense(tid, formData, { updatedBy: authorIn(tid) });
+          tellOthersAbout(tid, { kind: 'money_line', subjectId: line.id });
           notifySuccess(t('money.expense.createSuccess'));
           executedCount++;
           summaries.push(
@@ -2188,6 +2200,7 @@ async function executeActionBatch(
           await updateExpenseWithOwnershipCheck(eid, tid, merged, {
             updatedBy: authorIn(tid),
           });
+          tellOthersAbout(tid, { kind: 'money_line', subjectId: eid });
           notifySuccess(t('money.expense.updateSuccess'));
           executedCount++;
           summaries.push(

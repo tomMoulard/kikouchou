@@ -64,6 +64,7 @@ import type {
   TripId,
 } from '@/types';
 import { reportFailure } from '@/lib/errors/report-failure';
+import { requestTripNotification } from '@/lib/notifications/trip-notify';
 
 // ============================================================================
 // Type Definitions
@@ -102,6 +103,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
 
   const {
     trips,
+    currentTrip,
     isLoading: isTripLoading,
     error: tripError,
     checkConnection,
@@ -223,10 +225,15 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
 
       // The guest this device is: told nothing about their own change.
       const author = { updatedBy: myPersonId ?? undefined };
+      let lineId = expense?.id;
       if (expense) {
         await updateExpenseWithOwnershipCheck(expense.id, tripId, data, author);
       } else {
-        await createExpense(tripId, data, author);
+        lineId = (await createExpense(tripId, data, author)).id;
+      }
+      // The others on the line hear about it now, once it reaches the server.
+      if (currentTrip && lineId) {
+        requestTripNotification(currentTrip, { kind: 'money_line', subjectId: lineId });
       }
 
       captureUsage('expense_saved', {
@@ -237,7 +244,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
         beneficiary_count: data.splits.length,
       });
     },
-    [myPersonId, tripIdFromUrl],
+    [currentTrip, myPersonId, tripIdFromUrl],
   );
 
   const handleDelete = useCallback(
@@ -296,7 +303,10 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
         splitMode: 'equal',
         splits: [{ personId: payment.toPersonId, value: payment.amount }],
       }, { updatedBy: myPersonId ?? undefined })
-        .then(() => {
+        .then((line) => {
+          if (currentTrip) {
+            requestTripNotification(currentTrip, { kind: 'money_line', subjectId: line.id });
+          }
           notifySuccess(t('money.balances.paymentRecorded'));
           captureUsage('expense_saved', {
             operation: 'created',
@@ -314,7 +324,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
           );
         });
     },
-    [defaultDate, myPersonId, notifySuccess, personsMap, t, tripIdFromUrl],
+    [currentTrip, defaultDate, myPersonId, notifySuccess, personsMap, t, tripIdFromUrl],
   );
 
   const isLoading = isTripLoading || (tripIdFromUrl !== undefined && result === undefined);

@@ -764,6 +764,25 @@
     "participantCountCapped_one": "{{count}}/{{max}} participant",
     "participantCountCapped_other": "{{count}}/{{max}} participants",
     "noParticipants": "Personne ne s'est encore inscrit",
+    "invite": {
+      "button": "Inviter des participants",
+      "pickTitle": "Qui voulez-vous inviter ?",
+      "send_one": "Inviter {{count}} personne",
+      "send_other": "Inviter {{count}} personnes",
+      "sent_one": "{{count}} personne invitée",
+      "sent_other": "{{count}} personnes invitées",
+      "failed": "Impossible d'envoyer l'invitation",
+      "declined": "Réponse envoyée : vous ne venez pas",
+      "invitedList": "Invités, sans réponse",
+      "declinedList": "Ne viennent pas"
+    },
+    "invitationPrompt": {
+      "title": "Vous êtes invité",
+      "fromSomeone": "{{name}} vous invite à {{title}}.",
+      "description": "Vous êtes invité à {{title}}.",
+      "decline": "Pas cette fois",
+      "join": "Participer"
+    },
     "maxParticipants": "Nombre de places",
     "maxParticipantsPlaceholder": "Illimité",
     "full": "Complet",

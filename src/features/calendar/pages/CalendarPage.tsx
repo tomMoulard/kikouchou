@@ -109,6 +109,7 @@ import {
 
 // Import ActivityDialog + helpers for the shared agenda
 import { ActivityDialog } from '@/features/activities/components/ActivityDialog';
+import { useActivityInvitations } from '@/features/activities/hooks/useActivityInvitations';
 import { useActivityParticipation } from '@/features/activities/hooks/useActivityParticipation';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import {
@@ -1079,6 +1080,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     toggleParticipation,
   } = useActivityParticipation();
 
+  const { canInvite, invite: inviteToActivity } = useActivityInvitations();
+
   const handleToggleParticipation = useCallback(
     (activityId: ActivityId, joining: boolean) => {
       void toggleParticipation(activityId, joining);
@@ -1590,6 +1593,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         {...(canToggleParticipation
           ? { currentPersonId: myPersonId, onToggleParticipation: handleToggleParticipation }
           : {})}
+        guests={persons}
+        {...(canInvite ? { onInvite: inviteToActivity } : {})}
       />
 
       {/* Transport Edit Dialog */}
