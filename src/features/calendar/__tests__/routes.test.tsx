@@ -142,6 +142,10 @@ vi.mock('@/contexts/RideContext', () => ({
 }));
 
 // Local midnight, so "today" is the same calendar day at any UTC offset.
+// Needs the signed-in account; the binding has its own test.
+vi.mock('@/lib/notifications/ChangeAuthorBinding', () => ({
+  ChangeAuthorBinding: () => null,
+}));
 vi.mock('@/hooks/useToday', () => ({
   useToday: () => ({ today: new Date(2026, 3, 4) }),
 }));

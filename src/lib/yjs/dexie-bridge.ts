@@ -95,6 +95,9 @@ import {
 
 const COMPACTION_THRESHOLD = 100;
 
+/** The longest `updatedBy` kept: the app's ids are 21 characters. */
+const MAX_AUTHOR_ID_LENGTH = 64;
+
 export const ORIGIN_DEXIE_SYNC = 'dexie-sync';
 
 export type SharedCollectionName = DocCollectionName;
@@ -446,6 +449,7 @@ function buildGuestRecord(
     person.phone = options.localRow.phone;
   }
 
+  boundAuthor(person);
   return person;
 }
 
@@ -553,6 +557,7 @@ function buildTransportRecord(
     row.sharedLegId = sharedLegId;
   }
 
+  boundAuthor(row);
   return row;
 }
 
@@ -600,6 +605,7 @@ function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
     delete row.kind;
   }
 
+  boundAuthor(row);
   return row;
 }
 
@@ -714,6 +720,7 @@ function buildAssignmentRecord(
     row.endDate = row.startDate;
   }
 
+  boundAuthor(row);
   return row;
 }
 
@@ -785,6 +792,7 @@ function buildActivityRecord(
     delete row.invitedBy;
   }
 
+  boundAuthor(row);
   return row;
 }
 
@@ -795,6 +803,21 @@ function buildActivityRecord(
  * @param value - Whatever the document holds
  * @returns The usable ids
  */
+/**
+ * Keeps `updatedBy`, the guest who last saved a row, only when it can be one:
+ * a short non-empty id. The push server reads it to leave that guest out of
+ * the notification the change sends (`server/share-preview`, `notify.rs`).
+ */
+function boundAuthor(row: { updatedBy?: unknown }): void {
+  if (
+    typeof row.updatedBy !== 'string' ||
+    row.updatedBy.length === 0 ||
+    row.updatedBy.length > MAX_AUTHOR_ID_LENGTH
+  ) {
+    delete row.updatedBy;
+  }
+}
+
 function boundedPersonIds(value: unknown): Activity['participantIds'] {
   if (!Array.isArray(value)) {
     return [];
@@ -827,6 +850,7 @@ function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
       )
     : undefined;
 
+  boundAuthor(row);
   return row;
 }
 
@@ -896,9 +920,7 @@ function buildExpenseRecord(
         }))
     : [];
 
-  if (typeof row.updatedBy !== 'string' || row.updatedBy.length === 0) {
-    delete row.updatedBy;
-  }
+  boundAuthor(row);
 
   return row;
 }
@@ -948,6 +970,7 @@ function buildMealRecord(meal: SharedRecord, tripId: TripId): Meal | undefined {
     row.headcountAdjustment = adjustment;
   }
 
+  boundAuthor(row);
   return row;
 }
 
@@ -989,6 +1012,7 @@ function buildShoppingItemRecord(
   row.createdAt =
     typeof row.createdAt === 'number' && Number.isFinite(row.createdAt) ? row.createdAt : 0;
 
+  boundAuthor(row);
   return row;
 }
 

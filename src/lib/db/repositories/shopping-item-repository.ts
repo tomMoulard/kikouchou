@@ -9,6 +9,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import { sanitizeShoppingItemData } from '@/lib/db/sanitize';
 import { createShoppingItemId } from '@/lib/db/utils';
 import type {
@@ -57,9 +58,11 @@ export async function createShoppingItem(
       createdAt: Date.now(),
       ...(sanitizedData.quantity !== undefined && { quantity: sanitizedData.quantity }),
       ...(sanitizedData.buyerId !== undefined && { buyerId: sanitizedData.buyerId }),
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.shoppingItems.add(item);
+    announceGuestChange(tripId, 'shoppingItems', item.id);
     return item;
   } catch (error) {
     throw repositoryError(
@@ -144,8 +147,9 @@ export async function updateShoppingItemWithOwnershipCheck(
       throw new Error('Cannot update shopping item: item does not belong to current trip');
     }
 
-    await db.shoppingItems.update(id, patch);
+    await db.shoppingItems.update(id, { ...patch, ...authorPatch(tripId, 'update') });
   });
+  announceGuestChange(tripId, 'shoppingItems', id);
 }
 
 /**

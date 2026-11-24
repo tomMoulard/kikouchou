@@ -34,7 +34,7 @@ use web_push::{
 
 use crate::config::{Config, SendMode};
 use crate::native_push::{NativeError, NativePush};
-use crate::notify::{holds_subject, is_version_of_line, notice_for, render, NotifyRequest};
+use crate::notify::{holds_subject, is_version_of, notice_for, render, NotifyRequest};
 use crate::posthog::PostHog;
 use crate::reminders::{
     due_reminders, read_trip_facts, Clock, DueReminder, ReminderKind, Subscription,
@@ -355,12 +355,11 @@ impl PushSender {
             }) {
                 continue;
             }
-            let seen_before = notice.kind == ReminderKind::MoneyLine
-                && log.iter().any(|row| {
-                    row.kind == notice.kind.as_str()
-                        && row.sent_at.is_some()
-                        && is_version_of_line(&row.subject, &request.subject_id)
-                });
+            let seen_before = log.iter().any(|row| {
+                row.kind == notice.kind.as_str()
+                    && row.sent_at.is_some()
+                    && is_version_of(&row.subject, &notice)
+            });
             let reminder = render(
                 &notice,
                 &request.trip_id,

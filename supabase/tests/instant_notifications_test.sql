@@ -1,10 +1,10 @@
--- Instant notifications: the two kinds a device asks for are logged like the
+-- Instant notifications: the kinds a device asks for are logged like the
 -- reminders, and the log still refuses a kind nobody sends.
 --
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(4);
+select plan(5);
 
 -- ===========================================================================
 -- Fixtures
@@ -37,6 +37,12 @@ select lives_ok(
   $$insert into public.reminder_log (subscription_id, kind, subject)
     values ('66666666-0000-0000-0000-0000000000aa', 'money_line', 'line-1:0123456789abcdef')$$,
   'a version of a money line is logged'
+);
+
+select lives_ok(
+  $$insert into public.reminder_log (subscription_id, kind, subject)
+    values ('66666666-0000-0000-0000-0000000000aa', 'trip_change', 'r:ride-1:0123456789abcdef')$$,
+  'a version of a row naming a guest is logged'
 );
 
 select lives_ok(

@@ -14,6 +14,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import { sanitizeVehicleData } from '@/lib/db/sanitize';
 import { createVehicleId } from '@/lib/db/utils';
 import type { PersonId, TripId, Vehicle, VehicleFormData, VehicleId } from '@/types';
@@ -120,9 +121,11 @@ export async function createVehicle(
       id: createVehicleId(),
       tripId,
       ...sanitizedData,
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.vehicles.add(vehicle);
+    announceGuestChange(tripId, 'vehicles', vehicle.id);
     return vehicle;
   } catch (error) {
     throw repositoryError(`Failed to create vehicle "${sanitizedData.name}"`, error);
@@ -170,8 +173,10 @@ export async function updateVehicleWithOwnershipCheck(
         ? {}
         : { luggageNotes: merged.luggageNotes }),
       ...(data.notes === undefined ? {} : { notes: merged.notes }),
+      ...authorPatch(tripId, 'update'),
     });
   });
+  announceGuestChange(tripId, 'vehicles', id);
 }
 
 /**

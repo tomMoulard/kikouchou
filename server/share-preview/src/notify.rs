@@ -1,8 +1,8 @@
 //! `POST /push/notify`: tell the people a change is about, now.
 //!
-//! The reminders are swept for once an interval. Two things cannot wait for
-//! the sweep, and are asked for by the device that made the change, the moment
-//! the change has reached the server:
+//! The reminders are swept for once an interval. A change that involves a
+//! guest cannot wait for the sweep, and is asked for by the device that made
+//! it, the moment the change has reached the server:
 //!
 //! - `activity_invite`: guests were invited to an activity. Every device
 //!   subscribed as an invited guest is told, once per activity.
@@ -10,9 +10,14 @@
 //!   as a guest on it (the payer, or one of its shares) is told, once per
 //!   version of the line: the subject carries a digest of what the line says,
 //!   so a save that changed nothing is not told again.
+//! - `trip_change`: any other row naming a guest was added or changed: the
+//!   guest's own stay, a room night, a journey, a ride, a car, an activity they
+//!   are in or run, a meal they cook, a shopping item they buy. The request
+//!   names the collection; the server reads who the row names. Told once per
+//!   version of the row, like a money line.
 //!
 //! The guest who made the change is never told. The document says who did:
-//! `invitedBy` on the activity, `updatedBy` on the line.
+//! `invitedBy` on an invitation, `updatedBy` on every other row.
 //!
 //! Everything here is a pure function of a request body, a document and a
 //! language, tested without a socket. `main.rs` checks who is asking and
@@ -37,21 +42,102 @@ use crate::trip_source::is_uuid_shaped;
 pub struct NotifyRequest {
     /// The shared trip, `trips.id`.
     pub trip_id: String,
-    /// `ActivityInvite` or `MoneyLine`.
+    /// `ActivityInvite`, `MoneyLine` or `TripChange`.
     pub kind: ReminderKind,
-    /// The activity's or the line's id in the document.
+    /// The row's id in the document.
     pub subject_id: String,
+    /// Which rows the id is in. Set for `TripChange` only.
+    pub collection: Option<Collection>,
+}
+
+/// The collections whose rows name guests, for a `trip_change`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Collection {
+    Guests,
+    RoomAssignments,
+    Transport,
+    Rides,
+    Vehicles,
+    Activities,
+    Meals,
+    ShoppingItems,
+}
+
+impl Collection {
+    pub const ALL: [Collection; 8] = [
+        Self::Guests,
+        Self::RoomAssignments,
+        Self::Transport,
+        Self::Rides,
+        Self::Vehicles,
+        Self::Activities,
+        Self::Meals,
+        Self::ShoppingItems,
+    ];
+
+    /// The name the app gives it, `COLLECTION_ROOT`'s keys in `doc-model.ts`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Guests => "guests",
+            Self::RoomAssignments => "roomAssignments",
+            Self::Transport => "transport",
+            Self::Rides => "rides",
+            Self::Vehicles => "vehicles",
+            Self::Activities => "activities",
+            Self::Meals => "meals",
+            Self::ShoppingItems => "shoppingItems",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == value)
+    }
+
+    /// The root map in the document.
+    fn root(self) -> &'static str {
+        match self {
+            Self::Guests => "guestsById",
+            Self::RoomAssignments => "roomAssignmentsById",
+            Self::Transport => TRANSPORT_ROOT,
+            Self::Rides => RIDES_ROOT,
+            Self::Vehicles => "vehiclesById",
+            Self::Activities => ACTIVITIES_ROOT,
+            Self::Meals => "mealsById",
+            Self::ShoppingItems => "shoppingItemsById",
+        }
+    }
+
+    /// A short tag in the log's subject, which has 64 characters to hold it.
+    fn code(self) -> &'static str {
+        match self {
+            Self::Guests => "g",
+            Self::RoomAssignments => "ra",
+            Self::Transport => "t",
+            Self::Rides => "r",
+            Self::Vehicles => "v",
+            Self::Activities => "a",
+            Self::Meals => "m",
+            Self::ShoppingItems => "s",
+        }
+    }
 }
 
 /// Who to tell about one change, and the words to tell them with.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Notice {
     pub kind: ReminderKind,
-    /// The `reminder_log` subject: the activity id, or the line id and digest.
+    /// The `reminder_log` subject: the activity id, or the row and a digest.
     pub subject: String,
+    /// What every version of the same row's subject starts with: a device
+    /// told about one before is told this one is a change, not a new row.
+    /// `None` for an invitation, told once.
+    pub version_prefix: Option<String>,
+    /// The collection, for a `trip_change`: it picks the words.
+    pub collection: Option<Collection>,
     /// The guests to tell, the author already taken out.
     pub recipients: BTreeSet<String>,
-    /// The activity's or the line's title, as the document has it.
+    /// The row's title, as the document has it; empty where a row's only
+    /// name could be a guest's (a stay, a car).
     pub item_title: String,
 }
 
@@ -60,6 +146,8 @@ struct RawRequest {
     trip_id: String,
     kind: String,
     subject_id: String,
+    #[serde(default)]
+    collection: Option<String>,
 }
 
 // ============================================================================
@@ -72,9 +160,25 @@ pub const MAX_BODY_BYTES: usize = 1024;
 /// Root map keys, mirroring `COLLECTION_ROOT` in `src/lib/yjs/doc-model.ts`.
 const ACTIVITIES_ROOT: &str = "activitiesById";
 const EXPENSES_ROOT: &str = "expensesById";
+const TRANSPORT_ROOT: &str = "transportById";
+const RIDES_ROOT: &str = "ridesById";
+
+/// Fields that never make a version of a row: who saved it and when, and the
+/// invitations, which are told about as invitations.
+const NOT_A_CHANGE: [&str; 8] = [
+    "id",
+    "tripId",
+    "createdAt",
+    "updatedAt",
+    "updatedBy",
+    "invitedIds",
+    "declinedIds",
+    "invitedBy",
+];
 
 /// The longest document id taken: the app's ids are 21 characters, and the
-/// subject (id, a colon, a 16-digit digest) has to fit `reminder_log`'s 64.
+/// subject (a tag, id, a colon, a 16-digit digest) has to fit `reminder_log`'s
+/// 64.
 const MAX_SUBJECT_ID_LEN: usize = 40;
 
 /// The longest title written into a notification.
@@ -98,8 +202,19 @@ pub fn parse_request(body: &[u8]) -> Result<NotifyRequest, &'static str> {
         return Err("trip_id is not a trip id");
     }
     let kind = match ReminderKind::parse(&raw.kind) {
-        Some(kind @ (ReminderKind::ActivityInvite | ReminderKind::MoneyLine)) => kind,
+        Some(
+            kind @ (ReminderKind::ActivityInvite
+            | ReminderKind::MoneyLine
+            | ReminderKind::TripChange),
+        ) => kind,
         _ => return Err("kind is not one a device can ask for"),
+    };
+    let collection = match (kind, raw.collection.as_deref()) {
+        (ReminderKind::TripChange, Some(name)) => {
+            Some(Collection::parse(name).ok_or("collection is not one that names guests")?)
+        }
+        (ReminderKind::TripChange, None) => return Err("a trip_change names its collection"),
+        _ => None,
     };
     if raw.subject_id.is_empty()
         || raw.subject_id.len() > MAX_SUBJECT_ID_LEN
@@ -114,6 +229,7 @@ pub fn parse_request(body: &[u8]) -> Result<NotifyRequest, &'static str> {
         trip_id: raw.trip_id,
         kind,
         subject_id: raw.subject_id,
+        collection,
     })
 }
 
@@ -254,13 +370,153 @@ fn line_fingerprint(fields: &HashMap<String, Any>) -> String {
     .join("\u{1f}")
 }
 
+/// The ids of the rows of a root map whose `field` is `value`.
+fn rows_where(doc: &Doc, root: &str, field: &str, value: &str) -> Vec<HashMap<String, Any>> {
+    let txn = doc.transact();
+    let Some(map) = txn.get_map(root) else {
+        return Vec::new();
+    };
+    map.iter(&txn)
+        .filter_map(|(_, row)| match row {
+            Out::YMap(row) => match row.get(&txn, field) {
+                Some(Out::Any(Any::String(found))) if found.as_ref() == value => Some(
+                    row.iter(&txn)
+                        .filter_map(|(key, value)| match value {
+                            Out::Any(any) => Some((key.to_string(), any)),
+                            _ => None,
+                        })
+                        .collect(),
+                ),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
+/// A value written the same way on every run: map keys sorted, which a
+/// `HashMap` does not promise.
+fn canonical(value: &Any, out: &mut String) {
+    match value {
+        Any::Null | Any::Undefined => out.push('~'),
+        Any::Bool(value) => out.push_str(if *value { "T" } else { "F" }),
+        Any::Number(value) => out.push_str(&value.to_string()),
+        Any::BigInt(value) => out.push_str(&value.to_string()),
+        Any::String(value) => {
+            out.push('"');
+            out.push_str(value);
+            out.push('"');
+        }
+        Any::Buffer(bytes) => out.push_str(&format!("b{}", bytes.len())),
+        Any::Array(values) => {
+            out.push('[');
+            for value in values.iter() {
+                canonical(value, out);
+                out.push(',');
+            }
+            out.push(']');
+        }
+        Any::Map(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            out.push('{');
+            for key in keys {
+                out.push_str(key);
+                out.push('=');
+                canonical(&map[key], out);
+                out.push(',');
+            }
+            out.push('}');
+        }
+    }
+}
+
+/// What a row says, as one string: every field but who saved it, when, and
+/// the invitations. The same row saved again unchanged is the same version.
+fn row_fingerprint(fields: &HashMap<String, Any>) -> String {
+    let mut keys: Vec<&String> = fields
+        .keys()
+        .filter(|key| !NOT_A_CHANGE.contains(&key.as_str()))
+        .collect();
+    keys.sort();
+    let mut out = String::new();
+    for key in keys {
+        out.push_str(key);
+        out.push('=');
+        canonical(&fields[key], &mut out);
+        out.push('\u{1f}');
+    }
+    out
+}
+
+/// The guests a row of a collection names, read from the document.
+fn named_guests(
+    doc: &Doc,
+    collection: Collection,
+    id: &str,
+    fields: &HashMap<String, Any>,
+) -> BTreeSet<String> {
+    let mut guests = BTreeSet::new();
+    let mut add = |value: Option<&str>| {
+        if let Some(value) = value {
+            guests.insert(value.to_owned());
+        }
+    };
+    match collection {
+        // A guest's own row: their stay, their phone, their diet.
+        Collection::Guests => add(Some(id)),
+        Collection::RoomAssignments | Collection::Transport => {
+            add(text(fields, "personId"));
+            if collection == Collection::Transport {
+                // Who drives them: the leg's own driver, or the ride's.
+                add(text(fields, "driverId"));
+                if let Some(ride) =
+                    text(fields, "rideId").and_then(|ride_id| row_of(doc, RIDES_ROOT, ride_id))
+                {
+                    add(text(&ride, "driverId"));
+                }
+            }
+        }
+        Collection::Rides => {
+            add(text(fields, "driverId"));
+            for leg in rows_where(doc, TRANSPORT_ROOT, "rideId", id) {
+                add(text(&leg, "personId"));
+            }
+        }
+        Collection::Vehicles => add(text(fields, "ownerId")),
+        Collection::Activities => {
+            add(text(fields, "organizerId"));
+            for guest in strings(fields, "participantIds") {
+                add(Some(&guest));
+            }
+        }
+        Collection::Meals => {
+            for guest in strings(fields, "organizerIds") {
+                add(Some(&guest));
+            }
+        }
+        Collection::ShoppingItems => add(text(fields, "buyerId")),
+    }
+    guests
+}
+
+/// The title a notification may show for a row: never a field that could be
+/// a guest's name (a stay is the guest's, a car is often "Alice's car").
+fn safe_title(collection: Collection, fields: &HashMap<String, Any>) -> String {
+    match collection {
+        Collection::Activities => short_title(text(fields, "title")),
+        Collection::ShoppingItems => short_title(text(fields, "name")),
+        _ => String::new(),
+    }
+}
+
 /// Who to tell about a change, read from the live document.
 ///
-/// `None` when the document does not hold the activity or the line (yet: the
-/// device asks once its change reached the server, but a peer may have deleted
-/// it since), or when nobody but the author is concerned.
+/// `None` when the document does not hold the row (yet: the device asks once
+/// its change reached the server, but a peer may have deleted it since), or
+/// when nobody but the author is concerned.
 pub fn notice_for(doc: &Doc, request: &NotifyRequest) -> Option<Notice> {
-    let (fields, mut recipients, author, subject) = match request.kind {
+    let (mut recipients, author, subject, version_prefix, item_title) = match request.kind {
         ReminderKind::ActivityInvite => {
             let fields = row_of(doc, ACTIVITIES_ROOT, &request.subject_id)?;
             let joined: BTreeSet<String> = strings(&fields, "participantIds").into_iter().collect();
@@ -269,7 +525,13 @@ pub fn notice_for(doc: &Doc, request: &NotifyRequest) -> Option<Notice> {
                 .filter(|id| !joined.contains(id))
                 .collect();
             let author = text(&fields, "invitedBy").map(str::to_owned);
-            (fields, recipients, author, request.subject_id.clone())
+            (
+                recipients,
+                author,
+                request.subject_id.clone(),
+                None,
+                short_title(text(&fields, "title")),
+            )
         }
         ReminderKind::MoneyLine => {
             let fields = row_of(doc, EXPENSES_ROOT, &request.subject_id)?;
@@ -279,8 +541,29 @@ pub fn notice_for(doc: &Doc, request: &NotifyRequest) -> Option<Notice> {
             }
             let author = text(&fields, "updatedBy").map(str::to_owned);
             let digest = fnv1a(line_fingerprint(&fields).as_bytes());
-            let subject = format!("{}:{digest:016x}", request.subject_id);
-            (fields, recipients, author, subject)
+            let prefix = format!("{}:", request.subject_id);
+            (
+                recipients,
+                author,
+                format!("{prefix}{digest:016x}"),
+                Some(prefix),
+                short_title(text(&fields, "title")),
+            )
+        }
+        ReminderKind::TripChange => {
+            let collection = request.collection?;
+            let fields = row_of(doc, collection.root(), &request.subject_id)?;
+            let recipients = named_guests(doc, collection, &request.subject_id, &fields);
+            let author = text(&fields, "updatedBy").map(str::to_owned);
+            let digest = fnv1a(row_fingerprint(&fields).as_bytes());
+            let prefix = format!("{}:{}:", collection.code(), request.subject_id);
+            (
+                recipients,
+                author,
+                format!("{prefix}{digest:016x}"),
+                Some(prefix),
+                safe_title(collection, &fields),
+            )
         }
         _ => return None,
     };
@@ -295,37 +578,82 @@ pub fn notice_for(doc: &Doc, request: &NotifyRequest) -> Option<Notice> {
     Some(Notice {
         kind: request.kind,
         subject,
+        version_prefix,
+        collection: request.collection,
         recipients,
-        item_title: short_title(text(&fields, "title")),
+        item_title,
     })
 }
 
-/// Whether the document holds the activity or the line a request names.
+/// Whether the document holds the row a request names.
 pub fn holds_subject(doc: &Doc, request: &NotifyRequest) -> bool {
-    let root = match request.kind {
-        ReminderKind::ActivityInvite => ACTIVITIES_ROOT,
-        ReminderKind::MoneyLine => EXPENSES_ROOT,
+    let root = match (request.kind, request.collection) {
+        (ReminderKind::ActivityInvite, _) => ACTIVITIES_ROOT,
+        (ReminderKind::MoneyLine, _) => EXPENSES_ROOT,
+        (ReminderKind::TripChange, Some(collection)) => collection.root(),
         _ => return false,
     };
     row_of(doc, root, &request.subject_id).is_some()
 }
 
-/// Whether a `money_line` subject is a version of this line: its id, a colon.
-pub fn is_version_of_line(subject: &str, line_id: &str) -> bool {
-    subject
-        .strip_prefix(line_id)
-        .is_some_and(|rest| rest.starts_with(':'))
+/// Whether a logged subject is a version of the row a notice is about.
+pub fn is_version_of(subject: &str, notice: &Notice) -> bool {
+    notice
+        .version_prefix
+        .as_deref()
+        .is_some_and(|prefix| subject.starts_with(prefix))
 }
 
 // ============================================================================
 // Words
 // ============================================================================
 
+/// The title of a `trip_change`, by collection: new to this device, or a
+/// change to a row it was told about before.
+fn change_title(collection: Collection, language: Language, changed: bool, item: &str) -> String {
+    use Collection as C;
+    use Language::{En, Fr};
+    match (collection, language, changed) {
+        (C::Guests, En, false) => "Your stay was added".to_owned(),
+        (C::Guests, En, true) => "Your stay was updated".to_owned(),
+        (C::Guests, Fr, false) => "Votre séjour a été ajouté".to_owned(),
+        (C::Guests, Fr, true) => "Votre séjour a été modifié".to_owned(),
+        (C::RoomAssignments, En, false) => "You have a room".to_owned(),
+        (C::RoomAssignments, En, true) => "Your room changed".to_owned(),
+        (C::RoomAssignments, Fr, false) => "Une chambre vous attend".to_owned(),
+        (C::RoomAssignments, Fr, true) => "Votre chambre a changé".to_owned(),
+        (C::Transport, En, false) => "A journey was added for you".to_owned(),
+        (C::Transport, En, true) => "Your journey changed".to_owned(),
+        (C::Transport, Fr, false) => "Un trajet a été ajouté pour vous".to_owned(),
+        (C::Transport, Fr, true) => "Votre trajet a changé".to_owned(),
+        (C::Rides, En, false) => "You're on a ride".to_owned(),
+        (C::Rides, En, true) => "A ride you're on changed".to_owned(),
+        (C::Rides, Fr, false) => "Un covoiturage vous concerne".to_owned(),
+        (C::Rides, Fr, true) => "Un covoiturage qui vous concerne a changé".to_owned(),
+        (C::Vehicles, En, false) => "Your car was added".to_owned(),
+        (C::Vehicles, En, true) => "Your car's details changed".to_owned(),
+        (C::Vehicles, Fr, false) => "Votre voiture a été ajoutée".to_owned(),
+        (C::Vehicles, Fr, true) => "Votre voiture a été modifiée".to_owned(),
+        (C::Activities, En, false) => format!("You're in: {item}"),
+        (C::Activities, En, true) => format!("Changed: {item}"),
+        (C::Activities, Fr, false) => format!("Vous participez : {item}"),
+        (C::Activities, Fr, true) => format!("Modifié : {item}"),
+        (C::Meals, En, false) => "You're cooking a meal".to_owned(),
+        (C::Meals, En, true) => "A meal you cook changed".to_owned(),
+        (C::Meals, Fr, false) => "Vous cuisinez un repas".to_owned(),
+        (C::Meals, Fr, true) => "Un repas que vous préparez a changé".to_owned(),
+        (C::ShoppingItems, En, false) => format!("To buy: {item}"),
+        (C::ShoppingItems, En, true) => format!("Changed on the shopping list: {item}"),
+        (C::ShoppingItems, Fr, false) => format!("À acheter : {item}"),
+        (C::ShoppingItems, Fr, true) => format!("Modifié dans les courses : {item}"),
+    }
+}
+
 /// The notification for one device.
 ///
-/// `seen_before` is for a money line: whether this device was already told
-/// about an earlier version of it, which makes this one a change rather than a
-/// new line.
+/// `seen_before` is for a row told in versions (a money line, a trip change):
+/// whether this device was already told about an earlier version of it, which
+/// makes this one a change rather than a new row.
 pub fn render(
     notice: &Notice,
     trip_id: &str,
@@ -342,28 +670,39 @@ pub fn render(
         notice.item_title.clone()
     };
 
-    let (title, body) = match (notice.kind, language, seen_before) {
-        (ReminderKind::ActivityInvite, Language::En, _) => (
+    let (title, body) = match (notice.kind, notice.collection, language, seen_before) {
+        (ReminderKind::ActivityInvite, _, Language::En, _) => (
             format!("You're invited: {item}"),
             format!("Open {trip_name} to join, or to say you can't."),
         ),
-        (ReminderKind::ActivityInvite, Language::Fr, _) => (
+        (ReminderKind::ActivityInvite, _, Language::Fr, _) => (
             format!("Invitation : {item}"),
             format!("Ouvrez {trip_name} pour participer, ou pour dire non."),
         ),
-        (_, Language::En, false) => (
+        (ReminderKind::TripChange, Some(collection), language, changed) => (
+            change_title(collection, language, changed, &item),
+            match (language, changed) {
+                (Language::En, false) => format!("Open {trip_name} to see it."),
+                (Language::En, true) => format!("Open {trip_name} to see what changed."),
+                (Language::Fr, false) => format!("Ouvrez {trip_name} pour le voir."),
+                (Language::Fr, true) => {
+                    format!("Ouvrez {trip_name} pour voir ce qui a changé.")
+                }
+            },
+        ),
+        (_, _, Language::En, false) => (
             format!("New in the accounts: {item}"),
             format!("A line you're on was added to {trip_name}."),
         ),
-        (_, Language::En, true) => (
+        (_, _, Language::En, true) => (
             format!("Changed in the accounts: {item}"),
             format!("A line you're on in {trip_name} was changed."),
         ),
-        (_, Language::Fr, false) => (
+        (_, _, Language::Fr, false) => (
             format!("Nouveau dans les comptes : {item}"),
             format!("Une ligne qui vous concerne a été ajoutée à {trip_name}."),
         ),
-        (_, Language::Fr, true) => (
+        (_, _, Language::Fr, true) => (
             format!("Modifié dans les comptes : {item}"),
             format!("Une ligne qui vous concerne dans {trip_name} a été modifiée."),
         ),
@@ -427,6 +766,14 @@ mod tests {
             trip_id: TRIP.to_owned(),
             kind,
             subject_id: subject.to_owned(),
+            collection: None,
+        }
+    }
+
+    fn change(collection: Collection, subject: &str) -> NotifyRequest {
+        NotifyRequest {
+            collection: Some(collection),
+            ..request(ReminderKind::TripChange, subject)
         }
     }
 
@@ -507,7 +854,8 @@ mod tests {
             notice.recipients,
             ["bob", "carol"].into_iter().map(str::to_owned).collect()
         );
-        assert!(is_version_of_line(&notice.subject, "line-1"));
+        assert!(is_version_of(&notice.subject, &notice));
+        assert!(notice.subject.starts_with("line-1:"));
         assert_eq!(notice.subject.len(), "line-1:".len() + 16);
     }
 
@@ -621,8 +969,204 @@ mod tests {
 
     #[test]
     fn tells_a_line_version_from_another_line() {
-        assert!(is_version_of_line("line-1:0123456789abcdef", "line-1"));
-        assert!(!is_version_of_line("line-10:0123456789abcdef", "line-1"));
-        assert!(!is_version_of_line("line-1", "line-1"));
+        let notice = notice_for(
+            &line(Some("alice"), 84.2),
+            &request(ReminderKind::MoneyLine, "line-1"),
+        )
+        .unwrap();
+        assert!(is_version_of("line-1:0123456789abcdef", &notice));
+        assert!(!is_version_of("line-10:0123456789abcdef", &notice));
+        assert!(!is_version_of("line-1", &notice));
+    }
+
+    #[test]
+    fn reads_a_trip_change_only_with_a_collection_that_names_guests() {
+        let ok = format!(
+            r#"{{"trip_id":"{TRIP}","kind":"trip_change","subject_id":"ride-1","collection":"rides"}}"#
+        );
+        assert_eq!(
+            parse_request(ok.as_bytes()).unwrap(),
+            change(Collection::Rides, "ride-1")
+        );
+        for body in [
+            format!(r#"{{"trip_id":"{TRIP}","kind":"trip_change","subject_id":"x"}}"#),
+            format!(
+                r#"{{"trip_id":"{TRIP}","kind":"trip_change","subject_id":"x","collection":"rooms"}}"#
+            ),
+            format!(
+                r#"{{"trip_id":"{TRIP}","kind":"trip_change","subject_id":"x","collection":"expenses"}}"#
+            ),
+        ] {
+            assert!(parse_request(body.as_bytes()).is_err(), "accepted {body}");
+        }
+        // A collection on another kind is ignored, not trusted.
+        let money = format!(
+            r#"{{"trip_id":"{TRIP}","kind":"money_line","subject_id":"x","collection":"rides"}}"#
+        );
+        assert_eq!(parse_request(money.as_bytes()).unwrap().collection, None);
+    }
+
+    #[test]
+    fn tells_the_guest_a_row_names_but_not_the_one_who_saved_it() {
+        let cases = [
+            (
+                Collection::Guests,
+                "bob",
+                vec![("name", Any::String("Bob".into()))],
+                "bob",
+            ),
+            (
+                Collection::RoomAssignments,
+                "as-1",
+                vec![("personId", Any::String("bob".into()))],
+                "bob",
+            ),
+            (
+                Collection::Vehicles,
+                "car-1",
+                vec![("ownerId", Any::String("bob".into()))],
+                "bob",
+            ),
+            (
+                Collection::Meals,
+                "meal-1",
+                vec![("organizerIds", arr(&["bob", "alice"]))],
+                "bob",
+            ),
+            (
+                Collection::ShoppingItems,
+                "item-1",
+                vec![
+                    ("name", Any::String("Pain".into())),
+                    ("buyerId", Any::String("bob".into())),
+                ],
+                "bob",
+            ),
+            (
+                Collection::Activities,
+                "act-1",
+                vec![
+                    ("title", Any::String("Ski".into())),
+                    ("participantIds", arr(&["alice"])),
+                    ("organizerId", Any::String("bob".into())),
+                ],
+                "bob",
+            ),
+        ];
+        for (collection, id, mut fields, guest) in cases {
+            fields.push(("updatedBy", Any::String("alice".into())));
+            let doc = doc_with(collection.root(), id, fields);
+            let notice = notice_for(&doc, &change(collection, id)).unwrap();
+            assert_eq!(
+                notice.recipients,
+                [guest.to_owned()].into_iter().collect(),
+                "{collection:?}"
+            );
+            assert!(notice.subject.len() <= 64);
+            assert!(is_version_of(&notice.subject, &notice));
+            assert!(holds_subject(&doc, &change(collection, id)));
+        }
+    }
+
+    #[test]
+    fn tells_a_ride_s_driver_and_passengers_and_a_passenger_s_driver() {
+        let doc = Doc::new();
+        {
+            let mut txn = doc.transact_mut();
+            let rides = txn.get_or_insert_map(RIDES_ROOT);
+            let ride: MapPrelim = [
+                (
+                    "driverId".to_owned(),
+                    yrs::In::Any(Any::String("dan".into())),
+                ),
+                (
+                    "updatedBy".to_owned(),
+                    yrs::In::Any(Any::String("dan".into())),
+                ),
+            ]
+            .into_iter()
+            .collect();
+            rides.insert(&mut txn, "ride-1", ride);
+            let legs = txn.get_or_insert_map(TRANSPORT_ROOT);
+            for (id, person) in [("leg-1", "bob"), ("leg-2", "carol")] {
+                let leg: MapPrelim = [
+                    (
+                        "personId".to_owned(),
+                        yrs::In::Any(Any::String(person.into())),
+                    ),
+                    (
+                        "rideId".to_owned(),
+                        yrs::In::Any(Any::String("ride-1".into())),
+                    ),
+                ]
+                .into_iter()
+                .collect();
+                legs.insert(&mut txn, id, leg);
+            }
+        }
+
+        let ride = notice_for(&doc, &change(Collection::Rides, "ride-1")).unwrap();
+        assert_eq!(
+            ride.recipients,
+            ["bob", "carol"].into_iter().map(str::to_owned).collect()
+        );
+        let leg = notice_for(&doc, &change(Collection::Transport, "leg-1")).unwrap();
+        assert_eq!(
+            leg.recipients,
+            ["bob", "dan"].into_iter().map(str::to_owned).collect()
+        );
+    }
+
+    #[test]
+    fn gives_each_version_of_a_row_its_own_subject() {
+        let room = |night: &str, author: &str| {
+            doc_with(
+                "roomAssignmentsById",
+                "as-1",
+                vec![
+                    ("personId", Any::String("bob".into())),
+                    ("startDate", Any::String(night.into())),
+                    ("updatedBy", Any::String(author.into())),
+                    ("updatedAt", Any::String(author.into())),
+                ],
+            )
+        };
+        let ask = change(Collection::RoomAssignments, "as-1");
+        let first = notice_for(&room("2026-12-20", "alice"), &ask).unwrap();
+        let again = notice_for(&room("2026-12-20", "carol"), &ask).unwrap();
+        let moved = notice_for(&room("2026-12-21", "alice"), &ask).unwrap();
+        assert_eq!(first.subject, again.subject);
+        assert_ne!(first.subject, moved.subject);
+        assert!(is_version_of(&first.subject, &moved));
+    }
+
+    #[test]
+    fn writes_a_change_without_a_guest_name_in_each_language() {
+        let doc = doc_with(
+            "vehiclesById",
+            "car-1",
+            vec![
+                ("name", Any::String("bob's car".into())),
+                ("ownerId", Any::String("bob".into())),
+                ("updatedBy", Any::String("alice".into())),
+            ],
+        );
+        let notice = notice_for(&doc, &change(Collection::Vehicles, "car-1")).unwrap();
+        for language in [Language::En, Language::Fr] {
+            for seen in [false, true] {
+                let reminder = render(&notice, TRIP, "Trip", language, seen);
+                assert!(!reminder.title.contains("bob") && !reminder.body.contains("bob"));
+                assert!(reminder.body.contains("Trip"));
+            }
+        }
+        for collection in Collection::ALL {
+            for language in [Language::En, Language::Fr] {
+                assert!(!change_title(collection, language, true, "x").is_empty());
+            }
+        }
+        assert_eq!(
+            render(&notice, TRIP, "Trip", Language::En, true).title,
+            "Your car's details changed"
+        );
     }
 }

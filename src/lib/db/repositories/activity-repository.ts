@@ -8,6 +8,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import { sanitizeActivityData } from '@/lib/db/sanitize';
 import { createActivityId } from '@/lib/db/utils';
 import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
@@ -56,9 +57,11 @@ export async function createActivity(
       tripId,
       ...sanitizedData,
       participantIds: [...sanitizedData.participantIds],
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.activities.add(activity);
+    announceGuestChange(tripId, 'activities', activity.id);
     return activity;
   } catch (error) {
     throw repositoryError(
@@ -228,8 +231,9 @@ export async function updateActivityWithOwnershipCheck(
       throw new Error('Cannot update activity: activity does not belong to current trip');
     }
 
-    await db.activities.update(id, sanitizedData);
+    await db.activities.update(id, { ...sanitizedData, ...authorPatch(tripId, 'update') });
   });
+  announceGuestChange(tripId, 'activities', id);
 }
 
 /**
@@ -281,7 +285,7 @@ export async function setActivityParticipation(
   personId: PersonId,
   joining: boolean,
 ): Promise<PersonId[]> {
-  return db.transaction('rw', db.activities, async () => {
+  const { next, changed } = await db.transaction('rw', db.activities, async () => {
     const activity = await db.activities.get(id);
 
     if (!activity) {
@@ -295,7 +299,7 @@ export async function setActivityParticipation(
     const isParticipant = current.includes(personId);
 
     if (joining === isParticipant) {
-      return [...current];
+      return { next: [...current], changed: false };
     }
 
     if (joining && isActivityFull(activity)) {
@@ -316,9 +320,15 @@ export async function setActivityParticipation(
             declinedIds: withoutPerson(activity.declinedIds, personId),
           }
         : {}),
+      ...authorPatch(tripId, 'update'),
     });
-    return next;
+    return { next, changed: true };
   });
+  if (changed) {
+    // The organizer and the others in it hear who joined or left.
+    announceGuestChange(tripId, 'activities', id);
+  }
+  return next;
 }
 
 /**

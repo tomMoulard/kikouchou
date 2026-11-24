@@ -43,6 +43,8 @@ import {
   formatActivityDayRange,
   formatActivityTimeRange,
 } from '@/features/activities/utils/activity-utils';
+import { ActivityGuestList } from '@/features/activities/components/ActivityGuestList';
+import { activityGuestLines } from '@/features/activities/utils/activity-guest-lines';
 import { ActivityInvitations } from '@/features/activities/components/ActivityInvitations';
 import { ActivityParticipationButton } from '@/features/activities/components/ActivityParticipationButton';
 import { RideSummary } from '@/features/transports/components/RideSummary';
@@ -583,6 +585,10 @@ const ActivityDetails = memo(function ActivityDetails({
 
   const participantCount = activity.participantIds?.length ?? 0;
   const cap = activity.maxParticipants;
+  // Every guest of the trip when the page has them, so the invited and the
+  // ones who said no are named too; the participants alone otherwise.
+  const roster = guests.length > 0 ? guests : participants;
+  const hasGuestLines = activityGuestLines(activity, roster).length > 0;
 
   return (
     <div className="space-y-4">
@@ -646,11 +652,9 @@ const ActivityDetails = memo(function ActivityDetails({
             </Badge>
           )}
         </div>
-        {participants.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 pl-7">
-            {participants.map((person) => (
-              <PersonBadge key={person.id} person={person} size="sm" />
-            ))}
+        {hasGuestLines ? (
+          <div className="pl-7">
+            <ActivityGuestList activity={activity} guests={roster} />
           </div>
         ) : (
           <p className="pl-7 text-sm text-muted-foreground">
@@ -667,7 +671,7 @@ const ActivityDetails = memo(function ActivityDetails({
         ) : null}
       </div>
 
-      {/* Invitations: who was asked, who said no, and asking more */}
+      {/* Asking more guests */}
       <ActivityInvitations activity={activity} guests={guests} onInvite={onInvite} />
 
       {/* Organizer */}

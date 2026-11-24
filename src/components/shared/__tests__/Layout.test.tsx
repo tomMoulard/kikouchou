@@ -66,6 +66,9 @@ const { fixedToday, clock } = vi.hoisted(() => {
 
 // The invitation prompt has its own tests, and reads contexts this file does
 // not provide.
+vi.mock('@/lib/notifications/ChangeAuthorBinding', () => ({
+  ChangeAuthorBinding: () => null,
+}));
 vi.mock('@/features/activities/components/ActivityInvitationPrompt', () => ({
   ActivityInvitationPrompt: () => null,
 }));

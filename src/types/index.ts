@@ -1170,6 +1170,11 @@ export interface Person extends Identifiable, TripScoped {
    * @example "Peanuts"
    */
   dietaryNote?: string;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1232,6 +1237,11 @@ export interface RoomAssignment extends Identifiable, TripScoped {
    * @example "2024-07-19" — four nights from the 15th, leaving on the 19th
    */
   endDate: ISODateString;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1380,6 +1390,11 @@ export interface Transport extends Identifiable, TripScoped {
    * @example "Platform 12" or "Terminal 2E"
    */
   notes?: string;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1465,6 +1480,11 @@ export interface Vehicle extends Identifiable, TripScoped {
    * @example "Boîte automatique — Aurélia ne peut pas la conduire"
    */
   notes?: string;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1590,6 +1610,11 @@ export interface Ride extends Identifiable, TripScoped {
    * @example "Passer prendre le pain en redescendant"
    */
   notes?: string;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1713,6 +1738,11 @@ export interface Activity extends Identifiable, TripScoped {
    * @example "10 € l'entrée. Prévoir des bottes."
    */
   notes?: string;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1916,6 +1946,11 @@ export interface Meal extends Identifiable, TripScoped {
    * @example 2
    */
   headcountAdjustment?: number;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**
@@ -1959,6 +1994,11 @@ export interface ShoppingItem extends Identifiable, TripScoped {
    * The list shows lines in the order they were added.
    */
   createdAt: number;
+  /**
+   * The guest whose device last saved this row, when it knew who it was. The
+   * push server leaves them out of the notification the change sends.
+   */
+  updatedBy?: PersonId;
 }
 
 /**

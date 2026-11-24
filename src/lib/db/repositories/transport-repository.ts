@@ -33,6 +33,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import { sanitizeTransportData } from '@/lib/db/sanitize';
 import {
   requireCanonicalDatetime,
@@ -158,9 +159,11 @@ export async function createTransport(
       tripId,
       ...sanitizedData,
       datetime,
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.transports.add(transport);
+    announceGuestChange(tripId, 'transport', transport.id);
     return transport;
   } catch (error) {
     throw repositoryError(
@@ -508,7 +511,7 @@ export async function updateTransportWithOwnershipCheck(
   tripId: TripId,
   data: Partial<TransportFormData>,
 ): Promise<void> {
-  await db.transaction('rw', db.transports, async () => {
+  const changed = await db.transaction('rw', db.transports, async () => {
     const transport = await db.transports.get(id);
 
     if (!transport) {
@@ -541,6 +544,7 @@ export async function updateTransportWithOwnershipCheck(
         ? {}
         : { datetime: requireCanonicalDatetime(data.datetime) }),
       ...(detachesFromRide ? { rideId: undefined } : {}),
+      ...authorPatch(tripId, 'update'),
     });
 
     // The guests on the same train see the same train. The group is read
@@ -550,10 +554,14 @@ export async function updateTransportWithOwnershipCheck(
     if (Object.keys(shared).length > 0) {
       const updated = await db.transports.get(id);
       if (updated) {
-        await writeSharedFieldsToMates(tripId, updated, shared);
+        return [id, ...(await writeSharedFieldsToMates(tripId, updated, shared))];
       }
     }
+    return [id];
   });
+  for (const changedId of changed) {
+    announceGuestChange(tripId, 'transport', changedId);
+  }
 }
 
 // ============================================================================
@@ -577,24 +585,30 @@ async function getSharedLegRows(
 /**
  * Writes the vehicle's fields of a leg to every other leg of its group.
  * Must run inside a transaction over `db.transports`.
+ *
+ * @returns The ids of the legs written
  */
 async function writeSharedFieldsToMates(
   tripId: TripId,
   leg: Transport,
   shared: SharedLegFields,
-): Promise<void> {
+): Promise<TransportId[]> {
   const patch = {
     ...shared,
     ...(shared.datetime === undefined
       ? {}
       : { datetime: requireCanonicalDatetime(shared.datetime) }),
+    ...authorPatch(tripId, 'update'),
   };
   const mates = await getSharedLegRows(tripId, getSharedLegKey(leg));
+  const written: TransportId[] = [];
   for (const mate of mates) {
     if (mate.id !== leg.id) {
       await db.transports.update(mate.id, patch);
+      written.push(mate.id);
     }
   }
+  return written;
 }
 
 /**
@@ -633,6 +647,7 @@ export async function createSharedTransports(
       tripId,
       personId,
       datetime,
+      ...authorPatch(tripId, 'create'),
     };
     delete row.sharedLegId;
     // The founder's own key is its id, so it stores nothing.
@@ -653,6 +668,9 @@ export async function createSharedTransports(
       }
       await db.transports.bulkAdd(transports);
     });
+    for (const transport of transports) {
+      announceGuestChange(tripId, 'transport', transport.id);
+    }
     return transports;
   } catch (error) {
     throw repositoryError(
@@ -681,7 +699,7 @@ export async function setTransportSharedLeg(
   tripId: TripId,
   key: SharedLegId | null,
 ): Promise<SharedLegId> {
-  return db.transaction('rw', db.transports, async () => {
+  const written = await db.transaction('rw', db.transports, async () => {
     const transport = await db.transports.get(id);
     if (!transport) {
       throw new Error(`Transport with ID "${id}" not found`);
@@ -696,7 +714,10 @@ export async function setTransportSharedLeg(
         (row) => row.id !== id,
       );
       const ownSharedLegId = isFounderOfOthers ? createSharedLegId() : undefined;
-      await db.transports.update(id, { sharedLegId: ownSharedLegId });
+      await db.transports.update(id, {
+        sharedLegId: ownSharedLegId,
+        ...authorPatch(tripId, 'update'),
+      });
       return ownSharedLegId ?? ownKey;
     }
 
@@ -716,9 +737,12 @@ export async function setTransportSharedLeg(
     await db.transports.update(id, {
       ...(copied as Partial<Transport>),
       sharedLegId: key,
+      ...authorPatch(tripId, 'update'),
     });
     return key;
   });
+  announceGuestChange(tripId, 'transport', id);
+  return written;
 }
 
 /**

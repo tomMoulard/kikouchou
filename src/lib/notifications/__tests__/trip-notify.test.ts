@@ -60,6 +60,39 @@ describe('requestTripNotification', () => {
   });
 });
 
+describe('trip changes', () => {
+  it('names the collection, keeps two collections apart and drops a malformed ask', async () => {
+    requestTripNotification(TRIP, { kind: 'trip_change', collection: 'rides', subjectId: 'x-1' });
+    requestTripNotification(TRIP, { kind: 'trip_change', collection: 'transport', subjectId: 'x-1' });
+    requestTripNotification(TRIP, { kind: 'trip_change', collection: 'rides', subjectId: 'x-1' });
+    // Stored by hand: a trip change without its collection is never sent.
+    localStorage.setItem(
+      TRIP_NOTIFY_QUEUE_KEY,
+      JSON.stringify([
+        ...queued(),
+        { id: 'bad', remoteTripId: TRIP.remoteTripId, kind: 'trip_change', subjectId: 'y', attempts: 0 },
+      ]),
+    );
+    expect(queued()).toHaveLength(3);
+    const send = answer(200);
+
+    await flush(send);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledWith(
+      `${ORIGIN}/push/notify`,
+      expect.objectContaining({
+        body: JSON.stringify({
+          trip_id: TRIP.remoteTripId,
+          kind: 'trip_change',
+          subject_id: 'x-1',
+          collection: 'transport',
+        }),
+      }),
+    );
+  });
+});
+
 describe('flushTripNotifications', () => {
   it('asks the server with the member token, and forgets the ask once told', async () => {
     requestTripNotification(TRIP, { kind: 'activity_invite', subjectId: 'act-1' });

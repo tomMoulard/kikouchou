@@ -772,9 +772,15 @@
       "sent_one": "{{count}} guest invited",
       "sent_other": "{{count}} guests invited",
       "failed": "Could not send the invitation",
-      "declined": "Your answer was sent: you can't come",
-      "invitedList": "Invited, no answer yet",
-      "declinedList": "Can't come"
+      "declined": "Your answer was sent: you can't come"
+    },
+    "rsvp": {
+      "going": "Going",
+      "invited": "Invited, no answer yet",
+      "declined": "Can't come",
+      "organizer": "Organizer",
+      "listLabel": "Guests and their answers",
+      "summary": "{{going}} going, {{invited}} waiting, {{declined}} can't come"
     },
     "invitationPrompt": {
       "title": "You're invited",

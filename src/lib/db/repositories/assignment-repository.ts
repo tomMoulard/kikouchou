@@ -10,6 +10,7 @@
 import { stayNightsOverlap } from '@/features/rooms/utils/capacity-utils';
 import { db } from '@/lib/db/database';
 import { createRoomAssignmentId } from '@/lib/db/utils';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import type {
   ISODateString,
   PersonId,
@@ -69,9 +70,11 @@ export async function createAssignment(
       id: createRoomAssignmentId(),
       tripId,
       ...data,
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.roomAssignments.add(assignment);
+    announceGuestChange(tripId, 'roomAssignments', assignment.id);
     return assignment;
   } catch (error) {
     throw repositoryError(
@@ -382,8 +385,9 @@ export async function updateAssignmentWithOwnershipCheck(
     const finalEndDate = data.endDate ?? assignment.endDate;
     validateDateRange(finalStartDate, finalEndDate);
 
-    await db.roomAssignments.update(id, data);
+    await db.roomAssignments.update(id, { ...data, ...authorPatch(tripId, 'update') });
   });
+  announceGuestChange(tripId, 'roomAssignments', id);
 }
 
 /**

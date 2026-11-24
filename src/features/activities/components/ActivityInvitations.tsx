@@ -1,7 +1,9 @@
 /**
- * @fileoverview Who was invited to an activity, who said no, and inviting more.
+ * @fileoverview Inviting more guests to an activity.
  *
- * Shown in the activity's detail dialog under who is coming. "Invite" opens a
+ * Shown in the activity's detail dialog under its guest list
+ * (`ActivityGuestList`, which shows who is going, invited or not coming).
+ * "Invite" opens a
  * checklist of the guests who are neither in nor already asked; sending it
  * writes the invitation (`useActivityInvitations`), which tells their devices
  * at once and asks them when they next open the trip.
@@ -11,7 +13,7 @@
 
 import { type ReactElement, memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Mail, UserPlus, UserX } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,10 +42,10 @@ export interface ActivityInvitationsProps {
 // ============================================================================
 
 /**
- * The invited and declined guests, and the invite checklist.
+ * The invite button and checklist.
  *
  * @param props - See {@link ActivityInvitationsProps}
- * @returns The section, or nothing when there is nobody to show or invite
+ * @returns The section, or nothing when this device cannot invite anybody
  */
 export const ActivityInvitations = memo(function ActivityInvitations({
   activity,
@@ -54,15 +56,6 @@ export const ActivityInvitations = memo(function ActivityInvitations({
   const [isPicking, setIsPicking] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<PersonId>>(new Set());
   const [isSending, setIsSending] = useState(false);
-
-  const byId = useMemo(() => new Map(guests.map((guest) => [guest.id, guest])), [guests]);
-  const resolve = useCallback(
-    (ids: readonly PersonId[] | undefined): Person[] =>
-      (ids ?? []).map((id) => byId.get(id)).filter((guest): guest is Person => guest !== undefined),
-    [byId],
-  );
-  const invited = resolve(activity.invitedIds);
-  const declined = resolve(activity.declinedIds);
 
   // A guest who said no can be asked again; one already in or asked cannot.
   const candidates = useMemo(() => {
@@ -96,45 +89,13 @@ export const ActivityInvitations = memo(function ActivityInvitations({
   }, [activity.id, onInvite, picked]);
 
   const canInvite = onInvite !== undefined && candidates.length > 0;
-  if (invited.length === 0 && declined.length === 0 && !canInvite) {
+  if (!canInvite) {
     return null;
   }
 
   return (
     <div className="space-y-2">
-      {invited.length > 0 && (
-        <div className="flex items-start gap-3">
-          <Mail className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-sm text-muted-foreground">
-              {t('activities.invite.invitedList', 'Invited, no answer yet')}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {invited.map((guest) => (
-                <PersonBadge key={guest.id} person={guest} size="sm" />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {declined.length > 0 && (
-        <div className="flex items-start gap-3">
-          <UserX className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0 space-y-1.5">
-            <p className="text-sm text-muted-foreground">
-              {t('activities.invite.declinedList', "Can't come")}
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {declined.map((guest) => (
-                <PersonBadge key={guest.id} person={guest} size="sm" />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {canInvite && !isPicking && (
+      {!isPicking && (
         <Button
           type="button"
           variant="outline"
@@ -146,7 +107,7 @@ export const ActivityInvitations = memo(function ActivityInvitations({
         </Button>
       )}
 
-      {canInvite && isPicking && (
+      {isPicking && (
         <fieldset className="space-y-2 rounded-md border p-3">
           <legend className="px-1 text-sm font-medium">
             {t('activities.invite.pickTitle', 'Who do you want to invite?')}

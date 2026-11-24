@@ -9,6 +9,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import { sanitizeMealData } from '@/lib/db/sanitize';
 import { createMealId } from '@/lib/db/utils';
 import type { Meal, MealFormData, MealId, TripId } from '@/types';
@@ -55,9 +56,11 @@ export async function createMeal(tripId: TripId, data: MealFormData): Promise<Me
       tripId,
       ...withoutUndefined(sanitizedData),
       organizerIds: [...sanitizedData.organizerIds],
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.meals.add(meal);
+    announceGuestChange(tripId, 'meals', meal.id);
     return meal;
   } catch (error) {
     throw repositoryError(
@@ -138,8 +141,9 @@ export async function updateMealWithOwnershipCheck(
       throw new Error('Cannot update meal: meal does not belong to current trip');
     }
 
-    await db.meals.update(id, sanitizedData);
+    await db.meals.update(id, { ...sanitizedData, ...authorPatch(tripId, 'update') });
   });
+  announceGuestChange(tripId, 'meals', id);
 }
 
 /**

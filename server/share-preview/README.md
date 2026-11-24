@@ -103,21 +103,27 @@ How a reminder travels:
 
 ### Instant notifications
 
-Two kinds cannot wait for the next pass, and are asked for by the device that
-made the change, the moment the change has reached the server:
-`activity_invite` (guests invited to an activity) and `money_line` (a money
-line added or changed). The app calls `POST /push/notify` with
-`{ "trip_id", "kind", "subject_id" }` and the signed-in member's Supabase
-access token as `Authorization: Bearer <token>`.
+A change that involves a guest cannot wait for the next pass, and is asked
+for by the device that made it, the moment the change has reached the server:
+`activity_invite` (guests invited to an activity), `money_line` (a money line
+added or changed) and `trip_change` (any other row naming a guest added or
+changed: their stay, a room night, a journey, a ride, a car, an activity they
+are in or run, a meal they cook, a shopping item they buy). The app calls
+`POST /push/notify` with `{ "trip_id", "kind", "subject_id" }`, plus
+`"collection"` for a `trip_change` (`guests`, `roomAssignments`, `transport`,
+`rides`, `vehicles`, `activities`, `meals` or `shoppingItems`), and the
+signed-in member's Supabase access token as `Authorization: Bearer <token>`.
 
 The service asks Supabase whose token it is (`/auth/v1/user`), checks that
 account is in `trip_members`, and reads the live document for who to tell: the
-invited guests not yet in, or everybody on the line (its payer and its
-shares). The guest who made the change, `invitedBy` or `updatedBy` in the
-document, is never told. Each device is told once per invitation, and once
-per version of a line: a `money_line` subject is the line's id and a digest of
-what it says. Replies: `sent` (200, with a count), `not-yet` (409: the
-document does not hold the activity or the line yet, the app asks again),
+invited guests not yet in, everybody on the line (its payer and its shares),
+or the guests the row names (a ride: its driver and every passenger). The
+guest who made the change, `invitedBy` or `updatedBy` in the document, is
+never told. Each device is told once per invitation, and once per version of a
+line or a row: the subject is the row's id and a digest of what it says, so a
+save that changed nothing is not told again. No notification shows a guest's
+name: a stay or a car is announced without its title. Replies: `sent` (200, with a count), `not-yet` (409: the
+document does not hold the row yet, the app asks again),
 `unauthorized` (401), `not-a-member` (403), `failed` (502). The route answers
 CORS preflights for `NOTIFY_ALLOWED_ORIGINS`, by default the website and the
 store apps' origins.

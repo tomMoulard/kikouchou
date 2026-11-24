@@ -27,6 +27,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 import { sanitizeRideData } from '@/lib/db/sanitize';
 import {
   requireCanonicalDatetime,
@@ -233,9 +234,11 @@ export async function createRide(
       tripId,
       ...sanitizedData,
       meetDatetime,
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.rides.add(ride);
+    announceGuestChange(tripId, 'rides', ride.id);
     return ride;
   } catch (error) {
     throw repositoryError(
@@ -283,8 +286,10 @@ export async function updateRideWithOwnershipCheck(
       ...(data.meetDatetime === undefined
         ? {}
         : { meetDatetime: requireCanonicalDatetime(data.meetDatetime) }),
+      ...authorPatch(tripId, 'update'),
     });
   });
+  announceGuestChange(tripId, 'rides', id);
 }
 
 /**
@@ -339,8 +344,13 @@ export async function setTransportRide(
     // Detaching leaves it cleared. The ride became the authority the moment the
     // leg joined one, and restoring a pre-ride driver nobody has confirmed
     // since would be inventing an arrangement.
-    await db.transports.update(transportId, { rideId, driverId: undefined });
+    await db.transports.update(transportId, {
+      rideId,
+      driverId: undefined,
+      ...authorPatch(tripId, 'update'),
+    });
   });
+  announceGuestChange(tripId, 'transport', transportId);
 }
 
 /**

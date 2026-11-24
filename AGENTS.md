@@ -739,19 +739,35 @@ turns either into the one event and strips the parameter back off the URL. A new
 kind of notification must put a `kind` on the notification's `data`, or its
 clicks all count as `unknown`.
 
-**Two kinds are told at once, not on the sweep: `activity_invite` and
-`money_line`.** The device that made the change asks `POST /push/notify`
-(`lib/notifications/trip-notify.ts` to `notify.rs`) with the member's access
-token, and the server reads who to tell from the live document. Two things
-keep it right, and a new kind needs both:
+**Every change that involves a guest tells that guest, at once.** Anything
+added or changed that names a guest notifies their devices, not on the sweep:
+their own stay, a room night, a journey, a ride (its driver and every
+passenger), a car, an activity they are in or run, a meal they cook, a
+shopping item they buy, a money line they are on, an invitation. Three kinds
+carry it: `activity_invite`, `money_line`, and `trip_change` for everything
+else (the request names the collection). The device that made the change asks
+`POST /push/notify` (`lib/notifications/trip-notify.ts` to `notify.rs`) with
+the member's access token, and the server reads who to tell from the live
+document. A new field naming a guest, or a new collection holding one, joins
+this: add it to `named_guests` in `notify.rs` (and `Collection`, with words
+in `change_title` and no guest name in them), and make its write path follow
+the rules below. Three things keep it right:
 
-- **The change records who made it** (`invitedBy` on the activity,
-  `updatedBy` on the line, from `useTripIdentity` / `getTripGuestPersonId`),
-  and the server never tells that guest. A write path that skips it notifies
-  the author about their own change.
+- **Every write path records who made the change and asks once it is
+  written.** Repositories spread `authorPatch(tripId, 'create' | 'update')`
+  into the row (`updatedBy`) and call `announceGuestChange(tripId, collection,
+  id)` after the write (`lib/notifications/guest-change.ts`); invitations
+  record `invitedBy`, money lines `updatedBy` from the page. The server never
+  tells that guest. A write path that skips the stamp notifies the author
+  about their own change; one that skips the ask tells nobody. Deletions are
+  not told: the row, and who it named, is gone when the server reads it.
+- **Who this device is comes from the layout** (`ChangeAuthorBinding`, from
+  `useTripIdentity`): repositories cannot read React state.
 - **The ask is queued, and sent once the change is on the server**
   (`TripNotificationFlush`, under the sync provider). Sent straight from the
-  click, it reached the server before the change did and found nothing.
+  click, it reached the server before the change did and found nothing. Each
+  version of a row is told once: the log subject carries a digest of what the
+  row says, so a save that changed nothing is not told again.
 
 ### A feature flag is a three-state answer, and it can be forced locally
 

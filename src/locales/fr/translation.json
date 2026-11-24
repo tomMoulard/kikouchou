@@ -772,9 +772,15 @@
       "sent_one": "{{count}} personne invitée",
       "sent_other": "{{count}} personnes invitées",
       "failed": "Impossible d'envoyer l'invitation",
-      "declined": "Réponse envoyée : vous ne venez pas",
-      "invitedList": "Invités, sans réponse",
-      "declinedList": "Ne viennent pas"
+      "declined": "Réponse envoyée : vous ne venez pas"
+    },
+    "rsvp": {
+      "going": "Participe",
+      "invited": "Invité, pas encore de réponse",
+      "declined": "Ne vient pas",
+      "organizer": "Organise",
+      "listLabel": "Invités et leurs réponses",
+      "summary": "{{going}} participent, {{invited}} en attente, {{declined}} ne viennent pas"
     },
     "invitationPrompt": {
       "title": "Vous êtes invité",

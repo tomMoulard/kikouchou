@@ -1,8 +1,9 @@
 /**
  * @fileoverview Asking the push server to tell the people a change is about.
  *
- * An invitation to an activity and a money line someone is on are told at
- * once, not on the server's hourly sweep: the device that made the change asks
+ * A change that involves a guest (an invitation to an activity, a money line
+ * they are on, any other row naming them: `guest-change.ts`) is told at once,
+ * not on the server's hourly sweep: the device that made the change asks
  * `POST <share origin>/push/notify` (`server/share-preview`, `notify.rs`).
  * The server reads who to tell from the trip's shared document, so the ask
  * only works once the change is there. This module therefore queues the ask,
@@ -26,14 +27,40 @@ import type { Trip } from '@/types';
 // Types
 // ============================================================================
 
-/** The two changes worth telling at once. */
-export type TripNotificationKind = 'activity_invite' | 'money_line';
+/** The changes told at once. */
+export type TripNotificationKind = 'activity_invite' | 'money_line' | 'trip_change';
+
+/** The collections whose rows name guests, for a `trip_change`. */
+export type TripChangeCollection =
+  | 'guests'
+  | 'roomAssignments'
+  | 'transport'
+  | 'rides'
+  | 'vehicles'
+  | 'activities'
+  | 'meals'
+  | 'shoppingItems';
+
+const KINDS: readonly TripNotificationKind[] = ['activity_invite', 'money_line', 'trip_change'];
+
+const COLLECTIONS: readonly TripChangeCollection[] = [
+  'guests',
+  'roomAssignments',
+  'transport',
+  'rides',
+  'vehicles',
+  'activities',
+  'meals',
+  'shoppingItems',
+];
 
 /** What to tell about: the change, by its kind and its id in the document. */
 export interface TripNotificationRequest {
   readonly kind: TripNotificationKind;
-  /** The activity's or the money line's id. */
+  /** The row's id. */
   readonly subjectId: string;
+  /** Which rows the id is in: set for a `trip_change`, and only then. */
+  readonly collection?: TripChangeCollection;
 }
 
 interface QueuedNotification extends TripNotificationRequest {
@@ -98,8 +125,10 @@ function readQueue(storage: Storage | null): QueuedNotification[] {
             typeof (item as QueuedNotification).id === 'string' &&
             typeof (item as QueuedNotification).remoteTripId === 'string' &&
             typeof (item as QueuedNotification).subjectId === 'string' &&
-            ((item as QueuedNotification).kind === 'activity_invite' ||
-              (item as QueuedNotification).kind === 'money_line') &&
+            KINDS.includes((item as QueuedNotification).kind) &&
+            ((item as QueuedNotification).kind === 'trip_change'
+              ? COLLECTIONS.includes((item as QueuedNotification).collection as TripChangeCollection)
+              : (item as QueuedNotification).collection === undefined) &&
             typeof (item as QueuedNotification).attempts === 'number',
         )
       : [];
@@ -124,7 +153,12 @@ function writeQueue(storage: Storage | null, queue: readonly QueuedNotification[
 }
 
 function sameAsk(a: QueuedNotification, b: QueuedNotification): boolean {
-  return a.remoteTripId === b.remoteTripId && a.kind === b.kind && a.subjectId === b.subjectId;
+  return (
+    a.remoteTripId === b.remoteTripId &&
+    a.kind === b.kind &&
+    a.collection === b.collection &&
+    a.subjectId === b.subjectId
+  );
 }
 
 /** The signed-in session's access token, refreshed by supabase-js if due. */
@@ -236,7 +270,12 @@ async function runFlush(deps: FlushDeps): Promise<void> {
       const response = await send(`${origin}/push/notify`, {
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ trip_id: ask.remoteTripId, kind: ask.kind, subject_id: ask.subjectId }),
+        body: JSON.stringify({
+          trip_id: ask.remoteTripId,
+          kind: ask.kind,
+          subject_id: ask.subjectId,
+          ...(ask.collection === undefined ? {} : { collection: ask.collection }),
+        }),
       });
       status = response.status;
     } catch {

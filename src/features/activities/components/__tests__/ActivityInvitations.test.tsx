@@ -32,15 +32,6 @@ const activity = (overrides: Partial<Activity> = {}): Activity => ({
 });
 
 describe('ActivityInvitations', () => {
-  it('shows who is invited and who said no', () => {
-    render(<ActivityInvitations activity={activity()} guests={GUESTS} />, { withProviders: false });
-
-    expect(screen.getByText('activities.invite.invitedList')).toBeInTheDocument();
-    expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getByText('activities.invite.declinedList')).toBeInTheDocument();
-    expect(screen.getByText('Carol')).toBeInTheDocument();
-  });
-
   it('offers only the guests neither in nor asked, a no included, and sends the ones picked', async () => {
     const onInvite = vi.fn(async () => 1);
     const { user } = render(
@@ -62,17 +53,18 @@ describe('ActivityInvitations', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
-  it('offers no invitation where the device cannot write, and says nothing when there is nothing', () => {
+  it('offers no invitation where the device cannot write, nor when everybody is in or asked', () => {
     const { container, rerender } = render(
       <ActivityInvitations activity={activity()} guests={GUESTS} />,
       { withProviders: false },
     );
-    expect(screen.queryByRole('button', { name: 'activities.invite.button' })).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
 
     rerender(
       <ActivityInvitations
-        activity={activity({ invitedIds: [], declinedIds: [] })}
+        activity={activity({ participantIds: [ALICE.id, CAROL.id], invitedIds: [BOB.id, DAN.id] })}
         guests={GUESTS}
+        onInvite={vi.fn(async () => 0)}
       />,
     );
     expect(container).toBeEmptyDOMElement();

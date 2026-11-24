@@ -20,6 +20,7 @@ import { createPersonId } from '@/lib/db/utils';
 import type { Expense, Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
 import { repositoryError } from '@/lib/db/repository-error';
+import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
 
 /**
  * Creates a new person in the database.
@@ -48,9 +49,11 @@ export async function createPerson(
       id: createPersonId(),
       tripId,
       ...sanitizedData,
+      ...authorPatch(tripId, 'create'),
     };
 
     await db.persons.add(person);
+    announceGuestChange(tripId, 'guests', person.id);
     return person;
   } catch (error) {
     throw repositoryError(`Failed to create person "${sanitizedData.name}" for trip ${tripId}`, error);
@@ -374,8 +377,9 @@ export async function updatePersonWithOwnershipCheck(
       patch.extraStays = extraStays.length > 0 ? extraStays : undefined;
     }
 
-    await db.persons.update(id, patch);
+    await db.persons.update(id, { ...patch, ...authorPatch(tripId, 'update') });
   });
+  announceGuestChange(tripId, 'guests', id);
 }
 
 /**
