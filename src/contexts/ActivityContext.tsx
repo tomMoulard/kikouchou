@@ -182,7 +182,10 @@ const compareActivities = (a: Activity, b: Activity): boolean =>
   a.organizerId === b.organizerId &&
   a.maxParticipants === b.maxParticipants &&
   a.notes === b.notes &&
-  areParticipantsEqual(a.participantIds, b.participantIds);
+  areParticipantsEqual(a.participantIds, b.participantIds) &&
+  areParticipantsEqual(a.invitedIds ?? [], b.invitedIds ?? []) &&
+  areParticipantsEqual(a.declinedIds ?? [], b.declinedIds ?? []) &&
+  a.invitedBy === b.invitedBy;
 
 /**
  * Compares two activity arrays for equality based on all mutable properties.

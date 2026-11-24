@@ -306,14 +306,118 @@ export async function setActivityParticipation(
       ? [...current, personId]
       : current.filter((candidate) => candidate !== personId);
 
-    await db.activities.update(id, { participantIds: next });
+    // Joining answers an invitation, however the guest got here: the invite
+    // banner, the join button, or the assistant.
+    await db.activities.update(id, {
+      participantIds: next,
+      ...(joining
+        ? {
+            invitedIds: withoutPerson(activity.invitedIds, personId),
+            declinedIds: withoutPerson(activity.declinedIds, personId),
+          }
+        : {}),
+    });
     return next;
+  });
+}
+
+/**
+ * Invites guests to an activity.
+ *
+ * A guest already in is skipped. A guest who declined is asked again: an
+ * invitation sent after a "no" is a new question. `invitedBy` is the guest
+ * this device says it is, so the invitee is told who asks and the sender is
+ * not notified; it is left as it was when the device has not said.
+ *
+ * @param id - The activity's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @param personIds - The guests to invite
+ * @param invitedBy - The guest sending the invitation, when known
+ * @returns The guests newly invited, for the notification
+ * @throws {Error} If the activity is not found or belongs to another trip
+ */
+export async function inviteToActivity(
+  id: ActivityId,
+  tripId: TripId,
+  personIds: readonly PersonId[],
+  invitedBy?: PersonId,
+): Promise<PersonId[]> {
+  return db.transaction('rw', db.activities, async () => {
+    const activity = await db.activities.get(id);
+
+    if (!activity) {
+      throw new Error(`Activity with ID "${id}" not found`);
+    }
+    if (activity.tripId !== tripId) {
+      throw new Error('Cannot update activity: activity does not belong to current trip');
+    }
+
+    const participants = new Set(activity.participantIds ?? []);
+    const invited = new Set(activity.invitedIds ?? []);
+    const added = Array.from(new Set(personIds)).filter(
+      (personId) => !participants.has(personId) && !invited.has(personId),
+    );
+    if (added.length === 0) {
+      return [];
+    }
+
+    await db.activities.update(id, {
+      invitedIds: [...invited, ...added],
+      declinedIds: (activity.declinedIds ?? []).filter((personId) => !added.includes(personId)),
+      ...(invitedBy === undefined ? {} : { invitedBy }),
+    });
+    return added;
+  });
+}
+
+/**
+ * Records a guest's "no" to an invitation, for everybody to see.
+ *
+ * @param id - The activity's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @param personId - The guest declining
+ * @throws {Error} If the activity is not found or belongs to another trip
+ */
+export async function declineActivityInvitation(
+  id: ActivityId,
+  tripId: TripId,
+  personId: PersonId,
+): Promise<void> {
+  await db.transaction('rw', db.activities, async () => {
+    const activity = await db.activities.get(id);
+
+    if (!activity) {
+      throw new Error(`Activity with ID "${id}" not found`);
+    }
+    if (activity.tripId !== tripId) {
+      throw new Error('Cannot update activity: activity does not belong to current trip');
+    }
+
+    const declined = activity.declinedIds ?? [];
+    await db.activities.update(id, {
+      invitedIds: withoutPerson(activity.invitedIds, personId),
+      declinedIds: declined.includes(personId) ? declined : [...declined, personId],
+    });
   });
 }
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * A guest list without one guest; `undefined` stays `undefined`.
+ *
+ * @param ids - The list
+ * @param personId - The guest to take out
+ * @returns The list without the guest
+ */
+function withoutPerson(
+  ids: readonly PersonId[] | undefined,
+  personId: PersonId,
+): PersonId[] | undefined {
+  return ids === undefined ? undefined : ids.filter((candidate) => candidate !== personId);
+}
 
 /**
  * Whether an activity has reached its optional participant cap.

@@ -630,6 +630,9 @@ export const ActivityFormDataSchema = z
       .optional(),
     coordinates: coordinatesSchema.optional(),
     participantIds: z.array(personIdSchema),
+    invitedIds: z.array(personIdSchema).optional(),
+    declinedIds: z.array(personIdSchema).optional(),
+    invitedBy: personIdSchema.optional(),
     organizerId: personIdSchema.optional(),
     maxParticipants: z
       .number()

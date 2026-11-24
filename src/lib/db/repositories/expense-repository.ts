@@ -34,6 +34,15 @@ const MAX_STRING_KEY = '￿';
 // ============================================================================
 
 /**
+ * Who is writing a money line, so the others on it can be told and this
+ * guest is not.
+ */
+export interface ExpenseAuthorOptions {
+  /** The guest this device says it is (`getTripGuestPersonId`), when known. */
+  readonly updatedBy?: PersonId;
+}
+
+/**
  * Creates a new money line in the database.
  *
  * @param tripId - The trip this line belongs to
@@ -57,6 +66,7 @@ const MAX_STRING_KEY = '￿';
 export async function createExpense(
   tripId: TripId,
   data: ExpenseFormData,
+  options: ExpenseAuthorOptions = {},
 ): Promise<Expense> {
   const sanitizedData = sanitizeExpenseData(data);
 
@@ -66,6 +76,7 @@ export async function createExpense(
       tripId,
       ...sanitizedData,
       splits: [...sanitizedData.splits],
+      ...(options.updatedBy === undefined ? {} : { updatedBy: options.updatedBy }),
     };
 
     await db.expenses.add(expense);
@@ -155,6 +166,7 @@ export async function updateExpenseWithOwnershipCheck(
   id: ExpenseId,
   tripId: TripId,
   data: Partial<ExpenseFormData>,
+  options: ExpenseAuthorOptions = {},
 ): Promise<void> {
   const sanitizedData = sanitizeExpensePartial(data);
 
@@ -168,7 +180,10 @@ export async function updateExpenseWithOwnershipCheck(
       throw new Error('Cannot update expense: expense does not belong to current trip');
     }
 
-    await db.expenses.update(id, sanitizedData);
+    // Always written, `undefined` included: Dexie then drops the key, so a
+    // change from a device that has not said who it is leaves no earlier
+    // author recorded against it.
+    await db.expenses.update(id, { ...sanitizedData, updatedBy: options.updatedBy });
   });
 }
 

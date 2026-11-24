@@ -486,6 +486,28 @@ async function removePersonFromActivities(id: PersonId): Promise<void> {
     .where('organizerId')
     .equals(id)
     .modify({ organizerId: undefined });
+
+  // Invitations have no index, so the activities a guest was only invited to
+  // are found by a filter. Not through the guest's row: this runs beside its
+  // deletion, and the row may be gone already.
+  await db.activities
+    .filter(
+      (activity) =>
+        Boolean(activity.invitedIds?.includes(id)) ||
+        Boolean(activity.declinedIds?.includes(id)) ||
+        activity.invitedBy === id,
+    )
+    .modify((activity) => {
+      if (activity.invitedIds) {
+        activity.invitedIds = activity.invitedIds.filter((invited) => invited !== id);
+      }
+      if (activity.declinedIds) {
+        activity.declinedIds = activity.declinedIds.filter((declined) => declined !== id);
+      }
+      if (activity.invitedBy === id) {
+        delete activity.invitedBy;
+      }
+    });
 }
 
 /**

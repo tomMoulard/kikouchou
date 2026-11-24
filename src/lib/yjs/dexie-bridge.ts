@@ -767,7 +767,45 @@ function buildActivityRecord(
     delete row.organizerId;
   }
 
+  // Invitations: bounded like the participants, and dropped when empty so a
+  // row with none reads the same as one written before invitations existed.
+  const invited = boundedPersonIds(row.invitedIds);
+  if (invited.length > 0) {
+    row.invitedIds = invited;
+  } else {
+    delete row.invitedIds;
+  }
+  const declined = boundedPersonIds(row.declinedIds);
+  if (declined.length > 0) {
+    row.declinedIds = declined;
+  } else {
+    delete row.declinedIds;
+  }
+  if (typeof row.invitedBy !== 'string' || row.invitedBy.length === 0) {
+    delete row.invitedBy;
+  }
+
   return row;
+}
+
+/**
+ * A list of guest ids as a peer's document may hold it: strings only, each
+ * once, at most as many as an activity can seat.
+ *
+ * @param value - Whatever the document holds
+ * @returns The usable ids
+ */
+function boundedPersonIds(value: unknown): Activity['participantIds'] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      value.filter(
+        (id): id is Activity['participantIds'][number] => typeof id === 'string' && id.length > 0,
+      ),
+    ),
+  ).slice(0, MAX_ACTIVITY_PARTICIPANTS);
 }
 
 function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
@@ -857,6 +895,10 @@ function buildExpenseRecord(
           value: normalizeExpenseSplitValue(split.value),
         }))
     : [];
+
+  if (typeof row.updatedBy !== 'string' || row.updatedBy.length === 0) {
+    delete row.updatedBy;
+  }
 
   return row;
 }

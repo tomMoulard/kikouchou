@@ -221,10 +221,12 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
       }
       const tripId = tripIdFromUrl as TripId;
 
+      // The guest this device is: told nothing about their own change.
+      const author = { updatedBy: myPersonId ?? undefined };
       if (expense) {
-        await updateExpenseWithOwnershipCheck(expense.id, tripId, data);
+        await updateExpenseWithOwnershipCheck(expense.id, tripId, data, author);
       } else {
-        await createExpense(tripId, data);
+        await createExpense(tripId, data, author);
       }
 
       captureUsage('expense_saved', {
@@ -235,7 +237,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
         beneficiary_count: data.splits.length,
       });
     },
-    [tripIdFromUrl],
+    [myPersonId, tripIdFromUrl],
   );
 
   const handleDelete = useCallback(
@@ -293,7 +295,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
         payerId: payment.fromPersonId,
         splitMode: 'equal',
         splits: [{ personId: payment.toPersonId, value: payment.amount }],
-      })
+      }, { updatedBy: myPersonId ?? undefined })
         .then(() => {
           notifySuccess(t('money.balances.paymentRecorded'));
           captureUsage('expense_saved', {
@@ -312,7 +314,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
           );
         });
     },
-    [defaultDate, notifySuccess, personsMap, t, tripIdFromUrl],
+    [defaultDate, myPersonId, notifySuccess, personsMap, t, tripIdFromUrl],
   );
 
   const isLoading = isTripLoading || (tripIdFromUrl !== undefined && result === undefined);

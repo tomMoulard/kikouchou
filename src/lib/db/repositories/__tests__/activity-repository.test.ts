@@ -11,6 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createActivity,
+  declineActivityInvitation,
   deleteActivityWithOwnershipCheck,
   getActivitiesByOrganizerId,
   getActivitiesByParticipantId,
@@ -18,6 +19,7 @@ import {
   getActivitiesForDate,
   getActivityById,
   getActivityCount,
+  inviteToActivity,
   isActivityFull,
   setActivityParticipation,
   updateActivityWithOwnershipCheck,
@@ -582,5 +584,76 @@ describe('getActivitiesByTripId, other trips', () => {
     const ours = await createActivity(tripId, createTestActivityData());
 
     expect((await getActivitiesByTripId(tripId)).map((a) => a.id)).toEqual([ours.id]);
+  });
+});
+
+describe('activity invitations', () => {
+  async function setUp() {
+    const tripId = await createTestTrip();
+    const alice = await createTestPerson(tripId, 'Alice');
+    const bob = await createTestPerson(tripId, 'Bob');
+    const carol = await createTestPerson(tripId, 'Carol');
+    const activity = await createActivity(tripId, createTestActivityData({ participantIds: [carol] }));
+    return { tripId, alice, bob, carol, activityId: activity.id };
+  }
+
+  it('invites guests, skips one already in, and records who asked', async () => {
+    const { tripId, alice, bob, carol, activityId } = await setUp();
+
+    const added = await inviteToActivity(activityId, tripId, [bob, carol, bob], alice);
+
+    expect(added).toEqual([bob]);
+    expect(await getActivityById(activityId)).toMatchObject({
+      invitedIds: [bob],
+      invitedBy: alice,
+      participantIds: [carol],
+    });
+    // Asking again adds nobody, so nobody is notified twice.
+    await expect(inviteToActivity(activityId, tripId, [bob], alice)).resolves.toEqual([]);
+  });
+
+  it('records a no for everyone, and asks again after one', async () => {
+    const { tripId, alice, bob, activityId } = await setUp();
+    await inviteToActivity(activityId, tripId, [bob], alice);
+
+    await declineActivityInvitation(activityId, tripId, bob);
+    expect(await getActivityById(activityId)).toMatchObject({ invitedIds: [], declinedIds: [bob] });
+
+    await expect(inviteToActivity(activityId, tripId, [bob], alice)).resolves.toEqual([bob]);
+    expect(await getActivityById(activityId)).toMatchObject({ invitedIds: [bob], declinedIds: [] });
+  });
+
+  it('settles the invitation when the guest joins, however they join', async () => {
+    const { tripId, alice, bob, activityId } = await setUp();
+    await inviteToActivity(activityId, tripId, [bob], alice);
+
+    await setActivityParticipation(activityId, tripId, bob, true);
+
+    const activity = await getActivityById(activityId);
+    expect(activity?.participantIds).toContain(bob);
+    expect(activity?.invitedIds).toEqual([]);
+  });
+
+  it('refuses an activity of another trip', async () => {
+    const { activityId, bob, alice } = await setUp();
+    const otherTrip = await createTestTrip('Other');
+
+    await expect(inviteToActivity(activityId, otherTrip, [bob], alice)).rejects.toThrow();
+    await expect(declineActivityInvitation(activityId, otherTrip, bob)).rejects.toThrow();
+  });
+
+  it('forgets a deleted guest in every invitation list', async () => {
+    const { tripId, alice, bob, carol, activityId } = await setUp();
+    await inviteToActivity(activityId, tripId, [bob], alice);
+    await declineActivityInvitation(activityId, tripId, bob);
+    await inviteToActivity(activityId, tripId, [alice], carol);
+
+    await deletePersonWithOwnershipCheck(bob, tripId);
+    await deletePersonWithOwnershipCheck(carol, tripId);
+
+    const activity = await getActivityById(activityId);
+    expect(activity?.declinedIds).toEqual([]);
+    expect(activity?.invitedIds).toEqual([alice]);
+    expect(activity?.invitedBy).toBeUndefined();
   });
 });

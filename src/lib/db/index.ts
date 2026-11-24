@@ -221,6 +221,8 @@ export {
   getActivityCount,
   isActivityFull,
   setActivityParticipation,
+  inviteToActivity,
+  declineActivityInvitation,
   // Transactional operations with ownership validation
   updateActivityWithOwnershipCheck,
   deleteActivityWithOwnershipCheck,

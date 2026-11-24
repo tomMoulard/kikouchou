@@ -24,6 +24,7 @@ import { useOfflineAwareNotify } from '@/hooks';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useMealPlannerEnabled } from '@/hooks/useMealPlannerEnabled';
 import { tripAccessOf } from '@/hooks/useTripAccess';
+import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
 import { stayFollowingTravel } from '@/features/persons/utils/stay-from-travel';
 import { parseBedsText } from '@/features/rooms/utils/bed-text';
@@ -607,6 +608,16 @@ async function executeActionBatch(
 
   /** Tracks which trip mutations apply to (supports createTrip/selectTrip mid-batch). */
   let activeTripId: TripId | null = currentTrip?.id ?? null;
+
+  /**
+   * The guest this device is on a trip, for a money line or an invitation it
+   * writes there: the others are told, this guest is not. Unknown on a trip
+   * the batch has just created or switched to.
+   */
+  const authorIn = (tripId: TripId): PersonId | undefined =>
+    currentTrip !== null && currentTrip.id === tripId
+      ? getTripGuestPersonId(currentTrip)
+      : undefined;
 
   /**
    * Guest ids per trip, resolved once per reply. Invalidated whenever this
@@ -2091,7 +2102,7 @@ async function executeActionBatch(
             break;
           }
 
-          await createExpense(tid, formData);
+          await createExpense(tid, formData, { updatedBy: authorIn(tid) });
           notifySuccess(t('money.expense.createSuccess'));
           executedCount++;
           summaries.push(
@@ -2174,7 +2185,9 @@ async function executeActionBatch(
             break;
           }
 
-          await updateExpenseWithOwnershipCheck(eid, tid, merged);
+          await updateExpenseWithOwnershipCheck(eid, tid, merged, {
+            updatedBy: authorIn(tid),
+          });
           notifySuccess(t('money.expense.updateSuccess'));
           executedCount++;
           summaries.push(

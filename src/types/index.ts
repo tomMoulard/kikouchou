@@ -1678,6 +1678,25 @@ export interface Activity extends Identifiable, TripScoped {
   participantIds: PersonId[];
 
   /**
+   * Guests asked to join who have not answered yet. Joining moves a guest to
+   * {@link participantIds}; declining moves them to {@link declinedIds}. Each
+   * guest's devices are notified, and the guest is asked when they next open
+   * the trip.
+   */
+  invitedIds?: PersonId[];
+
+  /**
+   * Guests who were invited and said no, kept so everyone can see the answer.
+   */
+  declinedIds?: PersonId[];
+
+  /**
+   * The guest who sent the latest invitation, as their device identified
+   * itself: the invitee is told who asks, and the sender is not notified.
+   */
+  invitedBy?: PersonId;
+
+  /**
    * Optional guest who proposed and leads the activity.
    * @see {@link Person}
    */
@@ -1816,6 +1835,13 @@ export interface Expense extends Identifiable, TripScoped {
    * @example "Deux caddies, le vin compris"
    */
   description?: string;
+
+  /**
+   * The guest who last added or changed this line, as their device identified
+   * itself. Everybody else on the line is notified of the change; this guest
+   * is not.
+   */
+  updatedBy?: PersonId;
 }
 
 /**

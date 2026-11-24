@@ -399,6 +399,8 @@ export function sanitizeActivityData<
     location?: string;
     notes?: string;
     participantIds?: readonly string[];
+    invitedIds?: readonly string[];
+    declinedIds?: readonly string[];
     maxParticipants?: number;
   },
 >(data: T): T {
@@ -410,6 +412,8 @@ export function sanitizeActivityData<
     participantIds: data.participantIds
       ? Array.from(new Set(data.participantIds))
       : data.participantIds,
+    invitedIds: data.invitedIds ? Array.from(new Set(data.invitedIds)) : data.invitedIds,
+    declinedIds: data.declinedIds ? Array.from(new Set(data.declinedIds)) : data.declinedIds,
     maxParticipants: normalizeMaxParticipants(data.maxParticipants),
   };
 }
