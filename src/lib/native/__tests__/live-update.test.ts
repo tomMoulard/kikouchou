@@ -4,7 +4,7 @@
  * @module lib/native/__tests__/live-update.test
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const capture = vi.hoisted(() => vi.fn());
 const native = vi.hoisted(() => ({
@@ -17,6 +17,13 @@ vi.mock('@/lib/posthog', () => ({ captureEvent: capture }));
 vi.mock('@/lib/platform', () => ({
   hasNativePlugin: () => native.plugin,
   getPublicAppOrigin: () => 'https://app.kikouchou.app',
+}));
+const http = vi.hoisted(() => ({
+  get: vi.fn(async () => ({ status: 404, data: '', headers: {}, url: '' })),
+}));
+vi.mock('@capacitor/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@capacitor/core')>()),
+  CapacitorHttp: { get: http.get },
 }));
 vi.mock('@capawesome/capacitor-live-update', () => ({
   LiveUpdate: {
@@ -442,5 +449,38 @@ describe('applyLiveUpdateNow', () => {
     await expect(applyLiveUpdateNow()).resolves.toBe('unavailable');
     expect(native.ready).toHaveBeenCalledTimes(1);
     expect(native.reload).not.toHaveBeenCalled();
+  });
+});
+
+// The Android app serves its pages as app.kikouchou.app, and its web view
+// answers every request to that host from the files inside the app. A plain
+// fetch of the manifest read those files and never saw a newer bundle.
+describe('the manifest request', () => {
+  /** A fingerprint of the shape the build writes: 16 hex digits. */
+  const FINGERPRINT = '0123456789abcdef';
+
+  beforeEach(() => {
+    vi.resetModules();
+    http.get.mockClear();
+    vi.stubEnv('VITE_NATIVE_FINGERPRINT', FINGERPRINT);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('goes to the real website through the native client, never the web view', async () => {
+    native.plugin = true;
+    const webFetch = vi.spyOn(window, 'fetch');
+    const { startLiveUpdate } = await import('../live-update');
+
+    startLiveUpdate();
+
+    await vi.waitFor(() => expect(http.get).toHaveBeenCalledTimes(1));
+    expect(http.get).toHaveBeenCalledWith(
+      expect.objectContaining({ url: `https://app.kikouchou.app/live/${FINGERPRINT}.json` }),
+    );
+    expect(webFetch).not.toHaveBeenCalled();
+    webFetch.mockRestore();
   });
 });

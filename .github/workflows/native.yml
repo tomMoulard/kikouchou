@@ -348,6 +348,10 @@ jobs:
           path: dist/
 
       - name: Sync the web layer into the shell
+        # The iPhone app keeps capacitor://localhost; only Android serves as
+        # the website's host (capacitor.config.ts, ANDROID_HOSTNAME).
+        env:
+          KIKOUCHOU_NATIVE_PLATFORM: ios
         run: bunx cap sync ios
 
       - name: Show the toolchain

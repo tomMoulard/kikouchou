@@ -4,7 +4,9 @@
  * One `src/` builds three targets. The website at `app.kikouchou.app`, and the
  * iOS and Android apps, which load the same build from files inside the app
  * bundle (see `capacitor.config.ts`). Inside those apps the page origin is
- * `capacitor://localhost` or `https://localhost`, so anything that used to read
+ * `capacitor://localhost` on iOS, and on Android `https://app.kikouchou.app`
+ * served from files inside the app (`ANDROID_HOSTNAME` in `capacitor.config.ts`),
+ * so anything that used to read
  * `window.location.origin` as "where this app lives" has to ask here instead.
  *
  * Every native difference in the app is a branch on {@link isNativeApp} or

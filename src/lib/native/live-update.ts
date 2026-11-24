@@ -32,6 +32,7 @@
  * @module lib/native/live-update
  */
 
+import { CapacitorHttp } from '@capacitor/core';
 import { LiveUpdate } from '@capawesome/capacitor-live-update';
 
 import { captureEvent } from '@/lib/posthog';
@@ -257,6 +258,34 @@ export async function runLiveUpdate(deps: LiveUpdateDeps): Promise<LiveUpdateOut
   }
 }
 
+/** Statuses a `Response` must be built without a body for. */
+const NULL_BODY_STATUSES: ReadonlySet<number> = new Set([101, 103, 204, 205, 304]);
+
+/**
+ * Fetches outside the web view, through Capacitor's native HTTP client.
+ *
+ * The Android app serves its pages as `https://app.kikouchou.app`
+ * (`server.hostname` in `capacitor.config.ts`), and its web view answers every
+ * request to that host from the files inside the app. The manifest lives on
+ * the real host, so a plain `fetch` would read the app's own files, find no
+ * `/live/…`, and never see a newer bundle. The native client goes to the
+ * network.
+ *
+ * @param input - The URL to read
+ * @returns The answer, as a `Response`
+ */
+async function fetchOutsideWebView(input: RequestInfo | URL): Promise<Response> {
+  const response = await CapacitorHttp.get({
+    url: String(input),
+    responseType: 'text',
+    headers: { 'Cache-Control': 'no-cache' },
+  });
+  const body = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+  return new Response(NULL_BODY_STATUSES.has(response.status) ? null : body, {
+    status: response.status,
+  });
+}
+
 /** The real plugin and inputs. */
 function realDeps(): LiveUpdateDeps {
   return {
@@ -264,7 +293,7 @@ function realDeps(): LiveUpdateDeps {
     fingerprint: import.meta.env.VITE_NATIVE_FINGERPRINT ?? '',
     origin: getPublicAppOrigin(),
     storage: window.localStorage,
-    fetch: window.fetch.bind(window),
+    fetch: fetchOutsideWebView as typeof fetch,
   };
 }
 

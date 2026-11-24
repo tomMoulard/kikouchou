@@ -5,8 +5,9 @@
  * the app bundle (`webDir`), and never from `https://app.kikouchou.app`. That
  * is what makes the first launch work with no network, and what keeps the
  * App Store review from reading the app as a website in a frame. The price is
- * the page origin: `capacitor://localhost` on iOS, `https://localhost` on
- * Android. `src/lib/platform` is where the app learns that and answers with the
+ * the page origin: `capacitor://localhost` on iOS, `https://app.kikouchou.app`
+ * on Android (see `ANDROID_HOSTNAME` below). `src/lib/platform` is where the
+ * app learns that it is not the website and answers with the
  * public origin instead. See `plans/2026-09-26-native-apps-v1.md`.
  *
  * `KIKOUCHOU_ANDROID_FLAVOR=fdroid` builds the F-Droid variant. F-Droid ships
@@ -68,6 +69,36 @@ const LIVE_UPDATE_PUBLIC_KEY =
 
 const isFdroid = process.env.KIKOUCHOU_ANDROID_FLAVOR === 'fdroid';
 
+/**
+ * Whether this sync is for the iPhone app. `cap sync` does not say which
+ * platform it reads the config for, so the iOS steps say it themselves
+ * (`build:native`, and the iOS job in `.github/workflows/native.yml`).
+ */
+const isIosSync = process.env.KIKOUCHOU_NATIVE_PLATFORM === 'ios';
+
+/**
+ * The host the Android app serves its pages as: the website's.
+ *
+ * Under `https://localhost`, every map tile request told OpenStreetMap it came
+ * from `localhost`, and its tile servers refuse that, so the Android app drew
+ * no map while the website, the same build, did. Served as the website's host,
+ * the app sends the website's Referer, which OpenStreetMap accepts.
+ *
+ * What it costs, and why it stops at Android:
+ * - The page origin is what IndexedDB and localStorage belong to, so an
+ *   install upgraded across this change opens empty. Trips that sync come
+ *   back with the account; trips that lived only on the phone do not. This
+ *   was accepted for Android, to get the maps back.
+ * - The web view answers every request to this host from the files inside the
+ *   app, so anything the app reads from the real website has to go around it.
+ *   The live update manifest does (`fetchOutsideWebView` in
+ *   `lib/native/live-update`).
+ * - iOS keeps `capacitor://localhost`. Its custom scheme gains nothing from the
+ *   host, OpenStreetMap or otherwise, and moving it would empty every iPhone
+ *   install for nothing.
+ */
+const ANDROID_HOSTNAME = 'app.kikouchou.app';
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -79,6 +110,7 @@ const config: CapacitorConfig = {
   // The user agent names the shell, so a server log can tell a store app from
   // a browser without trusting anything the page says about itself.
   appendUserAgent: 'Kikouchou-Native',
+  ...(isIosSync ? {} : { server: { hostname: ANDROID_HOSTNAME } }),
   android: {
     includePlugins: isFdroid
       ? PLUGINS.filter((plugin) => !NOT_FOR_FDROID.includes(plugin))

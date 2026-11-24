@@ -1427,8 +1427,17 @@ the reasons are in `plans/2026-09-26-native-apps-v1.md`. The website stays, and
 every native difference is a branch on `lib/platform`: the web branch keeps
 what the website did before.
 
-- **The page origin in an app is `capacitor://localhost` or
-  `https://localhost`.** Nobody else can open it. A link handed to another
+- **The page origin in an app is `capacitor://localhost` on iOS and
+  `https://app.kikouchou.app` on Android** (`server.hostname`,
+  `ANDROID_HOSTNAME` in `capacitor.config.ts`; an iOS sync sets
+  `KIKOUCHOU_NATIVE_PLATFORM=ios` to keep its origin). Android moved from
+  `https://localhost` because OpenStreetMap refuses tiles to a `localhost`
+  Referer, so the app drew no map. That move emptied every Android install
+  upgraded across it: IndexedDB and localStorage belong to the origin. It was
+  decided knowingly; do not move the origin again without the same decision.
+  The Android web view answers every request to `app.kikouchou.app` from the
+  files inside the app, so anything read from the real website goes around it
+  (the live update manifest uses `CapacitorHttp`). A link handed to another
   person goes through `resolveLinkOrigin()` / `getPublicAppOrigin()`, never
   `window.location.origin`. `isDevelopmentHost()` knows a store app is not a
   laptop, unless the build is a dev build.
@@ -1455,9 +1464,10 @@ what the website did before.
   deployed client sends links that nothing redeems.
 - **A passkey in the Android app goes through Credential Manager, not the
   web view.** A passkey is bound to the rpId `app.kikouchou.app`. Chromium
-  refuses that rpId from the page origin `https://localhost`, also in the
-  web view's app mode. Do not change `server.hostname` to fix it: a new
-  origin leaves every trip in IndexedDB and the session behind.
+  refused that rpId from the page origin `https://localhost`, also in the
+  web view's app mode. The origin is now `https://app.kikouchou.app` (see
+  above, for the maps), but the native path stays: it was built and
+  verified, and an origin is no substitute for the app's signing key.
   `main.tsx` calls `installNativePasskeys()` (`lib/native/passkeys`) before
   the first render. It replaces `navigator.credentials` and sends each
   `publicKey` request to `PasskeyPlugin.java` as WebAuthn JSON. auth-js does

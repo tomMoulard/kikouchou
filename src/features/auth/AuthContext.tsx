@@ -274,7 +274,9 @@ export const NATIVE_EMAIL_RETURN_PATH = '/auth/native';
  * `detectSessionInUrl` picks the `?code=` off whatever URL it lands on.
  *
  * The store apps are the exception. Their page origin is `capacitor://localhost`
- * or `https://localhost`, which the provider cannot send anybody to: an OAuth
+ * on iOS, which the provider cannot send anybody to, and on Android the
+ * website's host served from inside the app, which a provider's redirect would
+ * not reach the app through: an OAuth
  * sign-in returns to the app's own URL scheme, and a magic link to
  * {@link NATIVE_EMAIL_RETURN_PATH} on the website.
  *

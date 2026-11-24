@@ -9,7 +9,7 @@
     "prod": "vite --mode production",
     "validate": "bun run generate-proto && bun run test:run && bun run lint && bun run build && bun run test:e2e",
     "build": "tsc -b && VITE_APP_VERSION=${VITE_APP_VERSION:-$npm_package_version} vite build",
-    "build:native": "bun run build && cap sync",
+    "build:native": "bun run build && cap sync android && KIKOUCHOU_NATIVE_PLATFORM=ios cap sync ios",
     "generate-proto": "NODE_NO_WARNINGS=1 PATH=\"$PWD/node_modules/.bin:$PATH\" buf generate && node scripts/generate-proto.js",
     "lint": "eslint .",
     "preview": "vite preview",
