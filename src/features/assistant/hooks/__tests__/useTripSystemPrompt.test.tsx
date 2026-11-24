@@ -346,6 +346,35 @@ describe('useTripSystemPrompt', () => {
     expect(beachLine).not.toContain('invited');
   });
 
+  // An older write could leave a guest who is going on a list. Going is the
+  // answer, so the prompt does not also call them "invited, no answer".
+  it('does not list a guest who is going as invited or declined', async () => {
+    const { tripId, personId } = await seedTrip();
+    const activity = await createActivity(tripId, {
+      title: 'Exposition',
+      category: 'culture',
+      startDatetime: '2024-07-18T10:00:00.000Z' as ISODateTimeString,
+      allDay: false,
+      participantIds: [personId],
+    });
+    await db.activities.update(activity.id, {
+      invitedIds: [personId],
+      declinedIds: [personId],
+    });
+
+    const result = await renderWithTrip(tripId);
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('Exposition');
+    });
+
+    const line = result.current.prompt.systemPrompt
+      .split('\n')
+      .find((candidate) => candidate.includes('Exposition'));
+    expect(line).toContain('signed up (1): Alice');
+    expect(line).not.toContain('invited');
+    expect(line).not.toContain('declined');
+  });
+
   it('tags activities happening today', async () => {
     const { tripId } = await seedTrip();
     await createActivity(tripId, {

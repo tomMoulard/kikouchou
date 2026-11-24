@@ -204,6 +204,10 @@ export async function getActivityCount(tripId: TripId): Promise<number> {
  * Updates an activity with ownership validation in a single transaction.
  * Prevents a TOCTOU race by combining validation and mutation atomically.
  *
+ * A new participant list answers the invitations of the guests on it: a
+ * guest signed up from the form, or by the assistant, is no longer
+ * "invited, no answer" or "can't come", as when they join themselves.
+ *
  * @param id - The activity's unique identifier
  * @param tripId - The expected trip ID for ownership validation
  * @param data - Partial activity form data to update
@@ -231,7 +235,16 @@ export async function updateActivityWithOwnershipCheck(
       throw new Error('Cannot update activity: activity does not belong to current trip');
     }
 
-    await db.activities.update(id, { ...sanitizedData, ...authorPatch(tripId, 'update') });
+    const answered =
+      sanitizedData.participantIds === undefined
+        ? {}
+        : settleAnsweredInvitations(activity, sanitizedData.participantIds);
+
+    await db.activities.update(id, {
+      ...sanitizedData,
+      ...answered,
+      ...authorPatch(tripId, 'update'),
+    });
   });
   announceGuestChange(tripId, 'activities', id);
 }
@@ -427,6 +440,31 @@ function withoutPerson(
   personId: PersonId,
 ): PersonId[] | undefined {
   return ids === undefined ? undefined : ids.filter((candidate) => candidate !== personId);
+}
+
+/**
+ * The invitation lists without the guests who are going.
+ *
+ * Only a list that names one of them is returned, so a write that answers
+ * nobody leaves both fields as they were.
+ *
+ * @param activity - The stored lists
+ * @param participantIds - The guests who are going
+ * @returns The lists to write
+ */
+function settleAnsweredInvitations(
+  activity: Pick<Activity, 'invitedIds' | 'declinedIds'>,
+  participantIds: readonly PersonId[],
+): Pick<Activity, 'invitedIds' | 'declinedIds'> {
+  const going = new Set(participantIds);
+  const settled: Pick<Activity, 'invitedIds' | 'declinedIds'> = {};
+  if (activity.invitedIds?.some((personId) => going.has(personId))) {
+    settled.invitedIds = activity.invitedIds.filter((personId) => !going.has(personId));
+  }
+  if (activity.declinedIds?.some((personId) => going.has(personId))) {
+    settled.declinedIds = activity.declinedIds.filter((personId) => !going.has(personId));
+  }
+  return settled;
 }
 
 /**

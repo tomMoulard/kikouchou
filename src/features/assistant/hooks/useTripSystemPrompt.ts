@@ -376,6 +376,8 @@ function formatActivityLine(
     personNameById(persons, personId);
 
   const participants = activity.participantIds ?? [];
+  const invited = (activity.invitedIds ?? []).filter((id) => !participants.includes(id));
+  const declined = (activity.declinedIds ?? []).filter((id) => !participants.includes(id));
   const cap =
     activity.maxParticipants !== undefined
       ? `/${activity.maxParticipants}`
@@ -395,12 +397,10 @@ function formatActivityLine(
       : `signed up (0${cap}): nobody yet`,
     // Only when there are any: most activities invite nobody, and the prompt
     // is paid for on every question.
-    activity.invitedIds && activity.invitedIds.length > 0
-      ? `invited, no answer: ${activity.invitedIds.map(nameOf).join(', ')}`
-      : '',
-    activity.declinedIds && activity.declinedIds.length > 0
-      ? `declined: ${activity.declinedIds.map(nameOf).join(', ')}`
-      : '',
+    // A guest who is going has answered, even where an older write left
+    // them on a list.
+    invited.length > 0 ? `invited, no answer: ${invited.map(nameOf).join(', ')}` : '',
+    declined.length > 0 ? `declined: ${declined.map(nameOf).join(', ')}` : '',
     activity.notes ? `notes: ${toPromptText(activity.notes)}` : '',
   ].filter(Boolean);
 

@@ -276,6 +276,59 @@ describe('activity-repository', () => {
         }),
       ).rejects.toThrow(/not found/);
     });
+
+    // Signing a guest up from the form answers their invitation, as joining
+    // does: they are no longer "invited, no answer" or "can't come".
+    it('settles the invitations of the guests it signs up', async () => {
+      const tripId = await createTestTrip();
+      const marie = await createTestPerson(tripId, 'Marie');
+      const paul = await createTestPerson(tripId, 'Paul');
+      const lea = await createTestPerson(tripId, 'Léa');
+      const activity = await createActivity(tripId, createTestActivityData());
+      await db.activities.update(activity.id, {
+        invitedIds: [marie, paul],
+        declinedIds: [lea],
+      });
+
+      await updateActivityWithOwnershipCheck(activity.id, tripId, {
+        participantIds: [marie, lea],
+      });
+
+      const updated = await getActivityById(activity.id);
+      expect(updated?.participantIds).toEqual([marie, lea]);
+      expect(updated?.invitedIds).toEqual([paul]);
+      expect(updated?.declinedIds).toEqual([]);
+    });
+
+    it('leaves the invitations alone when the participants are not in the patch', async () => {
+      const tripId = await createTestTrip();
+      const marie = await createTestPerson(tripId, 'Marie');
+      const activity = await createActivity(
+        tripId,
+        createTestActivityData({ participantIds: [marie] }),
+      );
+      // An older write left Marie on both lists; a title edit is not the
+      // moment to decide anything about her.
+      await db.activities.update(activity.id, { invitedIds: [marie] });
+
+      await updateActivityWithOwnershipCheck(activity.id, tripId, { title: 'Marché' });
+
+      expect((await getActivityById(activity.id))?.invitedIds).toEqual([marie]);
+    });
+
+    it('does not create invitation lists an activity never had', async () => {
+      const tripId = await createTestTrip();
+      const marie = await createTestPerson(tripId, 'Marie');
+      const activity = await createActivity(tripId, createTestActivityData());
+
+      await updateActivityWithOwnershipCheck(activity.id, tripId, {
+        participantIds: [marie],
+      });
+
+      const updated = await getActivityById(activity.id);
+      expect(updated?.invitedIds).toBeUndefined();
+      expect(updated?.declinedIds).toBeUndefined();
+    });
   });
 
   describe('deleteActivityWithOwnershipCheck', () => {
