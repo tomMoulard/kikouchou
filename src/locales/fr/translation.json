@@ -2312,6 +2312,93 @@
       "socks": "Chaussettes"
     }
   },
+  "achievements": {
+    "title": "Succès",
+    "summary_one": "{{count}} sur {{total}} débloqué",
+    "summary_other": "{{count}} sur {{total}} débloqués",
+    "unlocked": "Succès débloqué",
+    "unlockedMany_one": "{{count}} succès débloqué",
+    "unlockedMany_other": "{{count}} succès débloqués",
+    "unlockedOn": "Débloqué le {{date}}",
+    "percent": "Vous faites partie des {{percent}} % de personnes qui l’ont",
+    "progress": "{{current}} / {{target}}",
+    "signInForStats": "Connectez-vous pour voir combien de personnes ont chaque succès.",
+    "status": {
+      "unlocked": "Débloqué",
+      "locked": "Verrouillé"
+    },
+    "groups": {
+      "tier": "Voyages créés",
+      "milestone": "Étapes",
+      "hidden": "Secrets"
+    },
+    "hidden": {
+      "name": "Succès caché",
+      "description": "Continuez à utiliser l’app pour le trouver."
+    },
+    "items": {
+      "trips_1": {
+        "name": "Premier voyage",
+        "description": "Créez un voyage."
+      },
+      "trips_3": {
+        "name": "On prend le pli",
+        "description": "Créez 3 voyages."
+      },
+      "trips_10": {
+        "name": "Organisateur chevronné",
+        "description": "Créez 10 voyages."
+      },
+      "trips_100": {
+        "name": "Agence de voyages",
+        "description": "Créez 100 voyages."
+      },
+      "trips_1000": {
+        "name": "Toujours entre deux valises",
+        "description": "Créez 1000 voyages."
+      },
+      "first_guest": {
+        "name": "Plus on est de fous",
+        "description": "Ajoutez un invité à un voyage."
+      },
+      "full_room": {
+        "name": "Complet",
+        "description": "Remplissez tous les lits d’une chambre pour une nuit."
+      },
+      "group_activity": {
+        "name": "Sortie de groupe",
+        "description": "Prévoyez une activité avec 3 invités ou plus."
+      },
+      "first_question": {
+        "name": "Simple question",
+        "description": "Posez une question à l’assistant."
+      },
+      "trip_shared": {
+        "name": "Pas tout seul",
+        "description": "Quelqu’un rejoint un voyage que vous organisez."
+      },
+      "midnight_pet": {
+        "name": "Câlin de minuit",
+        "description": "Vous avez touché votre compagnon dans la première minute après minuit."
+      },
+      "petting_zoo": {
+        "name": "Ferme pédagogique",
+        "description": "Vous avez touché votre compagnon 100 fois."
+      },
+      "leap_day": {
+        "name": "Tous les quatre ans",
+        "description": "Vous avez ouvert l’app un 29 février."
+      },
+      "polyglot": {
+        "name": "Polyglotte",
+        "description": "Vous avez passé l’app dans une autre langue."
+      },
+      "night_owl": {
+        "name": "Oiseau de nuit",
+        "description": "Vous avez créé un voyage entre 3 et 4 heures du matin."
+      }
+    }
+  },
   "photos": {
     "add": "Ajouter une photo",
     "change": "Changer la photo",

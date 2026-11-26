@@ -1013,6 +1013,8 @@ export type AnalyticsEvent =
   | UsageAction
   | DeletionEvent
   | typeof USAGE_EVENT
+  // Achievements: the key alone, and whether it was a hidden one
+  | 'achievement_unlocked'
   // Account
   | 'account_registered'
   | 'account_trip_sync'

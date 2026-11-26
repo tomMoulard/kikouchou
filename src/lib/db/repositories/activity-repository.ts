@@ -9,6 +9,7 @@
 
 import { db } from '@/lib/db/database';
 import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
+import { recordActivityParticipants } from '@/lib/achievements/store';
 import { sanitizeActivityData } from '@/lib/db/sanitize';
 import { createActivityId } from '@/lib/db/utils';
 import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
@@ -62,6 +63,7 @@ export async function createActivity(
 
     await db.activities.add(activity);
     announceGuestChange(tripId, 'activities', activity.id);
+    void recordActivityParticipants(activity.participantIds.length);
     return activity;
   } catch (error) {
     throw repositoryError(
@@ -247,6 +249,9 @@ export async function updateActivityWithOwnershipCheck(
     });
   });
   announceGuestChange(tripId, 'activities', id);
+  if (sanitizedData.participantIds !== undefined) {
+    void recordActivityParticipants(sanitizedData.participantIds.length);
+  }
 }
 
 /**
@@ -340,6 +345,7 @@ export async function setActivityParticipation(
   if (changed) {
     // The organizer and the others in it hear who joined or left.
     announceGuestChange(tripId, 'activities', id);
+    void recordActivityParticipants(next.length);
   }
   return next;
 }

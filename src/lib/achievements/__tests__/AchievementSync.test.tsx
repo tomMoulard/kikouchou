@@ -1,0 +1,140 @@
+/**
+ * @fileoverview Tests for the app-wide half of achievements: the start-up
+ * checks, the one message per burst of unlocks, and when the sync runs.
+ *
+ * @module lib/achievements/__tests__/AchievementSync.test
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { db } from '@/lib/db/database';
+import { act, render, waitFor } from '@/test/utils';
+
+import { AchievementSync } from '../AchievementSync';
+import { unlockAchievement, unlockAchievements } from '../store';
+
+// ============================================================================
+// Mocks
+// ============================================================================
+
+const auth = vi.hoisted(() => ({ session: null as { user: { id: string } } | null }));
+vi.mock('@/features/auth/AuthContext', () => ({ useAuth: () => ({ session: auth.session }) }));
+
+vi.mock('@/hooks/useOnlineStatus', () => ({ useOnlineStatus: () => ({ isOnline: true }) }));
+
+vi.mock('@/lib/supabase/client', () => ({ getSupabaseClient: vi.fn(async () => ({})) }));
+
+const syncAchievements = vi.hoisted(() => vi.fn());
+vi.mock('../sync', () => ({ syncAchievements }));
+
+const reward = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/notifications', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/notifications')>()),
+  notify: { reward, success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}));
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('AchievementSync', () => {
+  beforeEach(() => {
+    auth.session = null;
+    reward.mockReset();
+    syncAchievements.mockReset();
+    syncAchievements.mockResolvedValue({ status: 'synced', pulled: 0, pushed: 0 });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows one message for one unlock, naming it', async () => {
+    render(<AchievementSync />, { withProviders: false });
+
+    await act(async () => {
+      await unlockAchievement('polyglot');
+    });
+
+    await waitFor(() => {
+      expect(reward).toHaveBeenCalledWith(
+        'achievements.unlocked',
+        'achievements.items.polyglot.name',
+      );
+    });
+    expect(reward).toHaveBeenCalledTimes(1);
+  });
+
+  it('folds a burst of unlocks into one message', async () => {
+    render(<AchievementSync />, { withProviders: false });
+
+    await act(async () => {
+      await unlockAchievements(['trips_1']);
+      await unlockAchievements(['trips_3', 'trips_10']);
+    });
+
+    await waitFor(() => {
+      expect(reward).toHaveBeenCalledTimes(1);
+    });
+    expect(reward).toHaveBeenCalledWith(
+      'achievements.unlockedMany',
+      'achievements.items.trips_1.name · achievements.items.trips_3.name · achievements.items.trips_10.name',
+    );
+  });
+
+  it('counts the trips already on the device when it starts', async () => {
+    await db.trips.add({
+      id: 'trip-1' as never,
+      name: 'Old trip',
+      shareId: 'share-1' as never,
+      createdAt: 1 as never,
+      updatedAt: 1 as never,
+    });
+
+    render(<AchievementSync />, { withProviders: false });
+
+    await waitFor(async () => {
+      expect(await db.achievements.get('trips_1')).toBeDefined();
+    });
+  });
+
+  it('does not sync signed out', async () => {
+    render(<AchievementSync />, { withProviders: false });
+    await act(async () => {
+      await unlockAchievement('polyglot');
+    });
+    expect(syncAchievements).not.toHaveBeenCalled();
+  });
+
+  it('syncs signed in, again for a new unlock, and stops asking a server without the table', async () => {
+    auth.session = { user: { id: 'user-1' } };
+    render(<AchievementSync />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(syncAchievements).toHaveBeenCalledWith(expect.anything(), 'user-1');
+    });
+
+    syncAchievements.mockResolvedValue({
+      status: 'error',
+      message: 'missing',
+      reason: 'unavailable',
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const before = syncAchievements.mock.calls.length;
+    await act(async () => {
+      await unlockAchievement('polyglot');
+    });
+    await waitFor(() => {
+      expect(syncAchievements.mock.calls.length).toBeGreaterThan(before);
+    });
+
+    const after = syncAchievements.mock.calls.length;
+    await act(async () => {
+      await unlockAchievement('first_guest');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(syncAchievements.mock.calls.length).toBe(after);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

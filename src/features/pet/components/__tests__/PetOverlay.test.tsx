@@ -30,6 +30,10 @@ vi.mock('@/lib/posthog', async (importOriginal) => ({
   captureEvent,
 }));
 
+const recordPetTap = vi.hoisted(() => vi.fn(async () => undefined));
+
+vi.mock('@/lib/achievements/store', () => ({ recordPetTap }));
+
 const storage = installLocalStorageDouble();
 
 function petTransform(): string {
@@ -95,6 +99,7 @@ describe('PetOverlay', () => {
   beforeEach(() => {
     storage.clear();
     captureEvent.mockClear();
+    recordPetTap.mockClear();
     storePetEnabled(true);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
   });
@@ -154,6 +159,8 @@ describe('PetOverlay', () => {
     expect(captureEvent.mock.calls.filter(([event]) => event === 'pet_interacted')).toEqual([
       ['pet_interacted', { species: 'pomeranian', reaction: 'heart' }],
     ]);
+    // Every tap counts for the pet achievements, not only the first.
+    expect(recordPetTap).toHaveBeenCalledTimes(2);
   });
 
   it('walks with the arrow keys', () => {
@@ -230,6 +237,7 @@ describe('PetOverlay', () => {
     expect(screen.getByTestId('pet')).toHaveAttribute('data-pet-pose', 'fall');
     expect(screen.queryByText('pet.heart')).not.toBeInTheDocument();
     expect(captureEvent).not.toHaveBeenCalled();
+    expect(recordPetTap).not.toHaveBeenCalled();
 
     act(() => {
       vi.advanceTimersByTime(2000);

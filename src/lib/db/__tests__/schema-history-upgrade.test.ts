@@ -99,6 +99,8 @@ const V14 = {
   shoppingItems: 'id, tripId, buyerId',
 };
 
+const V15 = { ...V14, achievements: 'key', achievementCounters: 'key' };
+
 const HISTORY: readonly (readonly [number, Record<string, string>])[] = [
   [1, V1],
   [2, V2],
@@ -242,7 +244,7 @@ describe('upgrading from every historical schema', () => {
     try {
       await upgraded.open();
 
-      expect(upgraded.verno).toBe(14);
+      expect(upgraded.verno).toBe(15);
       for (const table of Object.keys(schema)) {
         if (table === 'yjsUpdates') {
           const rows = await upgraded.yjsUpdates.where('tripId').equals(TRIP_ID).toArray();
@@ -350,7 +352,7 @@ describe('two tabs on different schema versions', () => {
     await current.open();
 
     const newer = new Dexie(DB_NAME);
-    newer.version(15).stores(V14);
+    newer.version(16).stores(V15);
     await newer.open();
 
     expect(current.isOpen()).toBe(false);

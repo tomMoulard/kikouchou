@@ -11,6 +11,7 @@ import { stayNightsOverlap } from '@/features/rooms/utils/capacity-utils';
 import { db } from '@/lib/db/database';
 import { createRoomAssignmentId } from '@/lib/db/utils';
 import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
+import { recordRoomAssigned } from '@/lib/achievements/store';
 import type {
   ISODateString,
   PersonId,
@@ -75,6 +76,7 @@ export async function createAssignment(
 
     await db.roomAssignments.add(assignment);
     announceGuestChange(tripId, 'roomAssignments', assignment.id);
+    void recordRoomAssigned(tripId, assignment.roomId);
     return assignment;
   } catch (error) {
     throw repositoryError(

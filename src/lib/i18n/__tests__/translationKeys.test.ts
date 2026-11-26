@@ -58,6 +58,8 @@ const SRC_DIR = resolve(process.cwd(), 'src'),
   * be checked leaf-by-leaf, so the parent object is required to exist instead.
   */
  DYNAMIC_KEY_PREFIXES = [
+   'achievements.groups',
+   'achievements.items',
    'activities.categories',
    'assistant.actionDetails.tripField',
    'childSeats',
@@ -72,8 +74,10 @@ const SRC_DIR = resolve(process.cwd(), 'src'),
   * Add here rather than weakening the scan.
   *
   * `app.kikouchou` is the store apps' id and URL scheme (`lib/platform`).
+  * `trips.owner_id` is a PostgREST filter on an embedded table
+  * (`lib/achievements/sync`).
   */
- ALLOWED_NON_KEYS = new Set<string>(['app.kikouchou']),
+ ALLOWED_NON_KEYS = new Set<string>(['app.kikouchou', 'trips.owner_id']),
 
  /**
   * Call sites that resolve a translation. `safeTranslate` is the

@@ -51,6 +51,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { recordPetTap } from '@/lib/achievements/store';
 import { captureEvent } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 
@@ -661,6 +662,9 @@ export const PetOverlay = memo(function PetOverlay({
       return;
     }
     interact();
+    // A tap, not a drag and not an arrow key: `midnight_pet` and
+    // `petting_zoo` count what a finger or a mouse did.
+    void recordPetTap();
   }, [interact]);
 
   const handleKeyDown = useCallback(

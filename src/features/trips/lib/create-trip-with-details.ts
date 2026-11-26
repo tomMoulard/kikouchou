@@ -28,6 +28,7 @@ import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { markTripOrganised } from '@/features/trips/hooks/usePlanOwnTripPrompt';
 import type { PersonId, Trip, TripFormData, TripId } from '@/types';
 import { reportError } from '@/lib/posthog';
+import { recordTripCreated } from '@/lib/achievements/store';
 
 // ============================================================================
 // Type Definitions
@@ -193,6 +194,9 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
   // this, filling the "You" row made the organiser's own trip read as a joined
   // one, and the trip list offered to teach them how to plan a trip.
   markTripOrganised();
+
+  // Not awaited: an achievement never holds up the screen that follows.
+  void recordTripCreated();
 
   // Selected now so the calendar can show it the moment the screen navigates.
   if (draft.selectAsCurrent !== false) {

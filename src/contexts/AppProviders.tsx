@@ -16,6 +16,7 @@ import { RideProvider } from '@/contexts/RideContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { MealProvider } from '@/contexts/MealContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
+import { AchievementSync } from '@/lib/achievements/AchievementSync';
 import { PhotoUploadSync } from '@/lib/photos/PhotoUploadSync';
 import { AccountTripSync } from '@/lib/sync/AccountTripSync';
 import { TripArchiveSync } from '@/lib/sync/TripArchiveSync';
@@ -134,6 +135,9 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
 
       {/* A sibling too: it keeps each trip's archived flag in step with the account. */}
       <TripArchiveSync />
+
+      {/* A sibling too: it shows unlocked achievements and syncs them with the account. */}
+      <AchievementSync />
 
       {/*
         A wrapper rather than a sibling, unlike `AccountTripSync` directly above,

@@ -2312,6 +2312,93 @@
       "socks": "Socks"
     }
   },
+  "achievements": {
+    "title": "Achievements",
+    "summary_one": "{{count}} of {{total}} unlocked",
+    "summary_other": "{{count}} of {{total}} unlocked",
+    "unlocked": "Achievement unlocked",
+    "unlockedMany_one": "{{count}} achievement unlocked",
+    "unlockedMany_other": "{{count}} achievements unlocked",
+    "unlockedOn": "Unlocked on {{date}}",
+    "percent": "You are in the {{percent}}% of people who have it",
+    "progress": "{{current}} / {{target}}",
+    "signInForStats": "Sign in to see how many people have each achievement.",
+    "status": {
+      "unlocked": "Unlocked",
+      "locked": "Locked"
+    },
+    "groups": {
+      "tier": "Trips created",
+      "milestone": "Milestones",
+      "hidden": "Secrets"
+    },
+    "hidden": {
+      "name": "Hidden achievement",
+      "description": "Keep using the app to find it."
+    },
+    "items": {
+      "trips_1": {
+        "name": "First trip",
+        "description": "Create a trip."
+      },
+      "trips_3": {
+        "name": "Getting the hang of it",
+        "description": "Create 3 trips."
+      },
+      "trips_10": {
+        "name": "Seasoned organiser",
+        "description": "Create 10 trips."
+      },
+      "trips_100": {
+        "name": "Travel agency",
+        "description": "Create 100 trips."
+      },
+      "trips_1000": {
+        "name": "Living out of a suitcase",
+        "description": "Create 1000 trips."
+      },
+      "first_guest": {
+        "name": "The more the merrier",
+        "description": "Add a guest to a trip."
+      },
+      "full_room": {
+        "name": "Full house",
+        "description": "Fill every bed of a room for a night."
+      },
+      "group_activity": {
+        "name": "Group outing",
+        "description": "Plan an activity with 3 guests or more."
+      },
+      "first_question": {
+        "name": "Just asking",
+        "description": "Ask the assistant a question."
+      },
+      "trip_shared": {
+        "name": "Not alone",
+        "description": "Someone joins a trip you organise."
+      },
+      "midnight_pet": {
+        "name": "Midnight snack",
+        "description": "You tapped your pet in the first minute after midnight."
+      },
+      "petting_zoo": {
+        "name": "Petting zoo",
+        "description": "You tapped your pet 100 times."
+      },
+      "leap_day": {
+        "name": "Once every four years",
+        "description": "You opened the app on 29 February."
+      },
+      "polyglot": {
+        "name": "Polyglot",
+        "description": "You switched the app to another language."
+      },
+      "night_owl": {
+        "name": "Night owl",
+        "description": "You created a trip between 3 and 4 in the morning."
+      }
+    }
+  },
   "photos": {
     "add": "Add a photo",
     "change": "Change photo",

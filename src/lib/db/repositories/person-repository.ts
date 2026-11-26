@@ -21,6 +21,7 @@ import type { Expense, Person, PersonFormData, PersonId, TripId } from '@/types'
 import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
 import { repositoryError } from '@/lib/db/repository-error';
 import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
+import { recordGuestAdded } from '@/lib/achievements/store';
 
 /**
  * Creates a new person in the database.
@@ -54,6 +55,7 @@ export async function createPerson(
 
     await db.persons.add(person);
     announceGuestChange(tripId, 'guests', person.id);
+    void recordGuestAdded();
     return person;
   } catch (error) {
     throw repositoryError(`Failed to create person "${sanitizedData.name}" for trip ${tripId}`, error);

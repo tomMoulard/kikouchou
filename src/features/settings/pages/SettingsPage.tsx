@@ -42,6 +42,8 @@ import { NavBarSettings } from '@/features/settings/components/NavBarSettings';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { PetSettingsCard } from '@/features/pet';
+import { AchievementsCard } from '@/features/achievements';
+import { recordLanguageChanged } from '@/lib/achievements/store';
 import { db } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
 import { captureEvent } from '@/lib/posthog';
@@ -89,6 +91,7 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
       // them. Captured inside the guard, so an unsupported value reports
       // nothing rather than reporting a change that did not happen.
       captureEvent('language_changed', { language: value });
+      void recordLanguageChanged();
       // Deliberately a raw confirmation: the language lives in localStorage and never
       // syncs, so the offline-aware "Saved on this device" wording adds
       // nothing. That helper is for writes to shared trip data.
@@ -344,6 +347,10 @@ function SettingsPageComponent(): ReactElement {
             only card here that asks the browser for something, and above About
             because it is a preference rather than reference material. */}
         <NotificationSettings />
+
+        {/* Achievements - folded by default: something to come back to, not
+            a preference, so below every preference and above the reference. */}
+        <AchievementsCard />
 
         {/* About Section */}
         <AboutSection />

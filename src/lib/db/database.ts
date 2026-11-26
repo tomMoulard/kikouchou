@@ -25,7 +25,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 14;
+export const DB_VERSION = 15;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -96,6 +96,28 @@ export interface SyncCursorRow {
   serverStateVector?: Uint8Array;
   /** Last time a pull or push completed, for the sync badge. */
   syncedAt?: number;
+}
+
+/**
+ * An achievement this device holds. See `lib/achievements`.
+ *
+ * Not trip-scoped: it belongs to the person on the device, and to their
+ * account once they sign in, so it outlives every trip.
+ */
+export interface AchievementRow {
+  /** The `AchievementKey`. A key this build does not know is ignored. */
+  key: string;
+  /** When it was unlocked, as this device or the account first saw it. */
+  unlockedAt: number;
+  /** The account the row was last uploaded to, if any. */
+  uploadedBy?: string;
+}
+
+/** A device-local counter an achievement reads, such as trips created. */
+export interface AchievementCounterRow {
+  /** The `AchievementCounter`. */
+  key: string;
+  value: number;
 }
 
 /**
@@ -352,6 +374,15 @@ export class KikouchouDatabase extends Dexie {
    * through Storage, and the document carries only the id.
    */
   photos!: Table<PhotoRow, [string, string]>;
+
+  /**
+   * Achievements unlocked on this device, or pulled from the account.
+   * Primary key: key. Not trip-scoped, so no `tripId` and no cascade.
+   */
+  achievements!: Table<AchievementRow, string>;
+
+  /** The counters achievements read. Primary key: key. Device-local. */
+  achievementCounters!: Table<AchievementCounterRow, string>;
 
   /**
    * @param name - Database name. Defaults to the real one; a test passes its own
@@ -792,6 +823,19 @@ export class KikouchouDatabase extends Dexie {
     this.version(14).stores({
       meals: 'id, tripId, *organizerIds, [tripId+date]',
       shoppingItems: 'id, tripId, buyerId',
+    });
+
+    /**
+     * Schema Version 15 - Achievements
+     *
+     * Two tables that belong to the person, not to a trip: the achievements
+     * unlocked (`key`), and the counters some of them read. Neither has a
+     * `tripId`, so neither joins `deleteTrip`'s cascade: deleting a trip must
+     * not take back the badge its creation earned. Both start empty.
+     */
+    this.version(15).stores({
+      achievements: 'key',
+      achievementCounters: 'key',
     });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade

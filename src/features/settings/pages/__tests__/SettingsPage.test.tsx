@@ -117,6 +117,11 @@ vi.mock('@/features/auth/components/AccountSection', () => ({
   AccountSection: () => <div data-testid="account-section" />,
 }));
 
+// The achievements card reads the session, and has its own tests.
+vi.mock('@/features/achievements', () => ({
+  AchievementsCard: () => <div data-testid="achievements-card" />,
+}));
+
 // Mock ConfirmDialog to capture confirm callback and onOpenChange
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (o: boolean) => void }) =>
@@ -127,6 +132,8 @@ vi.mock('@/components/shared/ConfirmDialog', () => ({
       </div>
     ) : null,
 }));
+
+import { db as achievementsDb } from '@/lib/db/database';
 
 import { SettingsPage } from '../SettingsPage';
 
@@ -152,6 +159,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('settings.language')).toBeInTheDocument();
     expect(screen.getByText('settings.theme')).toBeInTheDocument();
     expect(screen.getByText('pet.settings.title')).toBeInTheDocument();
+    expect(screen.getByTestId('achievements-card')).toBeInTheDocument();
     expect(screen.getByText('settings.about')).toBeInTheDocument();
     expect(screen.getByText('settings.dataManagement')).toBeInTheDocument();
   });
@@ -282,6 +290,10 @@ describe('SettingsPage', () => {
       // lie about a device-local preference.
       expect(mockNotifySuccess).toHaveBeenCalledWith('settings.languageChanged');
       expect(mockSuccessToast).not.toHaveBeenCalled();
+      // The hidden `polyglot` achievement.
+      await waitFor(async () => {
+        expect(await achievementsDb.achievements.get('polyglot')).toBeDefined();
+      });
     });
 
     it('does not re-announce a language that is already active', async () => {

@@ -33,6 +33,7 @@ import { listExtraStayPeriods } from '@/features/persons/utils/guest-presence';
 import { stayFollowingTravel } from '@/features/persons/utils/stay-from-travel';
 import { parseBedsText } from '@/features/rooms/utils/bed-text';
 import { useTripContext } from '@/contexts/TripContext';
+import { recordTripCreated } from '@/lib/achievements/store';
 import { db } from '@/lib/db/database';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
 import { isCalendarDayString } from '@/lib/db/sanitize';
@@ -743,6 +744,7 @@ async function executeActionBatch(
           });
           activeTripId = trip.id;
           await setCurrentTrip(trip.id);
+          void recordTripCreated();
           notifySuccess(t('trips.created'));
           executedCount++;
           summaries.push(

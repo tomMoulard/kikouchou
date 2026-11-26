@@ -111,6 +111,30 @@ export const notify = {
   },
 
   /**
+   * Celebrates something the user earned, such as an achievement, in the page.
+   *
+   * A toast, not an OS notification, and on every target. A reward is news
+   * the user did not ask for, like a warning, and it is only worth anything
+   * while they are looking at the app. Never sent for a burst: the caller
+   * folds several rewards into one message.
+   *
+   * @param message - The message, already translated.
+   * @param description - A second line, already translated.
+   */
+  reward(message: string, description?: string): void {
+    if (description === undefined) {
+      announceStatus(message);
+      toast.success(message);
+    } else {
+      announceStatus(`${message}. ${description}`);
+      toast.success(message, { description });
+    }
+    if (isNativeApp()) {
+      void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
+    }
+  },
+
+  /**
    * Reports something that went wrong, in the page, as a toast.
    *
    * @param message - The message, already translated.

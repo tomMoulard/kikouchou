@@ -82,6 +82,7 @@ import {
   type ChatMessage as LLMChatMessage,
   useAssistantChat,
 } from '../hooks/useAssistantChat';
+import { recordQuestionAsked } from '@/lib/achievements/store';
 import posthog, { captureEvent, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
@@ -744,6 +745,7 @@ function AssistantPageComponent(): ReactElement {
         queue_depth: queueRef.current.length,
         engine_status: status,
       });
+      void recordQuestionAsked();
 
       // Show the prompt straight away; `queued` is cleared when its turn starts.
       setMessages((prev) => [

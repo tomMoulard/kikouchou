@@ -933,6 +933,35 @@ A photo in the document would be replayed by every member on every start.
 - **The assistant reads that a photo exists and cannot set one.** No action
   carries an image.
 
+### Achievements belong to the person, and an unlock is permanent
+
+Fifteen achievements (`lib/achievements/definitions.ts`): five trip tiers, five
+milestones, five hidden ones. The settings page lists them in a card folded by
+default (`features/achievements`).
+
+- **Unlocked on the device, at once.** The `record…` functions in
+  `lib/achievements/store.ts` are called from the write paths and never
+  awaited: a failure costs a badge, never the save. They write
+  `db.achievements` and `db.achievementCounters`, two tables with no `tripId`,
+  so they stay out of `deleteTrip`'s cascade and the sample trip.
+- **A trip counts when a person creates it**: `createTripWithDetails` (the
+  form, the wizard, templates) and the assistant's `createTrip`. Not the
+  repository's `createTrip`, which also writes changeset imports. On start,
+  the trips with no `remoteTripId` count once (`backfillTripsFromDevice`);
+  signed in, the sync raises the counter to the trips the account owns.
+- **The account keeps a copy** in `public.achievements`: insert only, one row
+  per (account, key), no UPDATE and no DELETE grant. `AchievementSync` pulls
+  the account's rows silently and uploads the device's with
+  `ignoreDuplicates`. A key a build does not know is ignored everywhere, so a
+  key is never renamed.
+- **The percentages are aggregate and nothing else.** `achievement_stats()`
+  answers a whole percent per key over the accounts that are not anonymous,
+  never a count: with a handful of accounts, a count says who did what. It is
+  the first function that reads across accounts; keep it that narrow.
+- **One message per burst.** Unlocks within 400 ms share one
+  `notify.reward` toast, an in-page toast on every target, never an OS
+  notification.
+
 ### A global entity syncs per account, not through the trip document
 
 The Yjs document is per trip, so nothing that outlives a trip can travel in it.

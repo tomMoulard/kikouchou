@@ -144,6 +144,25 @@ describe('notify', () => {
     });
   });
 
+  describe('reward', () => {
+    it('stays in the page as a toast, and never reaches the operating system', () => {
+      notify.reward('Achievement unlocked');
+
+      expect(mockToastSuccess).toHaveBeenCalledWith('Achievement unlocked');
+      expect(mockAnnounceStatus).toHaveBeenCalledWith('Achievement unlocked');
+      expect(mockShowOsNotification).not.toHaveBeenCalled();
+    });
+
+    it('carries the second line in the toast and in the announcement', () => {
+      notify.reward('Achievement unlocked', 'First trip');
+
+      expect(mockToastSuccess).toHaveBeenCalledWith('Achievement unlocked', {
+        description: 'First trip',
+      });
+      expect(mockAnnounceStatus).toHaveBeenCalledWith('Achievement unlocked. First trip');
+    });
+  });
+
   describe('warning', () => {
     it('stays in the page as a toast', () => {
       // "2 people were no longer in the group" is news the user has to read,
