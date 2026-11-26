@@ -54,6 +54,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievements: {
+        Row: {
+          created_at: string
+          key: string
+          owner_id: string
+          unlocked_at: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          owner_id: string
+          unlocked_at: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          owner_id?: string
+          unlocked_at?: string
+        }
+        Relationships: []
+      }
       assistant_usage: {
         Row: {
           day: string
@@ -473,6 +494,13 @@ export type Database = {
       }
     }
     Functions: {
+      achievement_stats: {
+        Args: never
+        Returns: {
+          key: string
+          percent: number
+        }[]
+      }
       consume_assistant_quota: {
         Args: { p_limit: number; p_user_id: string }
         Returns: boolean
