@@ -28,6 +28,7 @@
 
 import { db } from '@/lib/db/database';
 import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
+import { recordRidePassengers } from '@/lib/achievements/store';
 import { sanitizeRideData } from '@/lib/db/sanitize';
 import {
   requireCanonicalDatetime,
@@ -290,6 +291,9 @@ export async function updateRideWithOwnershipCheck(
     });
   });
   announceGuestChange(tripId, 'rides', id);
+  if (data.driverId !== undefined) {
+    void recordRidePassengers(tripId, id);
+  }
 }
 
 /**
@@ -351,6 +355,9 @@ export async function setTransportRide(
     });
   });
   announceGuestChange(tripId, 'transport', transportId);
+  if (rideId !== undefined) {
+    void recordRidePassengers(tripId, rideId);
+  }
 }
 
 /**

@@ -25,7 +25,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 15;
+export const DB_VERSION = 16;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -115,9 +115,19 @@ export interface AchievementRow {
 
 /** A device-local counter an achievement reads, such as trips created. */
 export interface AchievementCounterRow {
-  /** The `AchievementCounter`. */
+  /** The `AchievementCounter`, or `lastOpenedDay` for the loyalty family. */
   key: string;
   value: number;
+}
+
+/**
+ * One thing a counter has already counted, so it is never counted twice.
+ *
+ * The key is `<counter>:<entity>`, for example `activitiesJoined:<activity id>`:
+ * leaving an activity and joining it again is one activity joined.
+ */
+export interface AchievementMarkRow {
+  key: string;
 }
 
 /**
@@ -383,6 +393,9 @@ export class KikouchouDatabase extends Dexie {
 
   /** The counters achievements read. Primary key: key. Device-local. */
   achievementCounters!: Table<AchievementCounterRow, string>;
+
+  /** What the counters already counted. Primary key: key. Device-local. */
+  achievementMarks!: Table<AchievementMarkRow, string>;
 
   /**
    * @param name - Database name. Defaults to the real one; a test passes its own
@@ -836,6 +849,17 @@ export class KikouchouDatabase extends Dexie {
     this.version(15).stores({
       achievements: 'key',
       achievementCounters: 'key',
+    });
+
+    /**
+     * Schema Version 16 - Achievement marks
+     *
+     * The things a family's counter already counted (an activity joined, a
+     * passenger driven), so the same one is not counted twice. Device-local,
+     * outside every trip, and empty at first.
+     */
+    this.version(16).stores({
+      achievementMarks: 'key',
     });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade

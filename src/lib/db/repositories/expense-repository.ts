@@ -8,6 +8,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { recordMoneyLine } from '@/lib/achievements/store';
 import { sanitizeExpenseData } from '@/lib/db/sanitize';
 import { createExpenseId } from '@/lib/db/utils';
 import type {
@@ -80,6 +81,7 @@ export async function createExpense(
     };
 
     await db.expenses.add(expense);
+    void recordMoneyLine();
     return expense;
   } catch (error) {
     throw repositoryError(

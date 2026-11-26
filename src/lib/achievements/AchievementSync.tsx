@@ -25,8 +25,8 @@ import { db } from '@/lib/db/database';
 import { notify } from '@/lib/notifications';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
-import type { AchievementKey } from './definitions';
-import { backfillTripsFromDevice, onAchievementsUnlocked, recordAppOpened } from './store';
+import { achievementNameKey, type AchievementKey } from './definitions';
+import { backfillFromDevice, onAchievementsUnlocked, recordAppOpened } from './store';
 import { syncAchievements } from './sync';
 
 // ============================================================================
@@ -69,7 +69,7 @@ export function AchievementSync(): null {
       const keys = pending;
       pending = [];
       const translate = tRef.current,
-        names = keys.map((key) => translate(`achievements.items.${key}.name`));
+        names = keys.map((key) => String(translate(achievementNameKey(key))));
       if (keys.length === 1) {
         notify.reward(translate('achievements.unlocked', 'Achievement unlocked'), names[0]);
       } else if (keys.length > 1) {
@@ -103,8 +103,18 @@ export function AchievementSync(): null {
   // --------------------------------------------------------------------------
 
   useEffect(() => {
-    void backfillTripsFromDevice();
+    void backfillFromDevice();
     void recordAppOpened();
+    // A tab left open overnight is a new day when it comes back.
+    const handleVisible = (): void => {
+      if (document.visibilityState === 'visible') {
+        void recordAppOpened();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
   }, []);
 
   // --------------------------------------------------------------------------

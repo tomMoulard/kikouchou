@@ -34,6 +34,7 @@
 
 import { db } from '@/lib/db/database';
 import { announceGuestChange, authorPatch } from '@/lib/notifications/guest-change';
+import { recordJourneysAdded } from '@/lib/achievements/store';
 import { sanitizeTransportData } from '@/lib/db/sanitize';
 import {
   requireCanonicalDatetime,
@@ -164,6 +165,7 @@ export async function createTransport(
 
     await db.transports.add(transport);
     announceGuestChange(tripId, 'transport', transport.id);
+    void recordJourneysAdded(1);
     return transport;
   } catch (error) {
     throw repositoryError(
@@ -671,6 +673,7 @@ export async function createSharedTransports(
     for (const transport of transports) {
       announceGuestChange(tripId, 'transport', transport.id);
     }
+    void recordJourneysAdded(transports.length);
     return transports;
   } catch (error) {
     throw repositoryError(

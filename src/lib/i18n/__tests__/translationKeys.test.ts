@@ -58,8 +58,9 @@ const SRC_DIR = resolve(process.cwd(), 'src'),
   * be checked leaf-by-leaf, so the parent object is required to exist instead.
   */
  DYNAMIC_KEY_PREFIXES = [
-   'achievements.groups',
+   'achievements.families',
    'achievements.items',
+   'achievements.stages',
    'activities.categories',
    'assistant.actionDetails.tripField',
    'childSeats',

@@ -76,7 +76,7 @@ export async function createAssignment(
 
     await db.roomAssignments.add(assignment);
     announceGuestChange(tripId, 'roomAssignments', assignment.id);
-    void recordRoomAssigned(tripId, assignment.roomId);
+    void recordRoomAssigned(tripId, assignment.roomId, assignment);
     return assignment;
   } catch (error) {
     throw repositoryError(

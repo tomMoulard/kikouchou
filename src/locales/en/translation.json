@@ -2323,44 +2323,126 @@
     "percent": "You are in the {{percent}}% of people who have it",
     "progress": "{{current}} / {{target}}",
     "signInForStats": "Sign in to see how many people have each achievement.",
+    "notStarted": "Not started yet",
+    "complete": "Every stage reached",
+    "showStages": "Stages of {{family}}",
     "status": {
       "unlocked": "Unlocked",
+      "next": "Next",
       "locked": "Locked"
     },
     "groups": {
-      "tier": "Trips created",
-      "milestone": "Milestones",
-      "hidden": "Secrets"
+      "families": "Families",
+      "specials": "Specials"
     },
     "hidden": {
       "name": "Hidden achievement",
       "description": "Keep using the app to find it."
     },
+    "families": {
+      "trips": {
+        "name": "Trip maker",
+        "description": "Trips you create. The sample trip and the trips you join do not count.",
+        "next_one": "Create {{count}} more trip to reach “{{stage}}”",
+        "next_other": "Create {{count}} more trips to reach “{{stage}}”"
+      },
+      "guests": {
+        "name": "Host",
+        "description": "Guests you add to a trip.",
+        "next_one": "Add {{count}} more guest to reach “{{stage}}”",
+        "next_other": "Add {{count}} more guests to reach “{{stage}}”"
+      },
+      "activities": {
+        "name": "Up for it",
+        "description": "Activities you take part in as a guest. Each activity counts once, even if you leave it and join again.",
+        "next_one": "Join {{count}} more activity to reach “{{stage}}”",
+        "next_other": "Join {{count}} more activities to reach “{{stage}}”"
+      },
+      "transports": {
+        "name": "Transport freak",
+        "description": "Arrivals and departures you add. A train for three guests counts three.",
+        "next_one": "Add {{count}} more journey to reach “{{stage}}”",
+        "next_other": "Add {{count}} more journeys to reach “{{stage}}”"
+      },
+      "rides": {
+        "name": "People mover",
+        "description": "Passengers you carry in a ride you drive. Each passenger counts once per ride, and a couple counts two.",
+        "next_one": "Drive {{count}} more passenger to reach “{{stage}}”",
+        "next_other": "Drive {{count}} more passengers to reach “{{stage}}”"
+      },
+      "rooms": {
+        "name": "Room planner",
+        "description": "Guest nights you give a bed. A couple for three nights counts six.",
+        "next_one": "Give a bed for {{count}} more guest night to reach “{{stage}}”",
+        "next_other": "Give a bed for {{count}} more guest nights to reach “{{stage}}”"
+      },
+      "money": {
+        "name": "Treasurer",
+        "description": "Expenses, incomes and payments you record.",
+        "next_one": "Record {{count}} more money line to reach “{{stage}}”",
+        "next_other": "Record {{count}} more money lines to reach “{{stage}}”"
+      },
+      "assistant": {
+        "name": "Curious",
+        "description": "Questions you ask the assistant.",
+        "next_one": "Ask {{count}} more question to reach “{{stage}}”",
+        "next_other": "Ask {{count}} more questions to reach “{{stage}}”"
+      },
+      "loyalty": {
+        "name": "Loyalty",
+        "description": "Days you open the app. Each day counts once.",
+        "next_one": "Come back {{count}} more day to reach “{{stage}}”",
+        "next_other": "Come back {{count}} more days to reach “{{stage}}”"
+      }
+    },
+    "stages": {
+      "trips_1": "First trip",
+      "trips_3": "Getting the hang of it",
+      "trips_10": "Seasoned organiser",
+      "trips_100": "Travel agency",
+      "trips_1000": "Living out of a suitcase",
+      "first_guest": "The more the merrier",
+      "guests_10": "Full table",
+      "guests_50": "Open house",
+      "guests_200": "Party planner",
+      "guests_1000": "The whole village",
+      "activities_1": "First outing",
+      "activities_5": "Game for it",
+      "activities_20": "Regular",
+      "activities_50": "Social butterfly",
+      "activities_100": "Never says no",
+      "journeys_1": "Ticket in hand",
+      "journeys_10": "Commuter",
+      "journeys_50": "Timetable buff",
+      "journeys_200": "Gold card",
+      "journeys_500": "Around the world",
+      "passengers_1": "First lift",
+      "passengers_5": "Carpooler",
+      "passengers_20": "Shuttle service",
+      "passengers_50": "Night bus",
+      "passengers_100": "Fleet manager",
+      "nights_1": "First bed made",
+      "nights_10": "Bed and breakfast",
+      "nights_50": "Guesthouse",
+      "nights_200": "Hotelier",
+      "nights_1000": "Grand hotel",
+      "money_1": "First receipt",
+      "money_10": "Bookkeeper",
+      "money_50": "Accountant",
+      "money_200": "Banker",
+      "money_500": "Central bank",
+      "first_question": "Just asking",
+      "questions_10": "Curious mind",
+      "questions_50": "Question box",
+      "questions_200": "Interviewer",
+      "questions_500": "Know-it-all",
+      "days_5": "Back again",
+      "days_15": "Familiar face",
+      "days_30": "Part of the furniture",
+      "days_60": "Old friend",
+      "days_100": "Always here"
+    },
     "items": {
-      "trips_1": {
-        "name": "First trip",
-        "description": "Create a trip."
-      },
-      "trips_3": {
-        "name": "Getting the hang of it",
-        "description": "Create 3 trips."
-      },
-      "trips_10": {
-        "name": "Seasoned organiser",
-        "description": "Create 10 trips."
-      },
-      "trips_100": {
-        "name": "Travel agency",
-        "description": "Create 100 trips."
-      },
-      "trips_1000": {
-        "name": "Living out of a suitcase",
-        "description": "Create 1000 trips."
-      },
-      "first_guest": {
-        "name": "The more the merrier",
-        "description": "Add a guest to a trip."
-      },
       "full_room": {
         "name": "Full house",
         "description": "Fill every bed of a room for a night."
@@ -2368,10 +2450,6 @@
       "group_activity": {
         "name": "Group outing",
         "description": "Plan an activity with 3 guests or more."
-      },
-      "first_question": {
-        "name": "Just asking",
-        "description": "Ask the assistant a question."
       },
       "trip_shared": {
         "name": "Not alone",

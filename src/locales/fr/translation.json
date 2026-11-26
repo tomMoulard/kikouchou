@@ -2323,44 +2323,126 @@
     "percent": "Vous faites partie des {{percent}} % de personnes qui l’ont",
     "progress": "{{current}} / {{target}}",
     "signInForStats": "Connectez-vous pour voir combien de personnes ont chaque succès.",
+    "notStarted": "Pas encore commencé",
+    "complete": "Toutes les étapes atteintes",
+    "showStages": "Étapes de {{family}}",
     "status": {
       "unlocked": "Débloqué",
+      "next": "Suivant",
       "locked": "Verrouillé"
     },
     "groups": {
-      "tier": "Voyages créés",
-      "milestone": "Étapes",
-      "hidden": "Secrets"
+      "families": "Familles",
+      "specials": "Spéciaux"
     },
     "hidden": {
       "name": "Succès caché",
       "description": "Continuez à utiliser l’app pour le trouver."
     },
+    "families": {
+      "trips": {
+        "name": "Organisation",
+        "description": "Les voyages que vous créez. Le voyage d’exemple et les voyages rejoints ne comptent pas.",
+        "next_one": "Créez encore {{count}} voyage pour atteindre « {{stage}} »",
+        "next_other": "Créez encore {{count}} voyages pour atteindre « {{stage}} »"
+      },
+      "guests": {
+        "name": "Hôte",
+        "description": "Les invités que vous ajoutez à un voyage.",
+        "next_one": "Ajoutez encore {{count}} invité pour atteindre « {{stage}} »",
+        "next_other": "Ajoutez encore {{count}} invités pour atteindre « {{stage}} »"
+      },
+      "activities": {
+        "name": "De la partie",
+        "description": "Les activités auxquelles vous participez en tant qu’invité. Chaque activité compte une fois, même si vous la quittez puis la rejoignez.",
+        "next_one": "Participez à encore {{count}} activité pour atteindre « {{stage}} »",
+        "next_other": "Participez à encore {{count}} activités pour atteindre « {{stage}} »"
+      },
+      "transports": {
+        "name": "Fou de transports",
+        "description": "Les arrivées et départs que vous ajoutez. Un train pour trois invités compte trois.",
+        "next_one": "Ajoutez encore {{count}} trajet pour atteindre « {{stage}} »",
+        "next_other": "Ajoutez encore {{count}} trajets pour atteindre « {{stage}} »"
+      },
+      "rides": {
+        "name": "Chauffeur",
+        "description": "Les passagers que vous conduisez. Chaque passager compte une fois par trajet, et un couple compte deux.",
+        "next_one": "Conduisez encore {{count}} passager pour atteindre « {{stage}} »",
+        "next_other": "Conduisez encore {{count}} passagers pour atteindre « {{stage}} »"
+      },
+      "rooms": {
+        "name": "Hébergement",
+        "description": "Les nuits d’invités pour lesquelles vous donnez un lit. Un couple pendant trois nuits compte six.",
+        "next_one": "Donnez un lit pour encore {{count}} nuit pour atteindre « {{stage}} »",
+        "next_other": "Donnez un lit pour encore {{count}} nuits pour atteindre « {{stage}} »"
+      },
+      "money": {
+        "name": "Trésorerie",
+        "description": "Les dépenses, recettes et remboursements que vous enregistrez.",
+        "next_one": "Enregistrez encore {{count}} opération pour atteindre « {{stage}} »",
+        "next_other": "Enregistrez encore {{count}} opérations pour atteindre « {{stage}} »"
+      },
+      "assistant": {
+        "name": "Curiosité",
+        "description": "Les questions que vous posez à l’assistant.",
+        "next_one": "Posez encore {{count}} question pour atteindre « {{stage}} »",
+        "next_other": "Posez encore {{count}} questions pour atteindre « {{stage}} »"
+      },
+      "loyalty": {
+        "name": "Fidélité",
+        "description": "Les jours où vous ouvrez l’app. Chaque jour compte une fois.",
+        "next_one": "Revenez encore {{count}} jour pour atteindre « {{stage}} »",
+        "next_other": "Revenez encore {{count}} jours pour atteindre « {{stage}} »"
+      }
+    },
+    "stages": {
+      "trips_1": "Premier voyage",
+      "trips_3": "On prend le pli",
+      "trips_10": "Organisateur chevronné",
+      "trips_100": "Agence de voyages",
+      "trips_1000": "Toujours entre deux valises",
+      "first_guest": "Plus on est de fous",
+      "guests_10": "Table pleine",
+      "guests_50": "Maison ouverte",
+      "guests_200": "Grand banquet",
+      "guests_1000": "Tout le village",
+      "activities_1": "Première sortie",
+      "activities_5": "Partant",
+      "activities_20": "Habitué",
+      "activities_50": "Pilier de la bande",
+      "activities_100": "Jamais sans moi",
+      "journeys_1": "Billet en poche",
+      "journeys_10": "Navetteur",
+      "journeys_50": "As des horaires",
+      "journeys_200": "Carte grand voyageur",
+      "journeys_500": "Tour du monde",
+      "passengers_1": "Premier covoit’",
+      "passengers_5": "Covoitureur",
+      "passengers_20": "Navette",
+      "passengers_50": "Bus de nuit",
+      "passengers_100": "Chef de flotte",
+      "nights_1": "Premier lit fait",
+      "nights_10": "Chambre d’hôtes",
+      "nights_50": "Pension de famille",
+      "nights_200": "Hôtelier",
+      "nights_1000": "Palace",
+      "money_1": "Premier ticket",
+      "money_10": "Comptable en herbe",
+      "money_50": "Comptable",
+      "money_200": "Banquier",
+      "money_500": "Banque centrale",
+      "first_question": "Simple question",
+      "questions_10": "Esprit curieux",
+      "questions_50": "Boîte à questions",
+      "questions_200": "Grand reporter",
+      "questions_500": "Puits de science",
+      "days_5": "De retour",
+      "days_15": "Visage connu",
+      "days_30": "Fait partie des meubles",
+      "days_60": "Vieil ami",
+      "days_100": "Inconditionnel"
+    },
     "items": {
-      "trips_1": {
-        "name": "Premier voyage",
-        "description": "Créez un voyage."
-      },
-      "trips_3": {
-        "name": "On prend le pli",
-        "description": "Créez 3 voyages."
-      },
-      "trips_10": {
-        "name": "Organisateur chevronné",
-        "description": "Créez 10 voyages."
-      },
-      "trips_100": {
-        "name": "Agence de voyages",
-        "description": "Créez 100 voyages."
-      },
-      "trips_1000": {
-        "name": "Toujours entre deux valises",
-        "description": "Créez 1000 voyages."
-      },
-      "first_guest": {
-        "name": "Plus on est de fous",
-        "description": "Ajoutez un invité à un voyage."
-      },
       "full_room": {
         "name": "Complet",
         "description": "Remplissez tous les lits d’une chambre pour une nuit."
@@ -2368,10 +2450,6 @@
       "group_activity": {
         "name": "Sortie de groupe",
         "description": "Prévoyez une activité avec 3 invités ou plus."
-      },
-      "first_question": {
-        "name": "Simple question",
-        "description": "Posez une question à l’assistant."
       },
       "trip_shared": {
         "name": "Pas tout seul",

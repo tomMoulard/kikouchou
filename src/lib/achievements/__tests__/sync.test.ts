@@ -122,6 +122,17 @@ describe('syncAchievements', () => {
     expect((await db.achievements.get('polyglot'))?.uploadedBy).toBe(USER);
   });
 
+  it('carries a stage pulled from another device into its counter', async () => {
+    const { client } = fakeClient({
+      remote: [{ key: 'guests_10', unlocked_at: '2026-03-01T10:00:00Z' }],
+    });
+
+    await syncAchievements(client, USER);
+
+    expect(await readCounter('guestsAdded')).toBe(10);
+    expect((await listUnlockedAchievements()).has('first_guest')).toBe(true);
+  });
+
   it('uploads what the account lacks once, as an insert that ignores a held row', async () => {
     await db.achievements.bulkAdd([
       { key: 'first_guest', unlockedAt: Date.parse('2026-05-01T00:00:00Z') },

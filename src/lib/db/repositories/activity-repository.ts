@@ -63,7 +63,7 @@ export async function createActivity(
 
     await db.activities.add(activity);
     announceGuestChange(tripId, 'activities', activity.id);
-    void recordActivityParticipants(activity.participantIds.length);
+    void recordActivityParticipants(tripId, activity.id, activity.participantIds);
     return activity;
   } catch (error) {
     throw repositoryError(
@@ -250,7 +250,7 @@ export async function updateActivityWithOwnershipCheck(
   });
   announceGuestChange(tripId, 'activities', id);
   if (sanitizedData.participantIds !== undefined) {
-    void recordActivityParticipants(sanitizedData.participantIds.length);
+    void recordActivityParticipants(tripId, id, sanitizedData.participantIds);
   }
 }
 
@@ -345,7 +345,7 @@ export async function setActivityParticipation(
   if (changed) {
     // The organizer and the others in it hear who joined or left.
     announceGuestChange(tripId, 'activities', id);
-    void recordActivityParticipants(next.length);
+    void recordActivityParticipants(tripId, id, next);
   }
   return next;
 }

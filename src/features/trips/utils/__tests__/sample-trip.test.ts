@@ -72,6 +72,7 @@ const TABLES_WITHOUT_SAMPLE_ROWS: Readonly<Record<string, string>> = {
   guestGroups: 'account-level and synced on sign-in; the sample stays on the device',
   achievements: 'belong to the person on the device, not to a trip',
   achievementCounters: 'device-local counters the achievements read',
+  achievementMarks: 'device-local record of what the achievement counters counted',
   photos:
     'fetched and written after the seed by attachSamplePhotos; seed-sample-trip.test holds it to one photo for the trip and one per room',
 };

@@ -78,8 +78,26 @@ describe('AchievementSync', () => {
     });
     expect(reward).toHaveBeenCalledWith(
       'achievements.unlockedMany',
-      'achievements.items.trips_1.name · achievements.items.trips_3.name · achievements.items.trips_10.name',
+      'achievements.stages.trips_1 · achievements.stages.trips_3 · achievements.stages.trips_10',
     );
+  });
+
+  it('counts a new day when the tab comes back', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 5, 1, 9, 0));
+    render(<AchievementSync />, { withProviders: false });
+    await waitFor(async () => {
+      expect((await db.achievementCounters.get('daysOpened'))?.value).toBe(1);
+    });
+
+    vi.setSystemTime(new Date(2026, 5, 2, 9, 0));
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(async () => {
+      expect((await db.achievementCounters.get('daysOpened'))?.value).toBe(2);
+    });
   });
 
   it('counts the trips already on the device when it starts', async () => {

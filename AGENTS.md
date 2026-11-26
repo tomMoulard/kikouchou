@@ -935,34 +935,51 @@ A photo in the document would be replayed by every member on every start.
 
 ### Achievements belong to the person, and an unlock is permanent
 
-Fifteen achievements (`lib/achievements/definitions.ts`): five trip tiers, five
-milestones, five hidden ones. The settings page lists them in a card folded by
-default (`features/achievements`).
+Nine families of five stages, and eight specials
+(`lib/achievements/definitions.ts`). A family is one lifetime counter read
+against its stages: trips created, guests added, activities joined, journeys
+added, passengers driven, guest nights given a bed, money lines, questions to
+the assistant, days the app opened. Reaching a stage's target unlocks it and
+shows the next. The specials are three milestones and five hidden ones. The
+settings page lists them in a card folded by default (`features/achievements`):
+one tile per family with a ring, and the specials below.
 
 - **Unlocked on the device, at once.** The `record…` functions in
-  `lib/achievements/store.ts` are called from the write paths and never
-  awaited: a failure costs a badge, never the save. They write
-  `db.achievements` and `db.achievementCounters`, two tables with no `tripId`,
-  so they stay out of `deleteTrip`'s cascade and the sample trip.
+  `lib/achievements/store.ts` are called from the repositories' create paths
+  and never awaited: a failure costs a badge, never the save. The sync
+  projection and the QR import write Dexie directly, so a member's change
+  arriving over sync counts nothing on this device. They write
+  `db.achievements`, `db.achievementCounters` and `db.achievementMarks`, three
+  tables with no `tripId`, so they stay out of `deleteTrip`'s cascade and the
+  sample trip.
 - **A trip counts when a person creates it**: `createTripWithDetails` (the
   form, the wizard, templates) and the assistant's `createTrip`. Not the
-  repository's `createTrip`, which also writes changeset imports. On start,
-  the trips with no `remoteTripId` count once (`backfillTripsFromDevice`);
-  signed in, the sync raises the counter to the trips the account owns.
+  repository's `createTrip`, which also writes changeset imports.
+- **"You" is the open trip's guest.** Activities joined and passengers driven
+  ask `changeAuthor(tripId)`, the identity `ChangeAuthorBinding` publishes.
+  Unknown, nothing is counted. Each of those is counted once
+  (`achievementMarks`), so leaving an activity and joining again is one.
+- **People, not rows**, as everywhere: a couple driven counts two
+  passengers, and a couple for three nights is six guest nights.
+- **A backfill is a floor, and silent.** On start, `backfillFromDevice`
+  raises the trips, guests, journeys, guest nights and money lines to what
+  the local-only trips hold, with no toast: it runs on a page load where the
+  person did nothing, and its toast on the e2e specs' seeded trips covered the
+  FAB and the install banner.
 - **The account keeps a copy** in `public.achievements`: insert only, one row
   per (account, key), no UPDATE and no DELETE grant. `AchievementSync` pulls
-  the account's rows silently and uploads the device's with
-  `ignoreDuplicates`. A key a build does not know is ignored everywhere, so a
-  key is never renamed.
+  the account's rows silently, raises each family's counter to its highest
+  stage held, and uploads the device's with `ignoreDuplicates`. A key a build
+  does not know is ignored everywhere, so a key is never renamed: the first
+  stages of the guests and assistant families are still `first_guest` and
+  `first_question`.
 - **The percentages are aggregate and nothing else.** `achievement_stats()`
   answers a whole percent per key over the accounts that are not anonymous,
   never a count: with a handful of accounts, a count says who did what. It is
   the first function that reads across accounts; keep it that narrow.
 - **One message per burst.** Unlocks within 400 ms share one
   `notify.reward` toast, an in-page toast on every target, never an OS
-  notification. A backfill (`raiseCounter`) unlocks silently: it runs on a
-  page load where the person did nothing, and its toast on the e2e specs'
-  seeded trips covered the FAB and the install banner.
+  notification.
 
 ### A global entity syncs per account, not through the trip document
 

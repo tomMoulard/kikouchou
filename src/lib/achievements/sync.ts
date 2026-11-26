@@ -25,7 +25,12 @@ import { db } from '@/lib/db/database';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 
 import { isAchievementKey, type AchievementKey } from './definitions';
-import { raiseCounter, recordTripShared, unlockAchievements } from './store';
+import {
+  raiseCounter,
+  raiseCountersToHeldStages,
+  recordTripShared,
+  unlockAchievements,
+} from './store';
 
 // ============================================================================
 // Type Definitions
@@ -125,6 +130,10 @@ export async function syncAchievements(
         .where('key')
         .anyOf([...onServer])
         .modify({ uploadedBy: userId });
+    }
+    if (pulled > 0) {
+      // A stage reached on another device: the next one counts on from it.
+      await raiseCountersToHeldStages();
     }
 
     // Ask: trips the account owns, and whether anybody joined one.

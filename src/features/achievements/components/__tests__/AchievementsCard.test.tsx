@@ -60,24 +60,86 @@ describe('AchievementsCard', () => {
     expect(await screen.findByText('achievements.summary')).toBeInTheDocument();
   });
 
-  it('opens on a click, and lists every achievement in three groups', async () => {
+  it('opens on a click: nine family tiles, then eight specials', async () => {
     const toggle = await open();
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getAllByRole('list')).toHaveLength(3);
-    expect(screen.getAllByRole('listitem')).toHaveLength(15);
-    expect(screen.getByRole('heading', { name: 'achievements.groups.hidden' })).toBeInTheDocument();
+    const families = screen.getByRole('heading', { name: 'achievements.groups.families' })
+      .parentElement as HTMLElement;
+    const specials = screen.getByRole('heading', { name: 'achievements.groups.specials' })
+      .parentElement as HTMLElement;
+    expect(within(families).getAllByRole('listitem')).toHaveLength(9);
+    expect(within(specials).getAllByRole('listitem')).toHaveLength(8);
+    // A tile stays folded: no stage is listed until it is opened.
+    expect(screen.queryByText('achievements.stages.guests_50')).not.toBeInTheDocument();
+  });
+
+  it('shows the stage reached and the way to the next one', async () => {
+    await db.achievementCounters.put({ key: 'guestsAdded', value: 12 });
+    await db.achievements.bulkAdd([
+      { key: 'first_guest', unlockedAt: Date.now() },
+      { key: 'guests_10', unlockedAt: Date.now() },
+    ]);
+    await open();
+
+    const tile = (await screen.findByText('achievements.families.guests.name')).closest(
+      'li',
+    ) as HTMLElement;
+    expect(within(tile).getByText('achievements.stages.guests_10')).toBeInTheDocument();
+    expect(within(tile).getByText('achievements.families.guests.next')).toBeInTheDocument();
+
+    const trips = screen.getByText('achievements.families.trips.name').closest('li') as HTMLElement;
+    expect(within(trips).getByText('achievements.notStarted')).toBeInTheDocument();
+  });
+
+  it('unfolds a tile into its five stages: reached, next, locked', async () => {
+    await db.achievementCounters.put({ key: 'daysOpened', value: 20 });
+    await db.achievements.bulkAdd([
+      { key: 'days_5', unlockedAt: Date.now() },
+      { key: 'days_15', unlockedAt: Date.now() },
+    ]);
+    const user = userEvent.setup();
+    await open();
+
+    const tile = (await screen.findByText('achievements.families.loyalty.name')).closest(
+      'li',
+    ) as HTMLElement;
+    const unfold = within(tile).getByRole('button', { name: 'achievements.showStages' });
+    expect(unfold).toHaveAttribute('aria-expanded', 'false');
+    await user.click(unfold);
+
+    expect(unfold).toHaveAttribute('aria-expanded', 'true');
+    const stages = within(tile).getAllByRole('listitem');
+    expect(stages).toHaveLength(5);
+    expect(stages[0]).toHaveTextContent('achievements.stages.days_5');
+    expect(stages[0]).toHaveTextContent('achievements.status.unlocked');
+    expect(stages[2]).toHaveTextContent('achievements.status.next');
+    expect(stages[4]).toHaveTextContent('achievements.status.locked');
+    expect(within(tile).getByText('achievements.families.loyalty.description')).toBeInTheDocument();
+  });
+
+  it('says a complete family is complete', async () => {
+    await db.achievementCounters.put({ key: 'questionsAsked', value: 600 });
+    await open();
+
+    const tile = (await screen.findByText('achievements.families.assistant.name')).closest(
+      'li',
+    ) as HTMLElement;
+    expect(within(tile).getByText('achievements.stages.questions_500')).toBeInTheDocument();
+    expect(within(tile).getByText('achievements.complete')).toBeInTheDocument();
   });
 
   it('keeps a locked hidden achievement secret, and names it once unlocked', async () => {
     await db.achievements.add({ key: 'midnight_pet', unlockedAt: Date.now() });
     await open();
 
-    const hidden = screen.getByRole('heading', { name: 'achievements.groups.hidden' })
+    const specials = screen.getByRole('heading', { name: 'achievements.groups.specials' })
       .parentElement as HTMLElement;
-    expect(within(hidden).getAllByText('achievements.hidden.name')).toHaveLength(4);
-    expect(within(hidden).getByText('achievements.items.midnight_pet.name')).toBeInTheDocument();
-    expect(within(hidden).queryByText('achievements.items.night_owl.name')).not.toBeInTheDocument();
+    expect(within(specials).getAllByText('achievements.hidden.name')).toHaveLength(4);
+    expect(within(specials).getByText('achievements.items.midnight_pet.name')).toBeInTheDocument();
+    expect(
+      within(specials).queryByText('achievements.items.night_owl.name'),
+    ).not.toBeInTheDocument();
   });
 
   it('asks signed-out people to sign in for the numbers, and asks the server nothing', async () => {

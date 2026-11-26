@@ -20,16 +20,28 @@
 import {
   buildNightlyOccupancyByRoom,
   createHeadcountResolver,
+  listStayNights,
 } from '@/features/rooms/utils/capacity-utils';
 import { db } from '@/lib/db/database';
+import { changeAuthor } from '@/lib/notifications/guest-change';
 import { captureEvent } from '@/lib/posthog';
-import type { RoomId, TripId } from '@/types';
+import {
+  getPersonHeadcount,
+  type ActivityId,
+  type PersonId,
+  type RideId,
+  type RoomAssignment,
+  type RoomId,
+  type TripId,
+} from '@/types';
 
 import {
-  ACHIEVEMENTS,
+  ACHIEVEMENT_FAMILIES,
+  ACHIEVEMENT_KEYS,
   GROUP_ACTIVITY_SIZE,
   isAchievementKey,
   keysEarnedByCounter,
+  placeOfAchievement,
   type AchievementCounter,
   type AchievementKey,
 } from './definitions';
@@ -58,8 +70,13 @@ export function onAchievementsUnlocked(listener: AchievementsUnlockedListener): 
 
 function announce(keys: readonly AchievementKey[]): void {
   for (const key of keys) {
-    const definition = ACHIEVEMENTS.find((a) => a.key === key);
-    captureEvent('achievement_unlocked', { key, hidden: definition?.kind === 'hidden' });
+    const place = placeOfAchievement(key);
+    captureEvent('achievement_unlocked', {
+      key,
+      family: place.type === 'stage' ? place.family.id : null,
+      stage: place.type === 'stage' ? place.index + 1 : null,
+      hidden: place.type === 'special' && place.special.kind === 'hidden',
+    });
   }
   for (const listener of listeners) {
     try {
@@ -95,7 +112,7 @@ export async function unlockAchievements(
     const held = new Set(
       (await db.achievements.bulkGet([...keys])).flatMap((row) => (row ? [row.key] : [])),
     );
-    const fresh = ACHIEVEMENTS.map((a) => a.key).filter(
+    const fresh = ACHIEVEMENT_KEYS.filter(
       (key) => keys.includes(key) && !held.has(key),
     );
     await db.achievements.bulkAdd(fresh.map((key) => ({ key, unlockedAt })));
@@ -170,6 +187,36 @@ export function raiseCounter(counter: AchievementCounter, atLeast: number): Prom
   return moveCounter(counter, (current) => Math.max(current, Math.floor(atLeast)), true);
 }
 
+/** The `achievementCounters` row that remembers the last day the app opened. */
+const LAST_OPENED_DAY = 'lastOpenedDay';
+
+/**
+ * Counts things once each: a thing marked before adds nothing.
+ *
+ * @param counter - Which counter.
+ * @param marks - One id per thing, unique within the counter.
+ * @param weigh - How much each new thing adds, 1 by default.
+ * @returns How much the counter moved.
+ */
+async function countOnce(
+  counter: AchievementCounter,
+  marks: readonly string[],
+  weigh: (mark: string) => number = () => 1,
+): Promise<number> {
+  const keys = marks.map((mark) => `${counter}:${mark}`);
+  const added = await db.transaction('rw', db.achievementMarks, async () => {
+    const seen = await db.achievementMarks.bulkGet(keys);
+    const fresh = marks.filter((_, index) => seen[index] === undefined);
+    await db.achievementMarks.bulkAdd(fresh.map((mark) => ({ key: `${counter}:${mark}` })));
+    return fresh;
+  });
+  const by = added.reduce((sum, mark) => sum + weigh(mark), 0);
+  if (by > 0) {
+    await incrementCounter(counter, by);
+  }
+  return by;
+}
+
 // ============================================================================
 // Events
 // ============================================================================
@@ -207,12 +254,30 @@ export function recordTripCreated(at: Date = new Date()): Promise<void> {
 
 /** A person added a guest to a trip. */
 export function recordGuestAdded(): Promise<void> {
-  return safely('recordGuestAdded', () => unlockAchievement('first_guest'));
+  return safely('recordGuestAdded', () => incrementCounter('guestsAdded'));
 }
 
-/** A person asked the assistant a question. */
+/** A person asked the assistant a question. A view shortcut is not one. */
 export function recordQuestionAsked(): Promise<void> {
-  return safely('recordQuestionAsked', () => unlockAchievement('first_question'));
+  return safely('recordQuestionAsked', () => incrementCounter('questionsAsked'));
+}
+
+/**
+ * A person added journeys: one row per guest, so a train for three is three.
+ *
+ * @param count - How many rows the save created.
+ */
+export function recordJourneysAdded(count = 1): Promise<void> {
+  return safely('recordJourneysAdded', async () => {
+    if (count > 0) {
+      await incrementCounter('journeysAdded', count);
+    }
+  });
+}
+
+/** A person recorded a money line: an expense, an income or a transfer. */
+export function recordMoneyLine(): Promise<void> {
+  return safely('recordMoneyLine', () => incrementCounter('moneyLines'));
 }
 
 /** A person switched the app's language from the settings. */
@@ -249,32 +314,120 @@ export function recordAppOpened(at: Date = new Date()): Promise<void> {
     if (at.getMonth() === 1 && at.getDate() === 29) {
       await unlockAchievement('leap_day');
     }
+    // Loyalty counts days, not opens: the local calendar day, once.
+    const day = at.getFullYear() * 10_000 + (at.getMonth() + 1) * 100 + at.getDate();
+    const isNewDay = await db.transaction('rw', db.achievementCounters, async () => {
+      const last = (await db.achievementCounters.get(LAST_OPENED_DAY))?.value;
+      if (last === day) {
+        return false;
+      }
+      await db.achievementCounters.put({ key: LAST_OPENED_DAY, value: day });
+      return true;
+    });
+    if (isNewDay) {
+      await incrementCounter('daysOpened');
+    }
   });
 }
 
 /**
  * An activity's participants changed.
  *
- * @param participantCount - How many guests now take part.
+ * Unlocks `group_activity` at three guests, and counts the activity once for
+ * the activities family when this device's own guest is in it. The device's
+ * guest is the one the open trip's layout knows (`changeAuthor`): unknown,
+ * nothing is counted.
+ *
+ * @param tripId - The trip.
+ * @param activityId - The activity.
+ * @param participantIds - Who takes part now.
  */
-export function recordActivityParticipants(participantCount: number): Promise<void> {
+export function recordActivityParticipants(
+  tripId: TripId,
+  activityId: ActivityId,
+  participantIds: readonly PersonId[],
+): Promise<void> {
   return safely('recordActivityParticipants', async () => {
-    if (participantCount >= GROUP_ACTIVITY_SIZE) {
+    if (participantIds.length >= GROUP_ACTIVITY_SIZE) {
       await unlockAchievement('group_activity');
+    }
+    const me = changeAuthor(tripId);
+    if (me !== undefined && participantIds.includes(me)) {
+      await countOnce('activitiesJoined', [`${tripId}/${activityId}`]);
     }
   });
 }
 
 /**
- * A guest got a room: unlocks `full_room` when the room is full on any night.
+ * A ride gained a driver or passengers: counts the passengers this device's
+ * own guest drives, each once per ride.
  *
- * People, not rows: a couple counts two (`getPersonHeadcount`).
+ * People, not rows: a couple riding along counts two. The driver riding in
+ * their own car is not a passenger.
+ *
+ * @param tripId - The trip.
+ * @param rideId - The ride.
+ */
+export function recordRidePassengers(tripId: TripId, rideId: RideId): Promise<void> {
+  return safely('recordRidePassengers', async () => {
+    const me = changeAuthor(tripId);
+    if (me === undefined) {
+      return;
+    }
+    const ride = await db.rides.get(rideId);
+    if (!ride || ride.tripId !== tripId || ride.driverId !== me) {
+      return;
+    }
+    const legs = await db.transports.where('rideId').equals(rideId).toArray();
+    const passengerIds = [
+      ...new Set(
+        legs
+          .filter((leg) => leg.tripId === tripId && leg.personId !== me)
+          .map((leg) => leg.personId),
+      ),
+    ];
+    if (passengerIds.length === 0) {
+      return;
+    }
+    const persons = await db.persons.bulkGet(passengerIds);
+    const headcounts = new Map(
+      persons.flatMap((person) =>
+        person && person.tripId === tripId ? [[person.id, getPersonHeadcount(person)]] : [],
+      ),
+    );
+    await countOnce(
+      'passengersDriven',
+      passengerIds.map((id) => `${tripId}/${rideId}/${id}`),
+      (mark) => headcounts.get(mark.slice(mark.lastIndexOf('/') + 1) as PersonId) ?? 1,
+    );
+  });
+}
+
+/**
+ * A guest got a room: counts the guest nights for the rooms family, and
+ * unlocks `full_room` when the room is full on any night.
+ *
+ * People, not rows: a couple counts two (`getPersonHeadcount`), so a couple
+ * for three nights is six guest nights.
  *
  * @param tripId - The trip.
  * @param roomId - The room the guest went to.
+ * @param assignment - The booking, for the nights it covers.
  */
-export function recordRoomAssigned(tripId: TripId, roomId: RoomId): Promise<void> {
+export function recordRoomAssigned(
+  tripId: TripId,
+  roomId: RoomId,
+  assignment?: Pick<RoomAssignment, 'personId' | 'startDate' | 'endDate'>,
+): Promise<void> {
   return safely('recordRoomAssigned', async () => {
+    if (assignment) {
+      const person = await db.persons.get(assignment.personId),
+        nights = listStayNights(assignment.startDate, assignment.endDate).length,
+        people = person ? getPersonHeadcount(person) : 1;
+      if (nights > 0) {
+        await incrementCounter('roomNights', nights * people);
+      }
+    }
     const room = await db.rooms.get(roomId);
     if (!room || room.tripId !== tripId || !(room.capacity > 0)) {
       return;
@@ -297,26 +450,70 @@ export function recordRoomAssigned(tripId: TripId, roomId: RoomId): Promise<void
 }
 
 /**
- * Counts the trips a person made on this device before achievements existed.
+ * Counts what a person made on this device before achievements existed.
  *
  * Only a trip with no server id is certainly theirs: a joined trip always has
- * one. The sample trip and viewer trips are left out. Signed in, the account
- * sync raises the counter again to the trips the account owns.
+ * one. The sample trip and viewer trips are left out. From those trips: the
+ * trips, the guests, the journeys, the guest nights given a bed and the money
+ * lines. A floor, never a step: it runs on every start and adds nothing the
+ * second time. Activities joined and passengers driven need to know which
+ * guest the person is, so they start from zero. Signed in, the account sync
+ * raises the trip counter again to the trips the account owns.
  */
-export function backfillTripsFromDevice(): Promise<void> {
-  return safely('backfillTripsFromDevice', async () => {
+export function backfillFromDevice(): Promise<void> {
+  return safely('backfillFromDevice', async () => {
     const [trips, settings] = await Promise.all([
       db.trips.toArray(),
       db.settings.get('settings'),
     ]);
-    const own = trips.filter(
-      (trip) =>
-        trip.id !== settings?.sampleTripId &&
-        trip.remoteTripId === undefined &&
-        trip.viewerToken === undefined,
-    ).length;
-    await raiseCounter('tripsCreated', own);
+    const own = trips
+      .filter(
+        (trip) =>
+          trip.id !== settings?.sampleTripId &&
+          trip.remoteTripId === undefined &&
+          trip.viewerToken === undefined,
+      )
+      .map((trip) => trip.id);
+    await raiseCounter('tripsCreated', own.length);
+    if (own.length === 0) {
+      return;
+    }
+
+    const [persons, transports, assignments, expenses] = await Promise.all([
+      db.persons.where('tripId').anyOf(own).toArray(),
+      db.transports.where('tripId').anyOf(own).toArray(),
+      db.roomAssignments.where('tripId').anyOf(own).toArray(),
+      db.expenses.where('tripId').anyOf(own).toArray(),
+    ]);
+    const headcount = createHeadcountResolver(persons);
+    const nights = assignments.reduce(
+      (sum, a) => sum + listStayNights(a.startDate, a.endDate).length * headcount(a.personId),
+      0,
+    );
+    await raiseCounter('guestsAdded', persons.length);
+    await raiseCounter('journeysAdded', transports.length);
+    await raiseCounter('roomNights', nights);
+    await raiseCounter('moneyLines', expenses.length);
   });
+}
+
+/**
+ * Raises each family's counter to the highest stage held.
+ *
+ * A stage pulled from the account's other devices says the counter reached
+ * its target there, so the next stage counts on from it here.
+ */
+export async function raiseCountersToHeldStages(): Promise<void> {
+  const held = new Set((await db.achievements.toArray()).map((row) => row.key));
+  for (const family of ACHIEVEMENT_FAMILIES) {
+    const floor = family.stages.reduce(
+      (max, stage) => (held.has(stage.key) ? Math.max(max, stage.target) : max),
+      0,
+    );
+    if (floor > 0) {
+      await raiseCounter(family.counter, floor);
+    }
+  }
 }
 
 /**
