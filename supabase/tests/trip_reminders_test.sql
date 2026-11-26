@@ -8,7 +8,7 @@
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(35);
+select plan(37);
 
 -- ===========================================================================
 -- Fixtures
@@ -390,6 +390,26 @@ select is(
   public.unsubscribe_reminders(repeat('a1', 32)),
   1,
   'the token alone stops the app''s reminders'
+);
+
+-- A device token may be up to 4096 characters (`push_subscriptions_shape_check`),
+-- twice the longest Web Push endpoint. `unsubscribe_reminders` used to refuse
+-- anything over 2048 with a quiet 0, so the client cleared its record while
+-- the server went on pushing to that phone.
+select isnt(
+  public.subscribe_trip_reminders(
+    'token-still-valid-01',
+    jsonb_build_object('transport', 'fcm', 'token', repeat('c3', 1500)),
+    'person-alice', 'en', null
+  ),
+  null,
+  'an Android app subscribes with a 3000-character FCM token'
+);
+
+select is(
+  public.unsubscribe_reminders(repeat('c3', 1500)),
+  1,
+  'a token longer than any Web Push endpoint still stops the app''s reminders'
 );
 
 select tests.act_as_postgres();
