@@ -141,6 +141,25 @@ describe('achievements store', () => {
       expect(await readCounter('tripsCreated')).toBe(10);
       expect(await held()).toEqual(['trips_1', 'trips_10', 'trips_3']);
     });
+
+    // A raise counts trips made before this build or on another device, so a
+    // toast for it would greet the person on a page load where they did
+    // nothing. In e2e it covered the FAB and the install banner.
+    it('unlocks silently when a counter is raised, and loudly when it counts', async () => {
+      const listener = vi.fn();
+      const unsubscribe = onAchievementsUnlocked(listener);
+
+      await raiseCounter('tripsCreated', 3);
+      expect(listener).not.toHaveBeenCalled();
+      expect(captureEvent).not.toHaveBeenCalledWith('achievement_unlocked', expect.anything());
+
+      await incrementCounter('tripsCreated', 7);
+      unsubscribe();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(['trips_10']);
+      expect(await held()).toEqual(['trips_1', 'trips_10', 'trips_3']);
+    });
   });
 
   describe('events', () => {

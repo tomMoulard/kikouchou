@@ -960,7 +960,9 @@ default (`features/achievements`).
   the first function that reads across accounts; keep it that narrow.
 - **One message per burst.** Unlocks within 400 ms share one
   `notify.reward` toast, an in-page toast on every target, never an OS
-  notification.
+  notification. A backfill (`raiseCounter`) unlocks silently: it runs on a
+  page load where the person did nothing, and its toast on the e2e specs'
+  seeded trips covered the FAB and the install banner.
 
 ### A global entity syncs per account, not through the trip document
 

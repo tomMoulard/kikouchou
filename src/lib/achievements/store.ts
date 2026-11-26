@@ -123,11 +123,13 @@ export async function readCounter(counter: AchievementCounter): Promise<number> 
  *
  * @param counter - Which counter.
  * @param next - Computes the new value from the stored one.
+ * @param silent - Unlock without a toast or an analytics event.
  * @returns The new value.
  */
 async function moveCounter(
   counter: AchievementCounter,
   next: (current: number) => number,
+  silent: boolean,
 ): Promise<number> {
   const value = await db.transaction('rw', db.achievementCounters, async () => {
     const current = (await db.achievementCounters.get(counter))?.value ?? 0,
@@ -137,7 +139,7 @@ async function moveCounter(
     }
     return updated;
   });
-  await unlockAchievements(keysEarnedByCounter(counter, value));
+  await unlockAchievements(keysEarnedByCounter(counter, value), { silent });
   return value;
 }
 
@@ -149,21 +151,23 @@ async function moveCounter(
  * @returns The new value.
  */
 export function incrementCounter(counter: AchievementCounter, by = 1): Promise<number> {
-  return moveCounter(counter, (current) => current + by);
+  return moveCounter(counter, (current) => current + by, false);
 }
 
 /**
  * Raises a counter to at least a value, and never lowers it.
  *
  * Used to backfill: the trips a person created before this build, counted on
- * the device or by the account.
+ * the device or by the account. What it unlocks is silent, because it runs on
+ * a page load where the person did nothing: a toast there would greet them
+ * for an old trip, and sat over the FAB and the install banner.
  *
  * @param counter - Which counter.
  * @param atLeast - The floor.
  * @returns The new value.
  */
 export function raiseCounter(counter: AchievementCounter, atLeast: number): Promise<number> {
-  return moveCounter(counter, (current) => Math.max(current, Math.floor(atLeast)));
+  return moveCounter(counter, (current) => Math.max(current, Math.floor(atLeast)), true);
 }
 
 // ============================================================================
