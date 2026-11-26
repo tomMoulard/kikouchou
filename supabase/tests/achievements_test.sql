@@ -13,8 +13,11 @@ select plan(17);
 -- Fixtures
 -- ===========================================================================
 
--- Four real accounts and one anonymous session. The test database holds no
--- other account, so the percentages below are exact.
+-- Four real accounts and one anonymous session, and no other account: a
+-- local database can hold the accounts somebody signed in with, and the
+-- percentages below count every account. The transaction rolls this back.
+delete from auth.users;
+
 insert into auth.users (id, email, role, aud, instance_id, is_anonymous)
 values
   ('11111111-1111-1111-1111-111111111111', 'one@example.test',   'authenticated', 'authenticated', '00000000-0000-0000-0000-000000000000', false),
