@@ -1,12 +1,10 @@
 /**
  * @fileoverview Starting a trip from last year's trip.
  *
- * Picking a place the household has been to before offers to bring that trip's
- * setup across. What the form does with the offer is the subject here: it
- * adopts the place with its pin (a name without its coordinates would put the
- * new trip somewhere else on the map), fills in a description only when there
- * is nothing to overwrite, and reports the source so the rooms can be copied on
- * save.
+ * Picking a place the household has been to before, in the edit form's
+ * location suggestions, adopts that place with its pin (a name without its
+ * coordinates would put the trip somewhere else on the map) and shows where
+ * it came from.
  *
  * The picker is stubbed down to a button that hands over a chosen trip: its own
  * searching has its own file.
@@ -92,21 +90,28 @@ import { TripForm } from '../TripForm';
 // Helpers
 // ============================================================================
 
-function renderForm(props: Record<string, unknown> = {}) {
+/** A trip with nothing set yet but its id, so the import has room to fill. */
+function blankTrip(): Trip {
+  return {
+    ...EDITED_TRIP,
+    id: 'trip-blank' as TripId,
+    name: '',
+    location: undefined,
+    coordinates: undefined,
+    startDate: undefined,
+    endDate: undefined,
+  } as Trip;
+}
+
+function renderForm() {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
-  const onImportSourceChange = vi.fn();
 
   const view = render(
-    <TripForm
-      onSubmit={onSubmit}
-      onCancel={vi.fn()}
-      onImportSourceChange={onImportSourceChange}
-      {...props}
-    />,
+    <TripForm trip={blankTrip()} onSubmit={onSubmit} onCancel={vi.fn()} />,
     { withProviders: false },
   );
 
-  return { ...view, onSubmit, onImportSourceChange };
+  return { ...view, onSubmit };
 }
 
 beforeEach(() => {
@@ -119,32 +124,20 @@ beforeEach(() => {
 // ============================================================================
 
 describe('TripForm — importing an earlier trip', () => {
-  it('adopts the place, its pin and the description, and says where from', async () => {
-    const { user, onImportSourceChange } = renderForm();
+  it('adopts the place and says where from', async () => {
+    const { user } = renderForm();
 
     await user.click(screen.getByTestId('import-trip'));
 
     expect(screen.getByTestId('location-input')).toHaveValue('Vannes');
-    expect(screen.getByLabelText(/trips.description/)).toHaveValue('The usual house');
-    expect(onImportSourceChange).toHaveBeenCalledWith(SOURCE_TRIP.id);
     // The badge names the trip and how many rooms come with it.
     expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
     // Through the plural key now, not a hardcoded English literal.
     expect(screen.getByText(/rooms\.roomCount/)).toBeInTheDocument();
   });
 
-  it('leaves a description that was already typed alone', async () => {
-    const { user } = renderForm();
-
-    const description = screen.getByLabelText(/trips.description/);
-    await user.type(description, 'Our own notes');
-    await user.click(screen.getByTestId('import-trip'));
-
-    expect(description).toHaveValue('Our own notes');
-  });
-
   it('lets the import be taken back', async () => {
-    const { user, onImportSourceChange } = renderForm();
+    const { user } = renderForm();
 
     await user.click(screen.getByTestId('import-trip'));
     await user.click(screen.getByRole('button', { name: 'trips.removeImport' }));
@@ -152,7 +145,6 @@ describe('TripForm — importing an earlier trip', () => {
     await waitFor(() => {
       expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
     });
-    expect(onImportSourceChange).toHaveBeenLastCalledWith(null);
   });
 
   it('says one room in the singular', async () => {
@@ -171,26 +163,6 @@ describe('TripForm — importing an earlier trip', () => {
     await user.click(screen.getByTestId('import-trip'));
 
     expect(screen.getByTestId('location-input')).toHaveAttribute('data-pin', '47.66,-2.76');
-  });
-
-  it('fills a description that holds only spaces', async () => {
-    const { user } = renderForm();
-
-    const description = screen.getByLabelText(/trips.description/);
-    await user.type(description, '   ');
-    await user.click(screen.getByTestId('import-trip'));
-
-    expect(description).toHaveValue('The usual house');
-  });
-
-  it('imports without a listener for the import source', async () => {
-    const { user } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
-      withProviders: false,
-    });
-
-    await user.click(screen.getByTestId('import-trip'));
-
-    expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
   });
 
   it('drops the import when it is handed another trip', async () => {
@@ -229,30 +201,6 @@ describe('TripForm — importing an earlier trip', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ location: 'Quimper' }));
     });
-  });
-
-  it('reports the import, and its removal, to the listener it has now', async () => {
-    const first = vi.fn();
-    const latest = vi.fn();
-    const { user, rerender } = renderForm({ onImportSourceChange: first });
-    rerender(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onImportSourceChange={latest} />);
-
-    await user.click(screen.getByTestId('import-trip'));
-    await user.click(screen.getByRole('button', { name: 'trips.removeImport' }));
-
-    expect(latest.mock.calls).toEqual([[SOURCE_TRIP.id], [null]]);
-    expect(first).not.toHaveBeenCalled();
-  });
-
-  it('takes an import back without a listener for it', async () => {
-    const { user } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
-      withProviders: false,
-    });
-    await user.click(screen.getByTestId('import-trip'));
-
-    await user.click(screen.getByRole('button', { name: 'trips.removeImport' }));
-
-    expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
   });
 
   describe('and the unsaved-changes guard', () => {
@@ -296,7 +244,7 @@ describe('TripForm — importing an earlier trip', () => {
   });
 });
 
-/** An existing trip, for the cases that need edit mode. */
+/** The trip the form edits. */
 const EDITED_TRIP = {
   ...SOURCE_TRIP,
   id: 'trip-now' as TripId,

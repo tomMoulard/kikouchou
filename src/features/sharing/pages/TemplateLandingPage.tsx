@@ -35,7 +35,7 @@ import {
 } from '@/features/trips/components/TripCreateWizard';
 import { useTripContext } from '@/contexts/TripContext';
 import { captureEvent, reportError } from '@/lib/posthog';
-import type { NewTripRoom } from '@/features/trips/components/TripForm';
+import type { NewTripRoom } from '@/features/trips/lib/create-trip-with-details';
 import { useTripTemplate, type TemplatePhase } from '../hooks/useTripTemplate';
 import type { Trip } from '@/types';
 

@@ -1,12 +1,10 @@
 /**
  * @fileoverview Creates a trip with its first guests and rooms, in one call.
  *
- * The one-page form and the first-trip wizard collect the same things — the
- * trip, a guest list, a room list, maybe a previous trip to copy rooms from —
- * and used to be the only place the writes lived. Now both hand a draft to
- * this function, so the two experiences cannot drift on what "create a trip"
- * means, and the comparison PostHog draws between them is about the screens
- * and nothing else.
+ * The wizard on `/trips/new` and the trip template page both create a trip
+ * through it: the trip, the creator's own guest row, and the rooms a template
+ * carries. The writes live here so the two paths cannot drift on what
+ * "create a trip" means.
  *
  * Everything after the trip row is best effort: a guest or a room that fails
  * is reported as a warning for the caller to show, never a rolled-back trip.
@@ -14,10 +12,7 @@
  * @module features/trips/lib/create-trip-with-details
  */
 
-import type { NewTripGuest, NewTripRoom } from '@/features/trips/components/TripForm';
 import {
-  cloneRoomsToTrip,
-  createPerson,
   createPersonWithAutoColor,
   createRoom,
   createTrip,
@@ -26,7 +21,7 @@ import {
 import { setRoomPhoto, setTripPhoto } from '@/lib/db/repositories/photo-repository';
 import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { markTripOrganised } from '@/features/trips/hooks/usePlanOwnTripPrompt';
-import type { PersonId, Trip, TripFormData, TripId } from '@/types';
+import type { PersonId, RoomBedLayout, RoomIcon, Trip, TripFormData } from '@/types';
 import { reportError } from '@/lib/posthog';
 import { recordTripCreated } from '@/lib/achievements/store';
 
@@ -34,28 +29,59 @@ import { recordTripCreated } from '@/lib/achievements/store';
 // Type Definitions
 // ============================================================================
 
-/** Everything either creation screen collects before the first write. */
+/**
+ * A guest the new trip starts with. The trip assigns a colour from the
+ * palette.
+ */
+export interface NewTripGuest {
+  readonly name: string;
+  /**
+   * Set on the creator's own row, and only on it.
+   *
+   * The person it creates is who this browser is on the new trip, and the
+   * trip stores that as its guest identity.
+   */
+  readonly isSelf?: boolean;
+}
+
+/**
+ * A room the new trip starts with: a template's, carried through the wizard.
+ */
+export interface NewTripRoom {
+  readonly name: string;
+  readonly capacity: number;
+  /** Which glyph the room shows in every list and timeline. */
+  readonly icon: RoomIcon;
+  /** The room's notes. */
+  readonly description?: string;
+  /** A photo saved with the room. */
+  readonly photo?: Blob;
+  /** The beds, as the template describes them. */
+  readonly bedLayouts?: RoomBedLayout[];
+  /** Sleeping spots that are not beds. */
+  readonly extraSpots?: number;
+}
+
+/** Everything the creation screen collects before the first write. */
 export interface TripDraft {
   readonly form: TripFormData;
   readonly guests: readonly NewTripGuest[];
   readonly rooms: readonly NewTripRoom[];
-  /** The cover photo, already prepared: picked in the form, or a template's. */
+  /** The cover photo, already prepared: a template's. */
   readonly photo?: Blob;
-  /** A previous trip whose rooms are copied, when the user picked one. */
-  readonly importSourceTripId?: TripId | null;
   /**
    * Whether to select the new trip as the current one here.
    *
-   * The form does, then navigates. The wizard must not: selecting a trip
-   * remounts the route element (`YjsTripSync` swaps it on the no-trip → trip
-   * transition), which would throw the wizard away before its invite screen.
-   * It selects the trip when the user opens it instead. Defaults to true.
+   * The wizard must not: selecting a trip remounts the route element
+   * (`YjsTripSync` swaps it on the no-trip → trip transition), which would
+   * throw the wizard away before its invite screen. It selects the trip when
+   * the user opens it instead. Defaults to true.
    */
   readonly selectAsCurrent?: boolean;
 }
 
 /** What went wrong after the trip itself was saved. */
-export type TripCreationWarning = 'rooms-import' | 'guests' | 'rooms' | 'photos' | 'identity';
+export type TripCreationWarning = 'guests' | 'rooms' | 'photos' | 'identity';
 
 export interface TripCreationOutcome {
   readonly trip: Trip;
@@ -63,9 +89,7 @@ export interface TripCreationOutcome {
   readonly selfPersonId: PersonId | undefined;
   readonly counts: {
     readonly guests: number;
-    readonly importedGuests: number;
     readonly rooms: number;
-    readonly importedRooms: boolean;
   };
   readonly warnings: readonly TripCreationWarning[];
 }
@@ -104,37 +128,11 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
     }
   }
 
-  let importedRooms = false;
-  if (draft.importSourceTripId) {
-    try {
-      await cloneRoomsToTrip(draft.importSourceTripId, trip.id);
-      importedRooms = true;
-    } catch (error) {
-      console.error('Failed to clone rooms from import source:', error);
-      warnings.push('rooms-import');
-    }
-  }
-
   let guests = 0;
-  let importedGuests = 0;
   let selfPersonId: PersonId | undefined;
   for (const guest of draft.guests) {
     try {
-      let person;
-      if (guest.color) {
-        // From a saved group: it brings its own colour and whatever else was
-        // stored with it.
-        person = await createPerson(trip.id, {
-          name: guest.name,
-          color: guest.color,
-          ...(guest.headcount === undefined ? {} : { headcount: guest.headcount }),
-          ...(guest.notes === undefined ? {} : { notes: guest.notes }),
-          ...(guest.phone === undefined ? {} : { phone: guest.phone }),
-        });
-        importedGuests += 1;
-      } else {
-        person = await createPersonWithAutoColor(trip.id, guest.name);
-      }
+      const person = await createPersonWithAutoColor(trip.id, guest.name);
       if (guest.isSelf) {
         selfPersonId = person?.id;
       }
@@ -206,7 +204,7 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
   return {
     trip,
     selfPersonId,
-    counts: { guests, importedGuests, rooms, importedRooms },
+    counts: { guests, rooms },
     warnings,
   };
 }

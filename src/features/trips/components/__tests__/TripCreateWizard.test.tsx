@@ -121,7 +121,7 @@ function outcome() {
   return {
     trip: CREATED_TRIP,
     selfPersonId: undefined,
-    counts: { guests: 0, importedGuests: 0, rooms: 0, importedRooms: false },
+    counts: { guests: 0, rooms: 0 },
     warnings: [],
   } as never;
 }
@@ -260,7 +260,6 @@ describe('TripCreateWizard', () => {
         form: { name: 'Lake house' },
         guests: [],
         rooms: [],
-        importSourceTripId: null,
         // Selecting the trip would remount the route and lose the invite screen.
         selectAsCurrent: false,
       });
@@ -408,8 +407,7 @@ describe('TripCreateWizard', () => {
           },
           guests: [],
           rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' }],
-          importSourceTripId: null,
-          selectAsCurrent: false,
+            selectAsCurrent: false,
         });
       });
     });
@@ -511,14 +509,10 @@ describe('TripCreateWizard screens', () => {
 describe('TripCreateWizard creating', () => {
   it('says it is creating and refuses a second Enter meanwhile', async () => {
     const creation = pendingCreation();
-    const onCreating = vi.fn();
     const user = userEvent.setup();
-    render(
-      <TripCreateWizard onCreating={onCreating} onCreated={onCreated} onCancel={onCancel} />,
-    );
+    renderWizard();
     await createTrip(user);
 
-    expect(onCreating).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
     fireEvent.submit(screen.getByTestId('trip-wizard'));
@@ -546,7 +540,7 @@ describe('TripCreateWizard creating', () => {
   it('reports the counts of what it created', async () => {
     mockedCreate.mockResolvedValue({
       ...(outcome() as object),
-      counts: { guests: 3, importedGuests: 1, rooms: 2, importedRooms: true },
+      counts: { guests: 3, rooms: 2 },
     } as never);
     const user = userEvent.setup();
     renderWizard();
@@ -554,9 +548,7 @@ describe('TripCreateWizard creating', () => {
 
     expect(vi.mocked(captureUsage)).toHaveBeenCalledWith('trip_created', {
       via: 'wizard',
-      imported_rooms: true,
       guest_count: 3,
-      imported_guests: 1,
       room_count: 2,
     });
     expect(vi.mocked(pushDataLayerEvent)).toHaveBeenCalledWith('trip_created', {

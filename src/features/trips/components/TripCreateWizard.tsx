@@ -1,11 +1,10 @@
 /**
  * @fileoverview The first trip: a name, then the invite link.
  *
- * Shown on `/trips/new` for a device that holds no trip of its own yet. It won
- * the `first-trip-wizard` experiment against the one-page form, which is still
- * what a later trip gets. One question (the name), then the trip is created
- * and the last screen hands over its invite link. Enter advances and Back
- * goes back.
+ * Shown on `/trips/new` for every new trip. It won the `first-trip-wizard`
+ * experiment against a one-page form, and that form was removed on
+ * 2026-11-27. One question (the name), then the trip is created and the last
+ * screen hands over its invite link. Enter advances and Back goes back.
  *
  * The dates are not a question. A trip is created without them, and the
  * calendar's setup checklist asks for them once the group is planning. Asking
@@ -18,8 +17,7 @@
  * signs in on that same screen, and `pending-invite` carries the trip across
  * the sign-in redirect so the link opens when they are back.
  *
- * The writes are `createTripWithDetails`, the same call the one-page form
- * makes, so the two paths differ in their screens and in nothing else.
+ * The writes are `createTripWithDetails`.
  *
  * It is also the screen behind a trip template link. A `prefill` carries the
  * place, the map pin, the description, the currency and the rooms the
@@ -58,8 +56,12 @@ import { pushDataLayerEvent } from '@/lib/google-tag';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import type { CurrencyCode, Trip, TripFormData } from '@/types';
-import type { NewTripGuest, NewTripRoom } from './TripForm';
-import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-trip-with-details';
+import {
+  createTripWithDetails,
+  type NewTripGuest,
+  type NewTripRoom,
+  type TripCreationOutcome,
+} from '../lib/create-trip-with-details';
 
 // ============================================================================
 // Type Definitions
@@ -94,15 +96,6 @@ export interface TripCreateWizardProps {
    * Absent for the ordinary first-trip wizard.
    */
   readonly prefill?: TripCreateWizardPrefill | undefined;
-  /**
-   * Called the moment creation starts, before the first write.
-   *
-   * The page decides between the wizard and the form from the trip list, and
-   * the list grows as soon as the trip row lands — before the guests, the
-   * rooms and the invite screen. This is how the page knows to keep the wizard
-   * on screen through that.
-   */
-  readonly onCreating?: (() => void) | undefined;
   /** Called from the invite screen when the user opens the trip. */
   readonly onCreated: (trip: Trip) => void;
   readonly onCancel: () => void;
@@ -154,7 +147,6 @@ function prefersReducedMotion(): boolean {
 export const TripCreateWizard = memo(function TripCreateWizard({
   currentUserName,
   prefill,
-  onCreating,
   onCreated,
   onCancel,
   onDirtyChange,
@@ -245,7 +237,6 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   const create = useCallback(async (): Promise<void> => {
     setIsCreating(true);
     setProblem(null);
-    onCreating?.();
     // The creator is on the guest list when the account gives a name. Every
     // other guest adds themself through the link.
     const guests: NewTripGuest[] = currentUserName ? [{ name: currentUserName, isSelf: true }] : [];
@@ -264,7 +255,6 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         guests,
         rooms: [...(prefill?.rooms ?? [])],
         ...(prefill?.photo === undefined ? {} : { photo: prefill.photo }),
-        importSourceTripId: null,
         // The page selects the trip when the user opens it; selecting it here
         // would remount the route and lose the invite screen.
         selectAsCurrent: false,
@@ -274,9 +264,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
       }
       captureUsage('trip_created', {
         via: prefill === undefined ? 'wizard' : 'template',
-        imported_rooms: outcome.counts.importedRooms,
         guest_count: outcome.counts.guests,
-        imported_guests: outcome.counts.importedGuests,
         room_count: outcome.counts.rooms,
       });
       // The conversion Google Ads optimises against, through a GTM trigger.
@@ -304,7 +292,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         setIsCreating(false);
       }
     }
-  }, [currentUserName, name, onCreating, prefill, t]);
+  }, [currentUserName, name, prefill, t]);
 
   /** Enter, or the Next button: validate this question, move to the next. */
   const advance = useCallback((): void => {

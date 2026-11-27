@@ -1,47 +1,25 @@
 /**
- * @fileoverview Trip Create Page for creating new vacation trips.
- * Provides a form interface to create trips, with navigation and user feedback.
+ * @fileoverview Trip Create Page: the wizard that creates every new trip.
  *
  * @module features/trips/pages/TripCreatePage
  */
 
-import { type ReactElement, memo, useCallback, useMemo, useRef, useState } from 'react';
+import { type ReactElement, memo, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { UsersRound } from 'lucide-react';
-import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
+import { useUnsavedChanges } from '@/hooks';
 import { useShortLandscapeViewport } from '@/hooks/usePhoneViewport';
 
-import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useHideNavigation } from '@/contexts/NavigationVisibilityContext';
-import { useTripContext } from '@/contexts/TripContext';
 import { TripCreateWizard } from '@/features/trips/components/TripCreateWizard';
-import {
-  TripForm,
-  type NewTripGuest,
-  type NewTripRoom,
-  type TripFormHandle,
-} from '@/features/trips/components/TripForm';
-import {
-  createTripWithDetails,
-  type TripCreationWarning,
-} from '@/features/trips/lib/create-trip-with-details';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getAccountGuestName } from '@/features/auth/display-name';
-import {
-  GuestGroupImportDialog,
-  type GuestGroupSelection,
-} from '@/features/guest-groups';
 import { setCurrentTrip } from '@/lib/db';
-import { pushDataLayerEvent } from '@/lib/google-tag';
-import { captureUsage } from '@/lib/posthog';
-import { notify } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
-import type { Trip, TripFormData, TripId } from '@/types';
+import type { Trip } from '@/types';
 import { reportError } from '@/lib/posthog';
 
 // ============================================================================
@@ -51,12 +29,11 @@ import { reportError } from '@/lib/posthog';
 /**
  * Page component for creating a new trip.
  *
- * Features:
- * - Uses TripForm component for form UI and validation
- * - Confirms success as an OS notification, reports errors as a toast
- * - Navigates to trip calendar on successful creation
- * - Prevents double-submission during async operations
- * - Handles unmount during async operations to prevent memory leaks
+ * Every new trip goes through `TripCreateWizard`: the name, then the invite
+ * link. The one-page form a returning visitor used to get was removed on
+ * 2026-11-27, so the first trip and the tenth are created the same way. The
+ * dates, the place, the guests and the rooms are filled in on the trip once
+ * it exists.
  *
  * @returns The trip create page element
  *
@@ -69,9 +46,7 @@ import { reportError } from '@/lib/posthog';
 export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { notifySuccess } = useOfflineAwareNotify();
   const { user } = useAuth();
-  const { trips, sampleTripId, isLoading: tripsLoading } = useTripContext();
 
   /**
    * How much vertical room the page may spend on its own frame.
@@ -88,39 +63,19 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   );
   const headerClass = isShortLandscape ? 'gap-2 pb-2 md:pb-2' : undefined;
 
-  /**
-   * Which experience this visit gets.
-   *
-   * A first trip gets the wizard, one question per screen. Somebody who has
-   * made a trip before knows the one-page form and gets it. The sample trip
-   * seeded on first open is not the visitor's own, so it does not count.
-   */
-  const ownTripCount = useMemo(
-    () => trips.filter((trip) => trip.id !== sampleTripId).length,
-    [sampleTripId, trips],
-  );
-  const isFirstTrip = !tripsLoading && ownTripCount === 0;
-  /**
-   * Latched the moment the wizard starts writing: the trip list grows with the
-   * first write, which would otherwise swap the wizard for the form between
-   * the last question and the invite screen.
-   */
-  const [wizardBusy, setWizardBusy] = useState(false);
-  const showWizard = isFirstTrip || wizardBusy;
-
   /*
-    No navigation beside the wizard. On a first visit every trip tab is
-    disabled, so the bar can go nowhere useful and only competes with the
-    question on screen. The page keeps its own back link.
+    No navigation beside the wizard. It asks one question at a time, and the
+    bar only competes with it; on a first visit every trip tab is disabled
+    anyway. The page keeps its own back link.
   */
-  useHideNavigation(showWizard);
+  useHideNavigation(true);
 
   /**
-   * What to pre-fill the first guest — "you" — with.
+   * The creator's own guest row, when the account gives a name.
    *
    * `undefined` signed out, and signed out is a first-class way to use this
-   * app, so the row is then simply the user's to fill in. A plain string, so
-   * the form compares it by value across the render where the session resolves.
+   * app: the guest then adds themself through the invite link like everybody
+   * else.
    */
   const currentUserName = getAccountGuestName(user);
 
@@ -130,172 +85,20 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
   const [isDirty, setIsDirty] = useState(false);
   const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
-  const importSourceRef = useRef<TripId | null>(null);
-  const guestsRef = useRef<readonly NewTripGuest[]>([]);
-  const roomsRef = useRef<readonly NewTripRoom[]>([]);
-  const photoRef = useRef<Blob | null>(null);
-
-  // ============================================================================
-  // Guest Group Selection
-  // ============================================================================
-
-  /*
-    The trip does not exist yet, so the picker cannot write — but the guest list
-    does not need it to. Picked people go straight into the form's list as
-    ordinary rows, editable and removable like the typed ones, and the page
-    creates all of them together once there is a trip.
-
-    That replaces a queue of "2 people from Family" chips sitting below the
-    guest list. It read as two kinds of guest, and it was not one: the same
-    people, split across two places, one of which could not be edited.
-  */
-  const formRef = useRef<TripFormHandle>(null);
-  const [isGroupPickerOpen, setIsGroupPickerOpen] = useState(false);
-
-  const handleOpenGroupPicker = useCallback(() => {
-    setIsGroupPickerOpen(true);
-  }, []);
-
-  const handleGroupsSelected = useCallback(
-    (selections: readonly GuestGroupSelection[]) => {
-      formRef.current?.addGuests(
-        selections.flatMap(({ group, memberIds }) =>
-          group.members
-            .filter((member) => memberIds.includes(member.id))
-            .map((member) => ({
-              sourceMemberId: member.id,
-              name: member.name,
-              color: member.color,
-              ...(member.headcount === undefined ? {} : { headcount: member.headcount }),
-              ...(member.notes === undefined ? {} : { notes: member.notes }),
-              ...(member.phone === undefined ? {} : { phone: member.phone }),
-            })),
-        ),
-      );
-    },
-    [],
-  );
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
     setIsDirty(dirty);
   }, []);
 
-  /**
-   * Tracks the import source trip ID from TripForm.
-   */
-  const handleImportSourceChange = useCallback((sourceTripId: TripId | null) => {
-    importSourceRef.current = sourceTripId;
-  }, []);
-
-  /**
-   * Tracks the guest list TripForm is holding — typed rows and imported ones
-   * alike, since the form keeps them in one list.
-   *
-   * A ref rather than state, like the import source above: nothing renders off
-   * it, and re-rendering the page on every keystroke in the guest list would
-   * cost the form its own state.
-   */
-  const handleGuestsChange = useCallback((guests: readonly NewTripGuest[]) => {
-    guestsRef.current = guests;
-  }, []);
-
-  /**
-   * Tracks the room list TripForm is holding, for the same reasons as the
-   * guests above: rooms are not a trip field, and a ref keeps the keystrokes
-   * out of this page's render.
-   */
-  const handleRoomsChange = useCallback((rooms: readonly NewTripRoom[]) => {
-    roomsRef.current = rooms;
-  }, []);
-
-  /** The cover photo the form holds, prepared already. Not a trip field either. */
-  const handlePhotoChange = useCallback((photo: Blob | null) => {
-    photoRef.current = photo;
-  }, []);
-
   // ============================================================================
-  // Submission Handler
+  // Event Handlers
   // ============================================================================
-
-  /**
-   * Submission handler that creates the trip and navigates on success.
-   * TripForm handles its own useFormSubmission internally — this is the
-   * business logic callback passed as onSubmit.
-   */
-  const handleSubmit = useCallback(
-    async (data: TripFormData): Promise<void> => {
-      // The writes are shared with the first-trip wizard; see
-      // `lib/create-trip-with-details`. What is left here is what the form
-      // says about them.
-      const outcome = await createTripWithDetails({
-        form: data,
-        guests: guestsRef.current,
-        rooms: roomsRef.current,
-        ...(photoRef.current ? { photo: photoRef.current } : {}),
-        importSourceTripId: importSourceRef.current,
-      });
-
-      // The trip exists either way, so each of these is a warning rather than
-      // a rolled-back creation.
-      const warningMessages: Record<TripCreationWarning, string> = {
-        'rooms-import': t('trips.importRoomsFailed', 'Trip created but room import failed'),
-        guests: t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'),
-        rooms: t('trips.roomsCreateFailed', 'Trip created but some rooms could not be added'),
-        photos: t('photos.saveFailedOnCreate', 'Trip created but a photo could not be saved'),
-        // Same message the settings picker shows, because it is the same failure.
-        identity: t(
-          'sharing.identityStorageFailed',
-          'Could not save your identity. You may need to re-select on your next visit.',
-        ),
-      };
-      for (const warning of outcome.warnings) {
-        notify.error(warningMessages[warning]);
-      }
-
-      captureUsage('trip_created', {
-        via: 'form',
-        imported_rooms: outcome.counts.importedRooms,
-        guest_count: outcome.counts.guests,
-        imported_guests: outcome.counts.importedGuests,
-        room_count: outcome.counts.rooms,
-      });
-      // The conversion Google Ads optimises against, through a GTM trigger.
-      // Counts and the enum only, like every other Google tag event.
-      pushDataLayerEvent('trip_created', {
-        via: 'form',
-        guest_count: outcome.counts.guests,
-        room_count: outcome.counts.rooms,
-      });
-
-      // Reset dirty state and skip blocker before navigation.
-      // skipNextBlock() prevents the blocker from firing if setIsDirty(false)
-      // hasn't re-rendered yet when navigate() executes.
-      setIsDirty(false);
-      skipNextBlock();
-
-      // Offline-aware, like every other entity: a trip created on a train is
-      // saved on this device and not yet anywhere else, and the confirmation says so.
-      if (outcome.counts.importedRooms) {
-        notifySuccess(t('trips.createdWithImport', 'Trip created with rooms imported'));
-      } else if (!importSourceRef.current) {
-        notifySuccess(t('trips.created', 'Trip created successfully'));
-      }
-
-      // Navigate to the new trip's calendar
-      navigate(`/trips/${outcome.trip.id}/calendar`);
-    },
-    [navigate, skipNextBlock, notifySuccess, t],
-  );
-
-  const handleWizardCreating = useCallback((): void => {
-    setWizardBusy(true);
-  }, []);
 
   /**
    * The wizard's way out: it has already created the trip and celebrated.
    *
-   * The trip is selected here rather than at creation — see `selectAsCurrent`
-   * in `lib/create-trip-with-details` — so the wizard survives to its done
+   * The trip is selected here rather than at creation (see `selectAsCurrent`
+   * in `lib/create-trip-with-details`) so the wizard survives to its done
    * screen.
    */
   const handleWizardCreated = useCallback(
@@ -317,10 +120,6 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
     [navigate, skipNextBlock],
   );
 
-  // ============================================================================
-  // Event Handlers
-  // ============================================================================
-
   /**
    * Handles cancel action by navigating back to trips list.
    * Reset dirty state first so the unsaved changes dialog doesn't appear.
@@ -335,82 +134,19 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   // Render
   // ============================================================================
 
-  // Rendering the form and then swapping it for the wizard once the trip list
-  // arrives would be the worst of both.
-  if (tripsLoading && !wizardBusy) {
-    return (
-      <div className={containerClass}>
-        <PageHeader title={t('trips.new')} backLink="/trips" className={headerClass} />
-        <LoadingState variant="inline" />
-      </div>
-    );
-  }
-
-  if (showWizard) {
-    return (
-      <div className={containerClass}>
-        <PageHeader
-          title={t('trips.wizard.title', 'Your first trip')}
-          backLink="/trips"
-          className={headerClass}
-        />
-        <Card>
-          <CardContent className={isShortLandscape ? 'pt-4' : 'pt-6'}>
-            <TripCreateWizard
-              currentUserName={currentUserName}
-              onCreating={handleWizardCreating}
-              onCreated={(trip) => void handleWizardCreated(trip)}
-              onCancel={handleCancel}
-              onDirtyChange={handleDirtyChange}
-            />
-          </CardContent>
-        </Card>
-        <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
-      </div>
-    );
-  }
-
   return (
     <div className={containerClass}>
       <PageHeader title={t('trips.new')} backLink="/trips" className={headerClass} />
-
       <Card>
         <CardContent className={isShortLandscape ? 'pt-4' : 'pt-6'}>
-          <TripForm
-            ref={formRef}
-            onSubmit={handleSubmit}
+          <TripCreateWizard
+            currentUserName={currentUserName}
+            onCreated={(trip) => void handleWizardCreated(trip)}
             onCancel={handleCancel}
             onDirtyChange={handleDirtyChange}
-            onImportSourceChange={handleImportSourceChange}
-            currentUserName={currentUserName}
-            onGuestsChange={handleGuestsChange}
-            onRoomsChange={handleRoomsChange}
-            onPhotoChange={handlePhotoChange}
-          >
-            {/*
-              One button, and no queue beside it: whatever the picker returns
-              goes into the guest list above as ordinary rows. What the user
-              picked is then visible in the one place they are already reading.
-            */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleOpenGroupPicker}
-            >
-              <UsersRound className="size-4" aria-hidden="true" />
-              {t('guestGroups.importAction', 'Add from a group')}
-            </Button>
-          </TripForm>
+          />
         </CardContent>
       </Card>
-
-      <GuestGroupImportDialog
-        open={isGroupPickerOpen}
-        onOpenChange={setIsGroupPickerOpen}
-        onConfirm={handleGroupsSelected}
-      />
-
       <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
     </div>
   );

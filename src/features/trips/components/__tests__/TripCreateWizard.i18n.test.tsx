@@ -62,7 +62,7 @@ const mockedCreate = vi.mocked(createTripWithDetails);
 const OUTCOME = {
   trip: { id: 'trip-1', shareId: 'share-1', name: 'Lac' },
   selfPersonId: undefined,
-  counts: { guests: 0, importedGuests: 0, rooms: 0, importedRooms: false },
+  counts: { guests: 0, rooms: 0 },
   warnings: [],
 } as never;
 
