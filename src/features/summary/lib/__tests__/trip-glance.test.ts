@@ -281,6 +281,20 @@ describe('buildTripGlance', () => {
       });
 
       expect(glance.guestsWithoutRoom).toEqual([]);
+      expect(glance.staysUnknown).toBe(false);
+    });
+
+    // Regression: the panel said "Everyone has a bed" on a trip with no
+    // dates, no guest dates and no booking, while every bed was free.
+    it('marks the stays unknown when no night can be planned', () => {
+      const glance = build({
+        trip: { ...TRIP, startDate: undefined, endDate: undefined } as unknown as Trip,
+        rooms: [room('r1', 2)],
+        persons: [person('p1')],
+      });
+
+      expect(glance.guestsWithoutRoom).toEqual([]);
+      expect(glance.staysUnknown).toBe(true);
     });
   });
 });

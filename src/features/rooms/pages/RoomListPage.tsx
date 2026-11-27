@@ -509,6 +509,20 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   */
    tripHasNoNights = isZeroNightWindow(currentTrip?.startDate, currentTrip?.endDate),
 
+  /*
+    No trip dates, no guest dates and no booking: the page has no night to
+    plan, so nobody gets a "needs room" chip. That is "we do not know when",
+    not "everyone has a bed", and the page asks for the dates instead.
+  */
+   staysUnknown = roomPlanningWindow === null && persons.length > 0,
+
+  // Every guest holds at least one booking. Without it an empty "needs room"
+  // list said "Everyone has a room" while every bed was free.
+   everyGuestBooked = useMemo(() => {
+    const booked = new Set(assignments.map((assignment) => assignment.personId));
+    return persons.every((person) => booked.has(person.id));
+  }, [assignments, persons]),
+
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
    timelineDayCount = useMemo(
@@ -961,8 +975,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
     // "Everyone has a room" has to mean rooms were given out. On a trip with no
     // nights nobody needed one, so the same empty list is not good news.
+    // An unknown window or a guest with no booking at all is not good news
+    // either: the empty list then means nobody was asked about.
     const allAssigned =
-      persons.length > 0 && unassignedGuests.length === 0 && !tripHasNoNights;
+      persons.length > 0 &&
+      unassignedGuests.length === 0 &&
+      !tripHasNoNights &&
+      !staysUnknown &&
+      everyGuestBooked;
     if (!allAssigned) {
       return;
     }
@@ -989,8 +1009,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
   }, [
     currentTrip?.id,
+    everyGuestBooked,
     persons.length,
     notifySuccess,
+    staysUnknown,
     t,
     tripHasNoNights,
     tripIdFromUrl,
@@ -1171,6 +1193,27 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           <BedDouble className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {t('rooms.noNights', 'No nights on this trip, so nobody needs a bed')}
         </p>
+      )}
+
+      {staysUnknown && !tripHasNoNights && (
+        <div
+          role="status"
+          className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"
+        >
+          <p className="flex min-w-0 flex-1 items-start gap-2">
+            <BedDouble className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            {t('rooms.staysUnknown', 'Set the trip dates, or each guest\'s stay, to give out the beds')}
+          </p>
+          {canEdit && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/trips/${tripIdFromUrl}/edit?focus=dates`)}
+            >
+              {t('rooms.setDates', 'Set the dates')}
+            </Button>
+          )}
+        </div>
       )}
 
       {/* Date range filter for room availability (cards view only) */}

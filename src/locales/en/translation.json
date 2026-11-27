@@ -352,6 +352,8 @@
     "unassignedGuests": "Guests without rooms",
     "allGuestsAssigned": "All guests have rooms assigned",
     "noNights": "No nights on this trip, so nobody needs a bed",
+    "staysUnknown": "Set the trip dates, or each guest's stay, to give out the beds",
+    "setDates": "Set the dates",
     "dragHint": "Drag a chip onto a room to give it a bed",
     "needsRoom": "needs room",
     "icon": "Room icon",
@@ -1114,6 +1116,7 @@
     "noRoom": {
       "title": "Still without a room",
       "empty": "Everyone has a bed",
+      "staysUnknown": "Set the trip dates to give out the beds",
       "nights_one": "{{count}} night",
       "nights_other": "{{count}} nights",
       "more_one": "{{count}} more guest",

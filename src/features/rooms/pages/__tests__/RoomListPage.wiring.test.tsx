@@ -1635,7 +1635,12 @@ describe('RoomListPage — the "everyone has a room" notice', () => {
   });
 
   it('falls back on the address when no trip is loaded', () => {
-    resetWorld({ trip: undefined, persons: [BOB] });
+    // Bob holds a booking: a guest with none is not "housed".
+    resetWorld({
+      trip: undefined,
+      persons: [BOB],
+      assignments: [stay('a2', BOB.id, BARN.id, tripDay(1), tripDay(10))],
+    });
     renderPage();
 
     expect(window.localStorage.setItem).toHaveBeenCalledWith(STORAGE_KEY, '1');

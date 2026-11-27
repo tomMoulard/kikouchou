@@ -376,6 +376,11 @@ export const TripGlancePanel = memo(function TripGlancePanel({
       >
         {isLoading ? (
           <p className="text-muted-foreground">{t('glance.loading', 'Loading…')}</p>
+        ) : glance.staysUnknown ? (
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <BedDouble className="size-4 shrink-0" aria-hidden="true" />
+            {t('glance.noRoom.staysUnknown', 'Set the trip dates to give out the beds')}
+          </p>
         ) : glance.guestsWithoutRoom.length === 0 ? (
           <p className="flex items-center gap-2 text-muted-foreground">
             <BedDouble className="size-4 shrink-0" aria-hidden="true" />

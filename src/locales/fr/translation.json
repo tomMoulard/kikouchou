@@ -352,6 +352,8 @@
     "unassignedGuests": "Invités sans chambre",
     "allGuestsAssigned": "Tous les invités ont une chambre",
     "noNights": "Aucune nuit sur ce séjour, personne n'a besoin d'un lit",
+    "staysUnknown": "Fixez les dates du séjour, ou celles de chaque invité, pour attribuer les lits",
+    "setDates": "Fixer les dates",
     "dragHint": "Glissez une étiquette sur une chambre pour lui donner un lit",
     "needsRoom": "a besoin d'une chambre",
     "icon": "Icône de la chambre",
@@ -1114,6 +1116,7 @@
     "noRoom": {
       "title": "Encore sans chambre",
       "empty": "Tout le monde a un lit",
+      "staysUnknown": "Fixez les dates du séjour pour attribuer les lits",
       "nights_one": "{{count}} nuit",
       "nights_other": "{{count}} nuits",
       "more_one": "{{count}} autre invité",

@@ -898,6 +898,57 @@ describe('RoomListPage', () => {
     expect(mockSuccessToast).toHaveBeenCalledWith('rooms.allGuestsAssigned');
   });
 
+  // Regression: a trip without dates, a guest without dates and no booking
+  // left the "needs room" list empty, and the page said "Everyone has a room"
+  // while every bed was free.
+  it('asks for the dates instead of saying everyone has a room when no stay is known', async () => {
+    const undatedTrip: Trip = { ...mockTrip, startDate: undefined, endDate: undefined };
+    vi.mocked(useTripContext).mockReturnValue({
+      currentTrip: undatedTrip,
+      isLoading: false,
+      error: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      trips: [undatedTrip],
+      checkConnection: vi.fn(),
+    });
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [mockPerson2],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(() => mockPerson2),
+    } as unknown as ReturnType<typeof usePersonContext>);
+
+    const { user } = render(<RoomListPage />, { withProviders: false });
+
+    expect(mockSuccessToast).not.toHaveBeenCalled();
+    expect(screen.getByText('rooms.staysUnknown')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'rooms.setDates' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/edit?focus=dates');
+  });
+
+  it('does not say everyone has a room while a guest holds no booking', () => {
+    // Alice is booked; Bob has no dates of his own. With the trip's dates
+    // Bob needs a bed, but the toast must not depend on that inference alone.
+    vi.mocked(useAssignmentContext).mockReturnValue({
+      assignments: [mockAssignment],
+      isLoading: false,
+      error: null,
+      getAssignmentsByRoom: vi.fn(() => [mockAssignment]),
+      createAssignment: mockCreateAssignment,
+      updateAssignment: mockUpdateAssignment,
+    } as unknown as ReturnType<typeof useAssignmentContext>);
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [mockPerson, { ...mockPerson2, stayStartDate: '2026-07-03', stayEndDate: '2026-07-03' } as Person],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(() => mockPerson),
+    } as unknown as ReturnType<typeof usePersonContext>);
+
+    render(<RoomListPage />, { withProviders: false });
+
+    expect(mockSuccessToast).not.toHaveBeenCalled();
+  });
+
   it('does not show success toast twice for all assigned (ref suppression within session)', () => {
     // First render — toast fires
     vi.mocked(useAssignmentContext).mockReturnValue({

@@ -112,6 +112,12 @@ export interface TripGlance {
   readonly nextArrivals: readonly GlanceArrival[];
   /** Guests with at least one uncovered night, most nights first. */
   readonly guestsWithoutRoom: readonly GlanceGuestWithoutRoom[];
+  /**
+   * The rooms page has no night to plan: no trip dates, no guest dates, no
+   * booking. An empty {@link guestsWithoutRoom} then means "unknown", not
+   * "everyone has a bed".
+   */
+  readonly staysUnknown: boolean;
 }
 
 /** What {@link buildTripGlance} reads. All of it is already in a context. */
@@ -236,11 +242,13 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
   });
 
   const guestsWithoutRoom: GlanceGuestWithoutRoom[] = [];
+  let staysUnknown = false;
 
   if (trip) {
     // The rooms page's own window, so a guest with no dates on a trip
     // without dates is counted here exactly when they get a chip there.
     const roomWindow = resolveRoomPlanningWindow(trip, persons, arrivals, departures, assignments);
+    staysUnknown = roomWindow === null && persons.length > 0;
     const tripWindow = { startDate: roomWindow?.startDate, endDate: roomWindow?.endDate };
     for (const person of persons) {
       const unassigned = calculateUnassignedDates(
@@ -278,5 +286,6 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
     rooms: glanceRooms,
     nextArrivals,
     guestsWithoutRoom,
+    staysUnknown,
   };
 }
