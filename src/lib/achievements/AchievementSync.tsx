@@ -38,6 +38,21 @@ import { syncAchievements } from './sync';
 /** Unlocks closer together than this share one message. */
 const BATCH_MS = 400;
 
+/** Where the achievements list is: the settings page's card, opened. */
+export const ACHIEVEMENTS_PATH = '/settings#achievements';
+
+/**
+ * Opens the achievements list. This component sits outside the router, so it
+ * takes the router itself, loaded on the click rather than with the app.
+ */
+function openAchievements(): void {
+  void import('@/router')
+    .then(({ router }) => router.navigate(ACHIEVEMENTS_PATH))
+    .catch((error: unknown) => {
+      console.warn('[achievements] could not open the list:', error);
+    });
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -76,9 +91,19 @@ export function AchievementSync(): null {
       const keys = pending;
       pending = [];
       const translate = tRef.current,
-        names = keys.map((key) => String(translate(achievementNameKey(key))));
+        names = keys.map((key) => String(translate(achievementNameKey(key)))),
+        // The list sits on the settings page, folded. The toast's button
+        // opens it there: the tester found it nowhere else.
+        seeAction = {
+          label: String(translate('achievements.see', 'See')),
+          onClick: openAchievements,
+        };
       if (keys.length === 1) {
-        notify.reward(translate('achievements.unlocked', 'Achievement unlocked'), names[0]);
+        notify.reward(
+          translate('achievements.unlocked', 'Achievement unlocked'),
+          names[0],
+          seeAction,
+        );
       } else if (keys.length > 1) {
         notify.reward(
           translate('achievements.unlockedMany', {
@@ -86,6 +111,7 @@ export function AchievementSync(): null {
             defaultValue: '{{count}} achievements unlocked',
           }),
           names.join(' · '),
+          seeAction,
         );
       }
     };

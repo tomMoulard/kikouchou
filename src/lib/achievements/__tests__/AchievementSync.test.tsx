@@ -61,6 +61,7 @@ describe('AchievementSync', () => {
       expect(reward).toHaveBeenCalledWith(
         'achievements.unlocked',
         'achievements.items.polyglot.name',
+        expect.objectContaining({ label: 'achievements.see' }),
       );
     });
     expect(reward).toHaveBeenCalledTimes(1);
@@ -80,7 +81,30 @@ describe('AchievementSync', () => {
     expect(reward).toHaveBeenCalledWith(
       'achievements.unlockedMany',
       'achievements.stages.trips_1 · achievements.stages.trips_3 · achievements.stages.trips_10',
+      expect.objectContaining({ label: 'achievements.see' }),
     );
+  });
+
+  // The list is folded on the settings page, where the tester never found it.
+  it("offers a button that opens the achievements list", async () => {
+    const navigate = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@/router', () => ({ router: { navigate } }));
+    render(<AchievementSync />, { withProviders: false });
+
+    await act(async () => {
+      await unlockAchievement('polyglot');
+    });
+    await waitFor(() => {
+      expect(reward).toHaveBeenCalledTimes(1);
+    });
+
+    const action = reward.mock.calls[0]?.[2] as { onClick: () => void };
+    action.onClick();
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith('/settings#achievements');
+    });
+    vi.doUnmock('@/router');
   });
 
   // Regression: the first-trip wizard unlocks `trips_1` on its sign-in
@@ -103,6 +127,7 @@ describe('AchievementSync', () => {
       expect(reward).toHaveBeenCalledWith(
         'achievements.unlocked',
         'achievements.items.polyglot.name',
+        expect.objectContaining({ label: 'achievements.see' }),
       );
     });
     expect(reward).toHaveBeenCalledTimes(1);

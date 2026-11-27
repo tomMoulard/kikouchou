@@ -15,8 +15,9 @@
  * @module features/achievements/components/AchievementsCard
  */
 
-import { memo, useCallback, useEffect, useId, useState, type ReactElement } from 'react';
+import { memo, useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import {
@@ -94,6 +95,9 @@ const SPECIAL_ICONS: Readonly<Record<AchievementSpecialKey, LucideIcon>> = {
 };
 
 const LIST_ID = 'achievements-list';
+
+/** The card's own id: `/settings#achievements` opens it. */
+const CARD_ID = 'achievements';
 
 /** The ring's geometry, in its own 64-unit box. */
 const RING_RADIUS = 28;
@@ -393,8 +397,21 @@ export const AchievementsCard = memo(function AchievementsCard(): ReactElement {
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
-  const [isOpen, setIsOpen] = useState(false);
+  const { hash } = useLocation();
+  // `/settings#achievements`, from the unlock toast's "See": the card opens
+  // and comes into view.
+  const isLinkedTo = hash === `#${CARD_ID}`;
+  const [isOpen, setIsOpen] = useState(isLinkedTo);
   const [stats, setStats] = useState<AchievementStats | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isLinkedTo) {
+      return;
+    }
+    setIsOpen(true);
+    cardRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [isLinkedTo]);
 
   const unlocked = useLiveQuery(async () => {
     const rows = await db.achievements.toArray();
@@ -437,7 +454,7 @@ export const AchievementsCard = memo(function AchievementsCard(): ReactElement {
   const held = unlocked ?? new Map<string, number>();
 
   return (
-    <Card>
+    <Card id={CARD_ID} ref={cardRef} className="scroll-mt-20">
       <CardHeader>
         <h2>
           <button

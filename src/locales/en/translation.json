@@ -2294,6 +2294,7 @@
     "unlocked": "Achievement unlocked",
     "unlockedMany_one": "{{count}} achievement unlocked",
     "unlockedMany_other": "{{count}} achievements unlocked",
+    "see": "See",
     "unlockedOn": "Unlocked on {{date}}",
     "percent": "You are in the {{percent}}% of people who have it",
     "progress": "{{current}} / {{target}}",

@@ -2294,6 +2294,7 @@
     "unlocked": "Succès débloqué",
     "unlockedMany_one": "{{count}} succès débloqué",
     "unlockedMany_other": "{{count}} succès débloqués",
+    "see": "Voir",
     "unlockedOn": "Débloqué le {{date}}",
     "percent": "Vous faites partie des {{percent}} % de personnes qui l’ont",
     "progress": "{{current}} / {{target}}",

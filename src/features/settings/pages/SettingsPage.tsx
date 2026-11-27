@@ -331,6 +331,10 @@ function SettingsPageComponent(): ReactElement {
         {/* Account Section */}
         <AccountCard />
 
+        {/* Achievements - folded by default, but near the top: at the bottom,
+            below every preference, nobody found them. */}
+        <AchievementsCard />
+
         {/* Language Section */}
         <LanguageSelector />
 
@@ -348,9 +352,6 @@ function SettingsPageComponent(): ReactElement {
             because it is a preference rather than reference material. */}
         <NotificationSettings />
 
-        {/* Achievements - folded by default: something to come back to, not
-            a preference, so below every preference and above the reference. */}
-        <AchievementsCard />
 
         {/* About Section */}
         <AboutSection />

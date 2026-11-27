@@ -161,6 +161,16 @@ describe('notify', () => {
       });
       expect(mockAnnounceStatus).toHaveBeenCalledWith('Achievement unlocked. First trip');
     });
+
+    it('carries a button to where the reward can be seen', () => {
+      const onClick = vi.fn();
+      notify.reward('Achievement unlocked', 'First trip', { label: 'See', onClick });
+
+      expect(mockToastSuccess).toHaveBeenCalledWith('Achievement unlocked', {
+        description: 'First trip',
+        action: { label: 'See', onClick },
+      });
+    });
   });
 
   describe('warning', () => {

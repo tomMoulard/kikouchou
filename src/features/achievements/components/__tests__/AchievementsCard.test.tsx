@@ -60,6 +60,18 @@ describe('AchievementsCard', () => {
     expect(await screen.findByText('achievements.summary')).toBeInTheDocument();
   });
 
+  // The unlock toast's "See" lands on /settings#achievements.
+  it('opens by itself when the address names it', async () => {
+    render(<AchievementsCard />, {
+      withProviders: false,
+      initialEntries: ['/settings#achievements'],
+    });
+
+    const toggle = await screen.findByRole('button', { name: /achievements\.title/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(document.getElementById('achievements')).not.toBeNull();
+  });
+
   it('opens on a click: nine family tiles, then eight specials', async () => {
     const toggle = await open();
 

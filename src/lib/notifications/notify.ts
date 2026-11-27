@@ -120,14 +120,24 @@ export const notify = {
    *
    * @param message - The message, already translated.
    * @param description - A second line, already translated.
+   * @param action - A button on the toast, such as "See" for an achievement.
    */
-  reward(message: string, description?: string): void {
+  reward(
+    message: string,
+    description?: string,
+    action?: { readonly label: string; readonly onClick: () => void },
+  ): void {
+    const actionOption = action === undefined ? {} : { action };
     if (description === undefined) {
       announceStatus(message);
-      toast.success(message);
+      if (action === undefined) {
+        toast.success(message);
+      } else {
+        toast.success(message, actionOption);
+      }
     } else {
       announceStatus(`${message}. ${description}`);
-      toast.success(message, { description });
+      toast.success(message, { description, ...actionOption });
     }
     if (isNativeApp()) {
       void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
