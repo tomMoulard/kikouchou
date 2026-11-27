@@ -822,6 +822,36 @@ describe('Layout', () => {
     });
   });
 
+  // A tester saw "More" lit as the current tab on "My trips": the trip list
+  // lives in the "More" sheet, so any sheet row being current lit the button.
+  describe('Mobile nav "More" button', () => {
+    function moreButton(): HTMLElement {
+      return within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' });
+    }
+
+    it('is not highlighted on the trip list, while the sheet still marks it current', async () => {
+      const user = userEvent.setup();
+      renderLayoutAt('/trips');
+
+      expect(moreButton()).not.toHaveClass('text-primary');
+      expect(moreButton().querySelector('svg')).not.toHaveClass('text-primary');
+
+      await user.click(moreButton());
+
+      const sheet = await screen.findByRole('dialog');
+      expect(within(sheet).getByRole('button', { name: 'trips.title' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+    });
+
+    it('is still highlighted on another page that lives in the sheet', () => {
+      renderLayoutAt('/settings');
+
+      expect(moreButton()).toHaveClass('text-primary');
+    });
+  });
+
   // ============================================================================
   // Sidebar Collapse Tests
   // ============================================================================
@@ -2211,9 +2241,12 @@ describe('Layout current page', () => {
       const { unmount } = renderLayoutAt(path);
       const railTrips = within(getSidebar() as HTMLElement).getByRole('link', { name: 'trips.title' });
       expect(railTrips, path).toHaveClass('bg-primary/14');
-      expect(within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }), path).toHaveClass(
-        'text-primary',
-      );
+      // The rail marks it; the bar's "More" does not light up for it, since
+      // the trip list is the app's landing page and the logo leads there.
+      expect(
+        within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }),
+        path,
+      ).not.toHaveClass('text-primary');
       unmount();
     }
   });

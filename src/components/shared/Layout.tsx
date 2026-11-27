@@ -140,18 +140,23 @@ const TripGlancePanel = lazy(() =>
 );
 
 /**
+ * "My trips". Current on the list and the new-trip form only: a trip's own
+ * pages live under `/trips/:tripId/…`, below the list in the URL but not part
+ * of it.
+ */
+const TRIPS_NAV_ITEM: NavItem = {
+  labelKey: 'trips.title',
+  pathSuffix: '',
+  icon: Luggage,
+  requiresTrip: false,
+  currentOn: ['/trips', '/trips/new'],
+};
+
+/**
  * Navigation items that don't require a trip (always visible).
  */
 const GLOBAL_NAV_ITEMS: readonly NavItem[] = [
-  // Current on the list and the new-trip form only: a trip's own pages live
-  // under `/trips/:tripId/…`, below the list in the URL but not part of it.
-  {
-    labelKey: 'trips.title',
-    pathSuffix: '',
-    icon: Luggage,
-    requiresTrip: false,
-    currentOn: ['/trips', '/trips/new'],
-  },
+  TRIPS_NAV_ITEM,
   // Guest groups sit here rather than beside "Guests": they belong to the
   // account, are edited with no trip selected, and outlive every trip they were
   // imported into.
@@ -476,9 +481,14 @@ const MobileNav = memo(function MobileNav({
     requestAnimationFrame(() => navigate(path, { state: OPENED_FROM_NAV }));
   }, [navigate, setIsMoreOpen]);
 
-  // Check if any "More" item's route is currently active
+  // Whether a "More" item's route is the current page. "My trips" does not
+  // count: the trip list is where the app lands, so "More" was lit on the
+  // screen people see most, and the header's logo already leads there. The
+  // row inside the sheet is still marked current.
   const isMoreItemActive = useMemo(() => {
-    return sheetItems.some((item) => isNavItemCurrent(item, tripId, location.pathname));
+    return sheetItems.some(
+      (item) => item !== TRIPS_NAV_ITEM && isNavItemCurrent(item, tripId, location.pathname),
+    );
   }, [sheetItems, tripId, location.pathname]);
 
   return (
@@ -639,6 +649,7 @@ const MobileNav = memo(function MobileNav({
                       onClick={() => { if (!isDisabled) handleMoreItemClick(path); }}
                       aria-disabled={isDisabled || undefined}
                       aria-describedby={isDisabled ? sheetDisabledHintId : undefined}
+                      aria-current={isActive ? 'page' : undefined}
                       className={cn(
                         'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm min-h-[44px] transition-colors',
                         'hover:bg-accent hover:text-accent-foreground',
