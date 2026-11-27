@@ -174,6 +174,8 @@
     "new": "Nouveau voyage",
     "settings": "Réglages du voyage",
     "settingsDescription": "Le voyage lui-même : son nom, ses dates, et qui vous êtes dessus.",
+    "deleteTitle": "Supprimer ce voyage",
+    "deleteDescription": "Supprime le voyage avec ses chambres, ses invités et ses trajets.",
     "name": "Nom du voyage",
     "namePlaceholder": "Ex : Vacances d'été",
     "location": "Lieu",
@@ -685,7 +687,7 @@
       "hidden_other": "{{count}} autres trajets masqués",
       "showAll": "Afficher tout le monde",
       "unknownIdentity": "Indiquez quel participant vous êtes pour ne voir que vos propres trajets.",
-      "chooseIdentity": "Choisir dans les réglages du voyage",
+      "chooseIdentity": "Choisir qui vous êtes",
       "empty": "Rien ici ne vous concerne",
       "emptyDescription": "Aucun trajet de ce séjour ne vous concerne. Passez à « Tout le monde » pour voir tout le séjour."
     },

@@ -706,13 +706,17 @@ describe('CalendarPage — the setup checklist', () => {
     expect(await screen.findByTestId('landed-on')).toHaveTextContent(destination);
   });
 
-  it('asks a trip without dates for them, and sends the step to the trip settings', async () => {
+  it('asks a trip without dates for them, and sends the step to the dates field', async () => {
     setTrip({ ...mockTrip, startDate: undefined, endDate: undefined });
     const { user } = renderCalendarPage();
 
     await user.click(screen.getByRole('button', { name: 'calendar.setup.dates.action' }));
 
-    expect(await screen.findByTestId('landed-on')).toHaveTextContent('/trips/trip-1/edit');
+    // `focus=dates`: the settings page used to open with the cursor in the
+    // name, the dates further down.
+    expect(await screen.findByTestId('landed-on')).toHaveTextContent(
+      /^\/trips\/trip-1\/edit\?focus=dates$/,
+    );
   });
 
   it('draws a plain timeline for a trip without dates', () => {

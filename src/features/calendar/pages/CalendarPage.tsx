@@ -262,9 +262,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     navigate(`/trips/${tripIdFromUrl}/transports?new=1`);
   }, [navigate, tripIdFromUrl]);
 
-  // The trip's settings page holds the date fields.
+  // The trip's settings page holds the date fields; `focus=dates` puts the
+  // cursor there instead of in the name.
   const handleSetDates = useCallback(() => {
-    navigate(`/trips/${tripIdFromUrl}/edit`);
+    navigate(`/trips/${tripIdFromUrl}/edit?focus=dates`);
   }, [navigate, tripIdFromUrl]);
 
   // How far the trip is from having anything to draw. A freshly saved trip

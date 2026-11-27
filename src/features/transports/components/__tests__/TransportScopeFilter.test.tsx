@@ -108,10 +108,12 @@ describe('TransportScopeFilter', () => {
     ).not.toBeInTheDocument();
   });
 
-  it("points at the trip's settings instead of a control nobody can use", () => {
+  it('opens the "who you are" picker in place instead of a control nobody can use', async () => {
     // No identity means no filtering, so there is no switch to offer — only
     // the one action that would make one possible.
-    render(
+    // It used to send the reader to the trip settings, a page led by the
+    // red delete button with the question four cards down.
+    const { user } = render(
       <TransportScopeFilter
         scope="all"
         canFilter={false}
@@ -119,12 +121,32 @@ describe('TransportScopeFilter', () => {
         hiddenCount={0}
         onScopeChange={vi.fn()}
       />,
-      { withProviders: false },
     );
 
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     expect(
+      screen.queryByRole('link', { name: 'transports.scope.chooseIdentity' }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'transports.scope.chooseIdentity' }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('settings.guestIdentity')).toBeInTheDocument();
+  });
+
+  it('points at the trip list when there is no trip', () => {
+    render(
+      <TransportScopeFilter
+        scope="all"
+        canFilter={false}
+        tripId={null}
+        hiddenCount={0}
+        onScopeChange={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+
+    expect(
       screen.getByRole('link', { name: 'transports.scope.chooseIdentity' }),
-    ).toHaveAttribute('href', '/trips/trip-1/edit');
+    ).toHaveAttribute('href', '/trips');
   });
 });

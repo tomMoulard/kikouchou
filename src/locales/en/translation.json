@@ -174,6 +174,8 @@
     "new": "New trip",
     "settings": "Trip settings",
     "settingsDescription": "The trip itself: its name, its dates, and who you are on it.",
+    "deleteTitle": "Delete this trip",
+    "deleteDescription": "Deletes the trip with its rooms, guests and travel.",
     "name": "Trip name",
     "namePlaceholder": "e.g. Summer vacation",
     "location": "Location",
@@ -685,7 +687,7 @@
       "hidden_other": "{{count}} other transports hidden",
       "showAll": "Show everyone",
       "unknownIdentity": "Tell the app which guest you are to see only your own travel.",
-      "chooseIdentity": "Choose in the trip settings",
+      "chooseIdentity": "Choose who you are",
       "empty": "Nothing here concerns you",
       "emptyDescription": "None of this trip’s travel involves you. Switch to Everyone to see the whole trip."
     },

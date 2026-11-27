@@ -74,7 +74,9 @@ export async function setTripDatesFromChecklist(
   endDate: string = fixtureDate(22, 0),
 ): Promise<void> {
   await page.getByRole('button', { name: /^set dates$/i }).click();
-  await expect(page).toHaveURL(/\/trips\/[^/]+\/edit/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/trips\/[^/]+\/edit\?focus=dates/, { timeout: 15_000 });
+  // The page opens on the dates, not on the name.
+  await expect(page.locator('#trip-start-date')).toBeFocused();
   await page.locator('#trip-start-date').fill(startDate);
   await page.locator('#trip-end-date').fill(endDate);
   await page.getByRole('button', { name: /save/i }).click();

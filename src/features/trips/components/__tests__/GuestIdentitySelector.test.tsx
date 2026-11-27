@@ -13,7 +13,7 @@
 import { createContext, useContext } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { render, screen, userEvent } from '@/test/utils';
+import { render, screen, userEvent, waitFor } from '@/test/utils';
 import type { Person, Trip } from '@/types';
 
 // ============================================================================
@@ -386,6 +386,21 @@ describe('GuestIdentitySelector', () => {
     await user.click(screen.getByRole('button', { name: 'settings.guestIdentityOpenGuests' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/persons');
+  });
+
+  // The transport page's "Choose who you are" opens this picker in a dialog,
+  // which brings its own title and closes once the choice is saved.
+  it('renders the picker alone, and says when a choice is saved', async () => {
+    const onChosen = vi.fn();
+    render(<GuestIdentitySelector bare onChosen={onChosen} />, { withProviders: false });
+
+    expect(screen.queryByText('settings.guestIdentityDescription')).not.toBeInTheDocument();
+
+    await choose('Paul');
+
+    await waitFor(() => {
+      expect(onChosen).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('titles the card, explains it, and says where the answer is kept', () => {

@@ -76,8 +76,8 @@ vi.mock('@/hooks', () => ({
 
 // Mock TripForm to avoid deep component tree
 vi.mock('@/features/trips/components/TripForm', () => ({
-  TripForm: ({ trip, onSubmit, onCancel }: { trip?: unknown; onSubmit: (data: unknown) => Promise<void>; onCancel: () => void }) => (
-    <div data-testid="trip-form">
+  TripForm: ({ trip, onSubmit, onCancel, focusField }: { trip?: unknown; onSubmit: (data: unknown) => Promise<void>; onCancel: () => void; focusField?: string }) => (
+    <div data-testid="trip-form" data-focus-field={focusField}>
       {trip ? <span data-testid="edit-mode">Edit mode</span> : <span data-testid="create-mode">Create mode</span>}
       <button data-testid="submit-btn" onClick={() => void onSubmit({ name: 'Updated Trip', startDate: '2026-07-01', endDate: '2026-07-15' }).catch(() => {})}>Submit</button>
       <button data-testid="cancel-btn" onClick={onCancel}>Cancel</button>
@@ -175,6 +175,33 @@ describe('TripEditPage', () => {
   it('renders delete button', async () => {
     render(<TripEditPage />, { withProviders: false });
     expect(await screen.findByText('common.delete')).toBeInTheDocument();
+  });
+
+  // The red button led the page from the header, above the fields people
+  // came to change. It is the page's last control now.
+  it('puts the delete button after every other card', async () => {
+    render(<TripEditPage />, { withProviders: false });
+
+    const deleteButton = await screen.findByRole('button', { name: /common\.delete/ });
+    for (const card of ['trip-form', 'guest-identity-selector', 'print-summary-card']) {
+      expect(
+        screen.getByTestId(card).compareDocumentPosition(deleteButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(screen.getByText('trips.deleteTitle')).toBeInTheDocument();
+  });
+
+  it('hands the form the dates to focus when the address asks for them', async () => {
+    render(<TripEditPage />, { withProviders: false, initialEntries: ['/trips/trip-1/edit?focus=dates'] });
+
+    expect(await screen.findByTestId('trip-form')).toHaveAttribute('data-focus-field', 'dates');
+  });
+
+  it('focuses the name otherwise', async () => {
+    render(<TripEditPage />, { withProviders: false });
+
+    expect(await screen.findByTestId('trip-form')).toHaveAttribute('data-focus-field', 'name');
   });
 
   it('opens the share dialog for this trip', async () => {

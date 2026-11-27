@@ -78,7 +78,21 @@ const NO_IDENTITY_VALUE = '__none__';
  *
  * @returns The guest identity card
  */
-export const GuestIdentitySelector = memo(function GuestIdentitySelector(): ReactElement {
+/** Props for {@link GuestIdentitySelector}. */
+export interface GuestIdentitySelectorProps {
+  /**
+   * The picker alone, without its card: for a dialog that brings its own
+   * title, such as the transport page's "Choose who you are".
+   */
+  readonly bare?: boolean;
+  /** Called once a choice is saved. */
+  readonly onChosen?: () => void;
+}
+
+export const GuestIdentitySelector = memo(function GuestIdentitySelector({
+  bare = false,
+  onChosen,
+}: GuestIdentitySelectorProps): ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { currentTrip } = useTripContext();
@@ -130,6 +144,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
         // lives in localStorage and never syncs, so "Saved on this device" is
         // the only thing it could ever mean. Same call as the language card's.
         notify.success(t('settings.guestIdentityCleared', 'You are nobody in particular now'));
+        onChosen?.();
         return;
       }
 
@@ -164,6 +179,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
               name: person.name,
             }),
           );
+          onChosen?.();
         })
         .catch((error: unknown) => {
           reportFailure(
@@ -176,7 +192,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
           );
         });
     },
-    [currentTrip, persons, setMyPersonId, t],
+    [currentTrip, onChosen, persons, setMyPersonId, t],
   );
 
   const handleOpenGuests = useCallback((): void => {
@@ -184,6 +200,99 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
       navigate(`/trips/${currentTrip.id}/persons`);
     }
   }, [currentTrip, navigate]);
+
+  const body = (
+    <>
+      {!currentTrip ? (
+        <p className="text-sm text-muted-foreground">
+          {t('settings.guestIdentityNoTrip', 'Open a trip to say which guest you are.')}
+        </p>
+      ) : isLoading ? (
+        <div className="flex justify-center py-2">
+          <LoadingState
+            variant="inline"
+            label={t('settings.guestIdentityLoading', 'Loading guests…')}
+          />
+        </div>
+      ) : persons.length === 0 ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t(
+              'settings.guestIdentityNoGuests',
+              'This trip has no guests yet. Add yourself to the guest list first.',
+            )}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenGuests}
+            className="w-full sm:w-auto"
+            data-testid="guest-identity-open-guests"
+          >
+            {t('settings.guestIdentityOpenGuests', 'Open guests')}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <Select
+            value={selectedPerson ? selectedPerson.id : NO_IDENTITY_VALUE}
+            onValueChange={handleChange}
+          >
+            <SelectTrigger
+              className="w-full sm:w-[240px]"
+              aria-label={t('settings.guestIdentity', 'Who you are')}
+              // The app defaults to French, so an e2e locator built from the
+              // accessible name would pass or fail by locale.
+              data-testid="guest-identity-select"
+            >
+              <SelectValue placeholder={t('settings.guestIdentityNone', 'Nobody in particular')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_IDENTITY_VALUE} data-testid="guest-identity-none">
+                {t('settings.guestIdentityNone', 'Nobody in particular')}
+              </SelectItem>
+              {persons.map((person) => (
+                <SelectItem key={person.id} value={person.id}>
+                  {person.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* A stored identity naming a guest who has since been removed
+              reads back fine but resolves to nobody, and the picker above
+              would silently sit on "Nobody in particular" as though that had
+              always been the answer. Say so instead. */}
+          {personId !== undefined && !selectedPerson && (
+            <p className="text-sm text-muted-foreground">
+              {t(
+                'settings.guestIdentityMissing',
+                'The guest you picked is no longer on this trip. Choose again.',
+              )}
+            </p>
+          )}
+
+          {selectedPerson && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              {t('settings.guestIdentityCurrent', 'On this trip you are')}
+              <PersonBadge person={selectedPerson} size="sm" />
+            </p>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            {t(
+              'settings.guestIdentityHint',
+              'Kept on this device only. It decides whose sign-ups and travel the trip pages offer to change.',
+            )}
+          </p>
+        </>
+      )}
+    </>
+  );
+
+  if (bare) {
+    return <div className="space-y-3">{body}</div>;
+  }
 
   return (
     <Card>
@@ -204,90 +313,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {!currentTrip ? (
-          <p className="text-sm text-muted-foreground">
-            {t('settings.guestIdentityNoTrip', 'Open a trip to say which guest you are.')}
-          </p>
-        ) : isLoading ? (
-          <div className="flex justify-center py-2">
-            <LoadingState
-              variant="inline"
-              label={t('settings.guestIdentityLoading', 'Loading guests…')}
-            />
-          </div>
-        ) : persons.length === 0 ? (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              {t(
-                'settings.guestIdentityNoGuests',
-                'This trip has no guests yet. Add yourself to the guest list first.',
-              )}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenGuests}
-              className="w-full sm:w-auto"
-              data-testid="guest-identity-open-guests"
-            >
-              {t('settings.guestIdentityOpenGuests', 'Open guests')}
-            </Button>
-          </div>
-        ) : (
-          <>
-            <Select
-              value={selectedPerson ? selectedPerson.id : NO_IDENTITY_VALUE}
-              onValueChange={handleChange}
-            >
-              <SelectTrigger
-                className="w-full sm:w-[240px]"
-                aria-label={t('settings.guestIdentity', 'Who you are')}
-                // The app defaults to French, so an e2e locator built from the
-                // accessible name would pass or fail by locale.
-                data-testid="guest-identity-select"
-              >
-                <SelectValue placeholder={t('settings.guestIdentityNone', 'Nobody in particular')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_IDENTITY_VALUE} data-testid="guest-identity-none">
-                  {t('settings.guestIdentityNone', 'Nobody in particular')}
-                </SelectItem>
-                {persons.map((person) => (
-                  <SelectItem key={person.id} value={person.id}>
-                    {person.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* A stored identity naming a guest who has since been removed
-                reads back fine but resolves to nobody, and the picker above
-                would silently sit on "Nobody in particular" as though that had
-                always been the answer. Say so instead. */}
-            {personId !== undefined && !selectedPerson && (
-              <p className="text-sm text-muted-foreground">
-                {t(
-                  'settings.guestIdentityMissing',
-                  'The guest you picked is no longer on this trip. Choose again.',
-                )}
-              </p>
-            )}
-
-            {selectedPerson && (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                {t('settings.guestIdentityCurrent', 'On this trip you are')}
-                <PersonBadge person={selectedPerson} size="sm" />
-              </p>
-            )}
-
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'settings.guestIdentityHint',
-                'Kept on this device only. It decides whose sign-ups and travel the trip pages offer to change.',
-              )}
-            </p>
-          </>
-        )}
+        {body}
       </CardContent>
     </Card>
   );

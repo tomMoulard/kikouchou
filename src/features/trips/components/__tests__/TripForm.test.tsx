@@ -140,6 +140,28 @@ describe('TripForm Basic Rendering', () => {
     expect(locationInput).toHaveValue('Brittany, France');
   });
 
+  it('puts the cursor in the name by default', () => {
+    render(<TripForm trip={createUndatedTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText(/trips\.name/i)).toHaveFocus();
+  });
+
+  // The calendar checklist's "Set the dates" landed here with the cursor in
+  // the name and the dates further down the page.
+  it('puts the cursor in the start date when asked for the dates', () => {
+    render(
+      <TripForm
+        trip={createUndatedTrip()}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        focusField="dates"
+      />,
+    );
+
+    expect(screen.getByLabelText(/trips\.startDate/i)).toHaveFocus();
+    expect(screen.getByLabelText(/trips\.name/i)).not.toHaveFocus();
+  });
+
   it('marks only the name as required', () => {
     render(<TripForm trip={createUndatedTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
 

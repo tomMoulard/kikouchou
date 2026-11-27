@@ -19,7 +19,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
 import { Archive, ArchiveRestore, Eye, Share2, Trash2 } from 'lucide-react';
@@ -29,7 +29,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentitySelector';
 import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
@@ -80,6 +80,10 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
+  // `?focus=dates` comes from the calendar checklist's "Set the dates": the
+  // cursor goes to the dates rather than the name.
+  const [searchParams] = useSearchParams();
+  const focusField = searchParams.get('focus') === 'dates' ? 'dates' : 'name';
   const {
     currentTrip,
     setCurrentTrip,
@@ -527,10 +531,6 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
                   : t('trips.archive')}
               </Button>
             )}
-            <Button variant="destructive" onClick={handleOpenDeleteDialog}>
-              <Trash2 className="mr-2 size-4" aria-hidden="true" />
-              {t('common.delete')}
-            </Button>
           </div>
         }
       />
@@ -539,10 +539,16 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         <Card>
           <CardContent className="pt-6">
             {canEdit ? (
-              <TripForm trip={trip} onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} />
+              <TripForm
+                trip={trip}
+                onSubmit={handleSubmit}
+                onCancel={handleCancel}
+                onDirtyChange={handleDirtyChange}
+                focusField={focusField}
+              />
             ) : (
               // A read-only trip: the facts, and the one thing that can be done
-              // about it here — deleting this device's copy — stays in the header.
+              // about it here — deleting this device's copy — is at the bottom.
               <dl className="grid gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-muted-foreground">{t('trips.name')}</dt>
@@ -616,6 +622,23 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
             entry of its own: printing is an occasional action, not a section of
             the trip. */}
         <PrintSummaryCard />
+
+        {/* Last, on purpose. It led the page from the header, in red, above
+            the fields people came to change. */}
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-base">{t('trips.deleteTitle', 'Delete this trip')}</CardTitle>
+            <CardDescription>
+              {t('trips.deleteDescription', 'Deletes the trip with its rooms, guests and travel.')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="destructive" onClick={handleOpenDeleteDialog}>
+              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+              {t('common.delete')}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <ConfirmDialog

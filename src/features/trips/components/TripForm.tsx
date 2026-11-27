@@ -75,6 +75,12 @@ interface TripFormProps {
   readonly onCancel: () => void;
   /** Callback when form dirty state changes (for unsaved changes guard). */
   readonly onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * The field to put the cursor in when the form opens. `name` by default;
+   * `dates` scrolls to the start date and focuses it, for the calendar
+   * checklist's "Set the dates".
+   */
+  readonly focusField?: 'name' | 'dates';
 }
 
 /**
@@ -146,8 +152,21 @@ const TripForm = memo(function TripForm({
   onSubmit,
   onCancel,
   onDirtyChange,
+  focusField = 'name',
 }: TripFormProps) {
   const { t } = useTranslation();
+
+  // "Set the dates" from the calendar checklist lands here: the cursor goes
+  // in the start date, not in the name, and the field is scrolled into view.
+  const startDateRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusField !== 'dates') {
+      return;
+    }
+    const field = startDateRef.current;
+    field?.scrollIntoView?.({ block: 'center' });
+    field?.focus({ preventScroll: true });
+  }, [focusField]);
 
   // ============================================================================
   // Import State
@@ -520,7 +539,7 @@ const TripForm = memo(function TripForm({
           aria-describedby={errors.name ? 'trip-name-error' : undefined}
           disabled={isSubmitting}
           // eslint-disable-next-line jsx-a11y/no-autofocus -- The first control of a form the user has just chosen to open. Without it focus stays on the trigger — or, in a dialog, on the close button — and the user tabs to reach the field they came for.
-          autoFocus
+          autoFocus={focusField === 'name'}
         />
         {errors.name && (
           <p
@@ -589,6 +608,7 @@ const TripForm = memo(function TripForm({
             </span>
           </Label>
           <Input
+            ref={startDateRef}
             id="trip-start-date"
             type="date"
             value={startDate}

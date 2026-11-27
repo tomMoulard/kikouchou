@@ -16,13 +16,21 @@
  * @module features/transports/components/TransportScopeFilter
  */
 
-import { type ReactElement, memo, useCallback } from 'react';
+import { type ReactElement, memo, useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { User, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
+import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentitySelector';
 import type { TransportScope } from '@/features/transports/utils/transport-scope';
 import { cn } from '@/lib/utils';
 
@@ -39,10 +47,8 @@ export interface TransportScopeFilterProps {
   /**
    * The trip the view belongs to, for the link that offers to name the guest.
    *
-   * Passed in rather than read from the trip context: the hint points at that
-   * trip's settings page, and this control is rendered on trip-scoped pages
-   * that already hold the id from the URL. `null` sends the reader to the trip
-   * list instead.
+   * With a trip, the hint opens the "who you are" picker in place. `null`
+   * sends the reader to the trip list instead.
    */
   readonly tripId: string | null;
   /** How many rows the current scope is hiding. */
@@ -61,7 +67,7 @@ export interface TransportScopeFilterProps {
  * trip's logistics.
  *
  * @param props - The scope, whether it can be applied, and what it is hiding
- * @returns The scope control, or the hint that points at the trip settings
+ * @returns The scope control, or the hint that opens the identity picker
  */
 export const TransportScopeFilter = memo(function TransportScopeFilter({
   scope,
@@ -72,23 +78,53 @@ export const TransportScopeFilter = memo(function TransportScopeFilter({
   className,
 }: TransportScopeFilterProps): ReactElement {
   const { t } = useTranslation(),
+    [isPickerOpen, setIsPickerOpen] = useState(false),
     handleShowAll = useCallback((): void => {
       onScopeChange('all');
-    }, [onScopeChange]);
+    }, [onScopeChange]),
+    handleOpenPicker = useCallback((): void => {
+      setIsPickerOpen(true);
+    }, []),
+    handleChosen = useCallback((): void => {
+      setIsPickerOpen(false);
+    }, []);
 
   if (!canFilter) {
+    const linkClass =
+      'rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+    // The picker opens here. Sending the reader to the trip settings put them
+    // on a page led by the red delete button, four cards above the question.
     return (
       <p className={cn('mb-4 text-sm text-muted-foreground', className)}>
         {t(
           'transports.scope.unknownIdentity',
           'Tell the app which guest you are to see only your own travel.',
         )}{' '}
-        <Link
-          to={tripId ? `/trips/${tripId}/edit` : '/trips'}
-          className="rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {t('transports.scope.chooseIdentity', 'Choose in the trip settings')}
-        </Link>
+        {tripId ? (
+          <>
+            <button type="button" className={cn(linkClass, 'text-foreground')} onClick={handleOpenPicker}>
+              {t('transports.scope.chooseIdentity', 'Choose who you are')}
+            </button>
+            <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{t('settings.guestIdentity', 'Who you are')}</DialogTitle>
+                  <DialogDescription>
+                    {t(
+                      'settings.guestIdentityDescription',
+                      'Which guest this browser is, on the current trip',
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <GuestIdentitySelector bare onChosen={handleChosen} />
+              </DialogContent>
+            </Dialog>
+          </>
+        ) : (
+          <Link to="/trips" className={linkClass}>
+            {t('transports.scope.chooseIdentity', 'Choose who you are')}
+          </Link>
+        )}
       </p>
     );
   }
