@@ -706,10 +706,12 @@ describe('TripCreateWizard invite screen', () => {
     await reachInvite(user);
 
     await waitFor(() => {
+      // From the top edge, down: the sign-in buttons sit in the lower half.
       expect(confetti).toHaveBeenCalledWith({
-        particleCount: 140,
-        spread: 75,
-        origin: { y: 0.65 },
+        particleCount: 100,
+        spread: 90,
+        angle: 270,
+        origin: { y: 0 },
       });
     });
     await act(async () => {

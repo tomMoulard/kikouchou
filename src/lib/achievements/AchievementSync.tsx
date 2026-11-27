@@ -8,7 +8,8 @@
  *   existed, and checks the date for `leap_day`.
  * - **On an unlock.** Shows one toast. Unlocks that land within
  *   {@link BATCH_MS} of each other (a backfill, a sync) share it, so a person
- *   with twelve trips sees one message and not three.
+ *   with twelve trips sees one message and not three. A screen that holds
+ *   rewards (`reward-hold`) delays it until it lets go.
  * - **Signed in.** Syncs with the account when a session appears, the network
  *   returns, the tab comes back into view, or an unlock waits for upload.
  *
@@ -26,6 +27,7 @@ import { notify } from '@/lib/notifications';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
 import { achievementNameKey, type AchievementKey } from './definitions';
+import { areRewardsHeld, onRewardsReleased } from './reward-hold';
 import { backfillFromDevice, onAchievementsUnlocked, recordAppOpened } from './store';
 import { syncAchievements } from './sync';
 
@@ -66,6 +68,11 @@ export function AchievementSync(): null {
 
     const flush = (): void => {
       timer = undefined;
+      // A screen that needs the whole page (the wizard's sign-in) holds the
+      // message; it goes out when that screen lets go.
+      if (areRewardsHeld()) {
+        return;
+      }
       const keys = pending;
       pending = [];
       const translate = tRef.current,
@@ -90,8 +97,15 @@ export function AchievementSync(): null {
       }
     });
 
+    const unsubscribeRelease = onRewardsReleased(() => {
+      if (pending.length > 0 && timer === undefined) {
+        timer = setTimeout(flush, BATCH_MS);
+      }
+    });
+
     return () => {
       unsubscribe();
+      unsubscribeRelease();
       if (timer !== undefined) {
         clearTimeout(timer);
       }

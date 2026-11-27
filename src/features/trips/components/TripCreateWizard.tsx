@@ -200,7 +200,9 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           // leaving the pieces frozen over every page until a reload. Drawing
           // on the main thread costs ~2s of animation frames and always ends.
           const fire = confetti.create(undefined, { resize: true, useWorker: false });
-          void fire({ particleCount: 140, spread: 75, origin: { y: 0.65 } });
+          // From the top of the screen, so the burst does not hide the
+          // sign-in buttons in the lower half.
+          void fire({ particleCount: 100, spread: 90, angle: 270, origin: { y: 0 } });
         }
       })
       .catch((error: unknown) => {

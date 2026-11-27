@@ -11,6 +11,7 @@ import { db } from '@/lib/db/database';
 import { act, render, waitFor } from '@/test/utils';
 
 import { AchievementSync } from '../AchievementSync';
+import { holdRewards } from '../reward-hold';
 import { unlockAchievement, unlockAchievements } from '../store';
 
 // ============================================================================
@@ -80,6 +81,31 @@ describe('AchievementSync', () => {
       'achievements.unlockedMany',
       'achievements.stages.trips_1 · achievements.stages.trips_3 · achievements.stages.trips_10',
     );
+  });
+
+  // Regression: the first-trip wizard unlocks `trips_1` on its sign-in
+  // screen, and the toast covered the sign-in buttons.
+  it('holds the message while a screen holds rewards, then shows it once released', async () => {
+    const release = holdRewards();
+    render(<AchievementSync />, { withProviders: false });
+
+    await act(async () => {
+      await unlockAchievement('polyglot');
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(reward).not.toHaveBeenCalled();
+
+    act(() => {
+      release();
+    });
+
+    await waitFor(() => {
+      expect(reward).toHaveBeenCalledWith(
+        'achievements.unlocked',
+        'achievements.items.polyglot.name',
+      );
+    });
+    expect(reward).toHaveBeenCalledTimes(1);
   });
 
   it('counts a new day when the tab comes back', async () => {

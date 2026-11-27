@@ -4,7 +4,7 @@
  * @module features/trips/pages/TripCreatePage
  */
 
-import { type ReactElement, memo, useCallback, useState } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useUnsavedChanges } from '@/hooks';
@@ -17,6 +17,7 @@ import { useHideNavigation } from '@/contexts/NavigationVisibilityContext';
 import { TripCreateWizard } from '@/features/trips/components/TripCreateWizard';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getAccountGuestName } from '@/features/auth/display-name';
+import { holdRewards } from '@/lib/achievements/reward-hold';
 import { setCurrentTrip } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
@@ -69,6 +70,13 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
     anyway. The page keeps its own back link.
   */
   useHideNavigation(true);
+
+  /*
+    The wizard ends on its sign-in screen, and creating the trip unlocks the
+    first achievement. Its toast sat over the sign-in buttons, so the
+    message waits until the visitor leaves the wizard.
+  */
+  useEffect(() => holdRewards(), []);
 
   /**
    * The creator's own guest row, when the account gives a name.

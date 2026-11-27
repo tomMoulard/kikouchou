@@ -72,6 +72,7 @@ vi.mock('@/features/trips/components/TripCreateWizard', () => ({
 }));
 
 import { TripCreatePage } from '../TripCreatePage';
+import { areRewardsHeld } from '@/lib/achievements/reward-hold';
 
 describe('TripCreatePage', () => {
   beforeEach(() => {
@@ -91,6 +92,16 @@ describe('TripCreatePage', () => {
     render(<TripCreatePage />, { withProviders: false });
 
     expect(mockHideNavigation).toHaveBeenLastCalledWith(true);
+  });
+
+  // The wizard ends on its sign-in screen, and the first trip unlocks an
+  // achievement: its toast covered the sign-in buttons.
+  it('holds the achievement message while the page is on screen, and lets go after', () => {
+    const { unmount } = render(<TripCreatePage />, { withProviders: false });
+    expect(areRewardsHeld()).toBe(true);
+
+    unmount();
+    expect(areRewardsHeld()).toBe(false);
   });
 
   it('navigates back on cancel', async () => {

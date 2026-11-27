@@ -6,6 +6,7 @@
  */
 
 export * from './definitions';
+export * from './reward-hold';
 export * from './store';
 export { fetchAchievementStats, syncAchievements } from './sync';
 export type { AchievementStats, AchievementSyncResult } from './sync';
