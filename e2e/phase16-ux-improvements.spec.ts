@@ -791,8 +791,10 @@ test.describe('Transport Single List', () => {
     expect(hasTabs).toBe(false);
 
     // Verify both arrival and departure are visible in the same list
-    const arrivalIndicator = page.getByText(/arrival|arriv[ée]/i).first();
-    const departureIndicator = page.getByText(/departure|d[ée]part/i).first();
+    // Not a button: "Add an arrival" names the action, not a row of the list.
+    const notAButton = page.locator(':not(button):not(button *)');
+    const arrivalIndicator = page.getByText(/arrival|arriv[ée]/i).and(notAButton).first();
+    const departureIndicator = page.getByText(/departure|d[ée]part/i).and(notAButton).first();
 
     await expect(arrivalIndicator).toBeVisible({ timeout: 5000 });
     await expect(departureIndicator).toBeVisible({ timeout: 5000 });
@@ -835,8 +837,10 @@ test.describe('Transport Single List', () => {
     // Look for arrival and departure indicators
     // The TransportListPage uses specific styling for arrivals/departures
     // Check for arrival indicator (down arrow icon or green styling)
-    await expect(page.getByText(/arrival|arriv[ée]/i).first()).toBeVisible();
-    await expect(page.getByText(/departure|d[ée]part/i).first()).toBeVisible();
+    // Not a button: "Add an arrival" names the action, not a row of the list.
+    const notAButton = page.locator(':not(button):not(button *)');
+    await expect(page.getByText(/arrival|arriv[ée]/i).and(notAButton).first()).toBeVisible();
+    await expect(page.getByText(/departure|d[ée]part/i).and(notAButton).first()).toBeVisible();
   });
 
   test('past transports section exists', async ({ page }) => {
@@ -1071,7 +1075,11 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     await waitForRoute(page);
 
     // Click add transport button - look for "Add an arrival" button or FAB
-    const addButton = page.getByRole('button', { name: /add an arrival|ajouter une arrivée/i });
+    // The header's button on a wide screen, the floating one on a phone.
+    const addButton = page
+      .getByRole('button', { name: /add an arrival|ajouter une arrivée/i })
+      .filter({ visible: true })
+      .first();
     const hasFab = await addButton.isVisible({ timeout: 2000 }).catch(() => false);
 
     if (!hasFab) {
@@ -1129,7 +1137,11 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // button and a FAB, so the union resolves to two elements and asserting on
     // it raises a strict-mode violation rather than the missing-control failure
     // the assertion is for.
-    const addButton = page.getByRole('button', { name: /add an arrival|ajouter une arrivée/i });
+    // The header's button on a wide screen, the floating one on a phone.
+    const addButton = page
+      .getByRole('button', { name: /add an arrival|ajouter une arrivée/i })
+      .filter({ visible: true })
+      .first();
     const fabButton = page.locator('button[aria-label*="transport" i]');
     const anyAddControl = addButton.or(fabButton).first();
 

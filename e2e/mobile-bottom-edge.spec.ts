@@ -420,7 +420,8 @@ test.describe('a card control scrolled under the FAB', () => {
       startDate: fixtureDate(1),
       endDate: fixtureDate(10),
     });
-    for (const name of ['Ana', 'Basile', 'Chloé', 'Dario', 'Elsa', 'Firmin']) {
+    // Enough cards to run past the FAB however short a card is.
+    for (const name of ['Ana', 'Basile', 'Chloé', 'Dario', 'Elsa', 'Firmin', 'Gaspard', 'Hélène', 'Inès', 'Jules', 'Katia', 'Léon']) {
       await seedPerson(page, tripId, name);
     }
 
