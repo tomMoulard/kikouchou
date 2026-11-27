@@ -1,11 +1,8 @@
 /**
- * @fileoverview E2E tests for typing a house full of rooms at once, and for
- * copying one.
+ * @fileoverview E2E tests for making many rooms quickly.
  *
  * A gîte with six identical doubles used to be six passes through the room
- * dialog. These tests cover the two ways out of that: the room list on the trip
- * creation form, where the whole house is named in one save, and Duplicate on a
- * room that is already right.
+ * dialog. Duplicate on a room that is already right is the way out of that.
  *
  * @module e2e/rooms-in-bulk
  */
@@ -17,7 +14,6 @@ import { roomCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
 import { seedRoom, seedTrip } from './support/seed';
 import { clearIndexedDB } from './support/storage';
-import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Helpers
@@ -43,24 +39,6 @@ async function seedFutureTrip(page: Page): Promise<string> {
   return tripId;
 }
 
-/**
- * Adds a room row on the create form and fills its name.
- *
- * Sequential by necessity: the input exists only once the click that adds its
- * row has rendered. Matched as an exact textbox rather than by label, because
- * each row's remove button is labelled "Remove room N" too.
- */
-async function addTripRoom(
-  page: Page,
-  index: number,
-  name: string,
-): Promise<void> {
-  await page.getByRole('button', { name: /^add room$/iu }).click();
-  await page
-    .getByRole('textbox', { name: `Room ${index}`, exact: true })
-    .fill(name);
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -70,62 +48,9 @@ test.describe('Rooms in bulk', () => {
     await clearIndexedDB(page);
   });
 
-  test('types the whole house on the trip creation form', async ({ page }) => {
-    // A trip already on the device, so `/trips/new` is the one-page form.
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await waitForRoute(page);
-
-    // No dates: the create form does not ask for them.
-    await page.getByLabel(/trip name/iu).fill('Gîte');
-
-    await addTripRoom(page, 1, 'Double bed 1');
-    await addTripRoom(page, 2, 'Double bed 2');
-    await addTripRoom(page, 3, 'Attic');
-
-    // The second room sleeps two; the beds stepper says so per row.
-    await page
-      .getByRole('button', { name: 'One person more in room 2', exact: true })
-      .click();
-
-    await page.getByRole('button', { name: /^save$/iu }).click();
-    await page.waitForURL(/\/trips\/[\w-]+\/calendar/u, { timeout: 20_000 });
-
-    await page.goto(page.url().replace('/calendar', '/rooms?view=card'));
-    await waitForRoute(page);
-
-    await expect(roomCards(page).getByText('Double bed 1')).toBeVisible();
-    await expect(roomCards(page).getByText('Double bed 2')).toBeVisible();
-    await expect(roomCards(page).getByText('Attic')).toBeVisible();
-  });
-
-  test('drops a room row that was added and left empty', async ({ page }) => {
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await waitForRoute(page);
-
-    // No dates: the create form does not ask for them.
-    await page.getByLabel(/trip name/iu).fill('Gîte');
-
-    await addTripRoom(page, 1, 'Attic');
-    // An abandoned "Add room" click, not a nameless room.
-    await page.getByRole('button', { name: /^add room$/iu }).click();
-
-    await page.getByRole('button', { name: /^save$/iu }).click();
-    await page.waitForURL(/\/trips\/[\w-]+\/calendar/u, { timeout: 20_000 });
-
-    await page.goto(page.url().replace('/calendar', '/rooms?view=card'));
-    await waitForRoute(page);
-
-    await expect(roomCards(page).getByText('Attic')).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /open menu|ouvrir le menu/iu }),
-    ).toHaveCount(1);
-  });
-
   test('does not ask how many rooms in the room dialog', async ({ page }) => {
-    // The room dialog makes one room. How many of them there are is a question
-    // the trip creation form asks, and it was mistaken here for the bed count.
+    // The room dialog makes one room. A "how many rooms" field there was
+    // mistaken for the bed count.
     const tripId = await seedFutureTrip(page);
 
     await openRooms(page, tripId);

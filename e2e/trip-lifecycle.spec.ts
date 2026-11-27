@@ -12,10 +12,8 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureDate } from './support/fixture-dates';
-import { expectOsNotification, recordOsNotifications } from './support/os-notifications';
 import { seedTrip } from './support/seed';
 import { createTripThroughWizard, seedEarlierTrip } from './support/trip-create';
-import { addTripGuests, fillTripOrganiser, ORGANISER_NAME } from './support/trip-form';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -62,45 +60,14 @@ function getTripCard(page: Page, tripName: string) {
 }
 
 /**
- * Creates a trip using the trip form.
- * Handles date picker interactions and form submission.
+ * Creates a trip through the wizard and leaves it without dates, which is what
+ * the tests below then check or set.
  *
- * @param page - Playwright page object
- * @param tripData - Trip data to fill in the form
+ * @param page - Playwright page sitting on `/trips/new`
+ * @param tripData - The trip; only its name is typed
  */
-async function createTrip(
-  page: Page,
-  tripData: {
-    name: string;
-    location?: string;
-    startDate: string;
-    endDate: string;
-    organiser?: string;
-    guests?: readonly string[];
-  },
-): Promise<void> {
-  // Fill in the trip name
-  await page.getByLabel(/trip name/i).fill(tripData.name);
-
-  // Fill in location if provided
-  if (tripData.location) {
-    await page.locator('#trip-location').fill(tripData.location);
-  }
-
-  // No dates: the create form does not ask for them. `tripData`'s dates are
-  // what a test later sets through the checklist, or seeds.
-
-  // Both opt-in: the guest list is optional in full, so the tests that are not
-  // about it leave it alone and create a trip with nobody on it.
-  if (tripData.organiser) {
-    await fillTripOrganiser(page, tripData.organiser);
-  }
-  if (tripData.guests) {
-    await addTripGuests(page, tripData.guests);
-  }
-
-  // Submit the form
-  await page.getByRole('button', { name: /save/i }).click();
+async function createTrip(page: Page, tripData: { readonly name: string }): Promise<void> {
+  await createTripThroughWizard(page, tripData.name, { withoutDates: true });
 }
 
 /**
@@ -323,94 +290,31 @@ test.describe('Trip Lifecycle', () => {
     });
   });
 
-  test('creates a later trip through the one-page form', async ({ page }) => {
-    // The creation is confirmed by an OS notification, which is not in the
-    // DOM. Install the recorder before the first navigation, while
-    // `window.Notification` can still be replaced.
-    await recordOsNotifications(page);
+  test('creates a later trip through the wizard too', async ({ page }) => {
     await seedEarlierTrip(page);
 
     await page.goto('/trips');
     await page.getByRole('button', { name: /new trip/i }).first().click();
 
-    // Verify we're on the create trip page — and that the form is on it.
+    // A device that already holds a trip gets the same wizard as a first visit.
     await expect(page).toHaveURL('/trips/new');
-    await expectTripFormPage(page, /new trip/i);
+    await expect(page.locator('#wizard-trip-name')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#trip-name')).toHaveCount(0);
 
-    // Fill in the trip form
     await createTrip(page, TEST_TRIP);
-
-    // Wait for navigation after successful creation
-    // The app navigates to /trips/:id/calendar after creation
     await expectCalendarPage(page, TEST_TRIP.name);
-
-    // Verify the confirmation reached the operating system
-    await expectOsNotification(page, /trip created successfully/i);
-
-    // …and that it did not land on the page as a card over the content, which
-    // is the defect that moved it to the OS in the first place.
-    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
-
     const tripId = tripIdFromCalendarUrl(page);
 
     await page.goto('/trips');
     await page.waitForLoadState('load');
     await expect(getTripCard(page, TEST_TRIP.name)).toBeVisible();
 
-    // And verify the trip was stored without dates: the form asks for none,
-    // and a trip without dates must not come back with an empty string or
-    // today's date in their place.
+    // Stored without dates: the wizard asks for none, and a trip without dates
+    // must not come back with an empty string or today's date in their place.
     expect(await readTripDates(page, tripId)).toEqual({
       startDate: undefined,
       endDate: undefined,
     });
-  });
-
-  // ============================================================================
-  // Test Case 1b: The create form's guest list reaches the Guests page
-  // ============================================================================
-
-  test('creates the guests typed on the create form', async ({ page }) => {
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await expectTripFormPage(page, /new trip/i);
-
-    await createTrip(page, {
-      ...TEST_TRIP,
-      organiser: ORGANISER_NAME,
-      guests: ['Marie', 'Camille'],
-    });
-    await expectCalendarPage(page, TEST_TRIP.name);
-
-    await page.getByRole('link', { name: /guests/i }).first().click();
-    await page.waitForURL(/\/persons/);
-
-    // The organiser among them: the first row is the user's own, and filling it
-    // is how they put themselves on the trip they are creating.
-    for (const guestName of [ORGANISER_NAME, 'Marie', 'Camille']) {
-      await expect(page.getByText(guestName).first()).toBeVisible();
-    }
-  });
-
-  test('creates a trip the organiser is not on', async ({ page }) => {
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await expectTripFormPage(page, /new trip/i);
-
-    // Somebody who hosts rather than travels — an Airbnb owner arranging a trip
-    // for their guests — leaves their own row blank.
-    await createTrip(page, { ...TEST_TRIP, guests: ['Marie', 'Camille'] });
-    await expectCalendarPage(page, TEST_TRIP.name);
-
-    await page.getByRole('link', { name: /guests/i }).first().click();
-    await page.waitForURL(/\/persons/);
-
-    // Counted, not merely matched by name: the point of this test is that a
-    // third guest — the organiser — was *not* created.
-    const guests = page.getByRole('list', { name: /guests/i }).getByRole('listitem');
-    await expect(guests).toHaveCount(2);
-    await expect(page.getByText('Marie').first()).toBeVisible();
-    await expect(page.getByText('Camille').first()).toBeVisible();
   });
 
   // ============================================================================
@@ -529,8 +433,7 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('navigates between trips', async ({ page }) => {
-    // The first trip. Seeded, so the second one below is created through the
-    // form rather than the first-trip wizard.
+    // The first trip, seeded. The second one is created through the wizard.
     const firstTripId = await seedTestTrip(page);
 
     // Navigate back to trips list
@@ -575,7 +478,7 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('persists trip data across page reload', async ({ page }) => {
-    // A trip, made through the form after an earlier one
+    // A trip, made through the wizard after an earlier one
     await seedEarlierTrip(page);
     await page.goto('/trips/new');
     await createTrip(page, TEST_TRIP);
@@ -606,14 +509,12 @@ test.describe('Trip Lifecycle', () => {
 
     // Verify form is populated with correct data
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
-    await expect(page.locator('#trip-location')).toHaveValue(TEST_TRIP.location);
 
     // Reload again from the edit page
     await page.reload();
 
     // Verify data is still there after another reload
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
-    await expect(page.locator('#trip-location')).toHaveValue(TEST_TRIP.location);
   });
 
   // ============================================================================
@@ -649,25 +550,22 @@ test.describe('Trip Lifecycle', () => {
   });
 
   test('validates required fields on trip creation', async ({ page }) => {
-    // Navigate to create trip page, with an earlier trip so it is the form
-    await seedEarlierTrip(page);
     await page.goto('/trips/new');
+    await expect(page.locator('#wizard-trip-name')).toBeVisible({ timeout: 15_000 });
 
-    // Try to submit empty form
-    await page.getByRole('button', { name: /save/i }).click();
+    // Try to create a trip with no name. Enter in the field, as
+    // `createTripThroughWizard` does: under load, a first click on this route
+    // was seen to miss React's handler.
+    await page.locator('#wizard-trip-name').press('Enter');
 
-    // Verify validation error appears for name (should show "Required")
+    // The wizard says why and stays on its question.
     await expect(page.getByRole('alert').first()).toBeVisible();
-
-    // Still on the create page: the URL alone would not say so, and a form
-    // that had unmounted itself into a blank page would have satisfied it.
     await expect(page).toHaveURL('/trips/new');
-    await expectTripFormPage(page, /new trip/i);
+    await expect(page.locator('#wizard-trip-name')).toBeVisible();
 
     // The name is the only required field: the dates are asked later, on the
     // calendar, so a name alone creates the trip.
-    await page.getByLabel(/trip name/i).fill('Test Trip');
-    await page.getByRole('button', { name: /save/i }).click();
+    await createTrip(page, { name: 'Test Trip' });
     await expectCalendarPage(page, 'Test Trip');
     await expect(page.getByRole('button', { name: /^set dates$/i })).toBeVisible();
   });

@@ -364,10 +364,8 @@ How the seed behaves, and why:
   `OPENED_FROM_ASSISTANT` on a view in an assistant answer. A new link
   into a trip page sets its own, or it reports `other`. It is not a usage
   action, because a demo is not a trip being planned.
-- **It is not the user's own trip.** `TripCreatePage` does not count it, so
-  "New trip" on a first open still gets the first-trip wizard. The "plan your
-  own trip" card does not count it either. Read it from
-  `useTripContext().sampleTripId`.
+- **It is not the user's own trip.** The "plan your own trip" card does not
+  count it. Read it from `useTripContext().sampleTripId`.
 - **It starts two weeks from today.** Dates are relative, so the sample does not
   go stale, and no reminder or "leave now" notice fires for it.
 - **Automation does not get it.** `navigator.webdriver` turns the seed off, so
@@ -818,12 +816,13 @@ benchmark of 2026-10-29, where the pet was seen in the way of the first-trip
 wizard's first question, which 379 of 389 visitors never answered.
 
 The first-trip wizard was the other flag (`first-trip-wizard`). It went to 100%
-and its flag is gone from the code: a device with no trip of its own always
-gets `TripCreateWizard` on `/trips/new`, and a later trip gets the one-page
-form. Both write through `createTripWithDetails`. The wizard hides the sidebar
-and the bottom bar through `useHideNavigation`, because no trip tab can open
-on a first visit. An e2e spec that tests the form seeds a trip first
-(`seedTrip`); one that only needs a trip uses `e2e/support/trip-create.ts`.
+and its flag is gone from the code. Since 2026-11-27 it is the only way to
+create a trip: `/trips/new` shows `TripCreateWizard` for the first trip and
+every later one, and the one-page create form is gone. `TripForm` is the trip
+settings form and has no create mode. The wizard writes through
+`createTripWithDetails`, and hides the sidebar and the bottom bar through
+`useHideNavigation`, so the one question has the screen. An e2e spec that
+only needs a trip uses `e2e/support/trip-create.ts`.
 
 **The invitation is part of the creation.** The wizard asks the name,
 creates the trip, and ends on its invite link (`ShareLinkPanel`, the same body
@@ -1484,10 +1483,10 @@ share `dataLayer`. Same contract as `lib/meta-pixel`: guarded by
   access is part of this app's security boundary — which is why the Ads tag is
   configured in code beside it rather than inside it, and why a leak onto a dev
   server matters more here than for the other two trackers.
-- **A trip creation goes to the container, not to the Ads tag.** Both
-  creation paths (`TripCreatePage` and `TripCreateWizard`) call
-  `pushDataLayerEvent('trip_created', …)` beside PostHog's `trip_created`, with
-  `via`, `guest_count` and `room_count`. It is a plain `{ event }` object,
+- **A trip creation goes to the container, not to the Ads tag.**
+  `TripCreateWizard`, the one creation screen (on `/trips/new` and behind a
+  template link), calls `pushDataLayerEvent('trip_created', …)` beside
+  PostHog's `trip_created`, with `via`, `guest_count` and `room_count`. It is a plain `{ event }` object,
   because a GTM Custom Event trigger does not match a `gtag()` push. The Google
   Ads conversion that reads it is configured in the GTM UI.
 - **A conversion is a whole `send_to`**, `AW-…/<label>`, never an account and a

@@ -14,7 +14,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForRoute } from './support/routes';
 import { roomCards } from './support/page-regions';
-import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Database Helpers
@@ -554,52 +553,6 @@ const STAY_NIGHTS = stayNights(
 test.describe('Trip Creation with New UI', () => {
   test.beforeEach(async ({ page }) => {
     await clearAppData(page);
-  });
-
-  test('trip form includes description field', async ({ page }) => {
-    // Navigate directly to trip creation page. A trip already on the device,
-    // so it is the one-page form rather than the first-trip wizard.
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await page.waitForLoadState('load');
-    await waitForRoute(page);
-
-    // Verify we're on the trip form page
-    await expect(page).toHaveURL('/trips/new');
-
-    // A retrying assertion, not `.count()` / `.isVisible()`. The route is lazy,
-    // so `waitForLoadState('load')` returns while `main` still holds the
-    // "Loading..." fallback, and an instant read there sees no form at all.
-    await expect(page.locator('#trip-description')).toBeVisible();
-  });
-
-  test('trip form has location input', async ({ page }) => {
-    // Navigate directly to trip creation page. A trip already on the device,
-    // so it is the one-page form rather than the first-trip wizard.
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await page.waitForLoadState('load');
-    await waitForRoute(page);
-
-    // Find location input (could be LocationPicker or regular input)
-    const locationInput = page.getByLabel(/location|lieu/i);
-    await expect(locationInput).toBeVisible();
-  });
-
-  test('trip create form asks for no dates', async ({ page }) => {
-    // Navigate directly to trip creation page. A trip already on the device,
-    // so it is the one-page form rather than the first-trip wizard.
-    await seedEarlierTrip(page);
-    await page.goto('/trips/new');
-    await page.waitForLoadState('load');
-    await waitForRoute(page);
-
-    // The dates are set later, from the calendar's setup checklist. Wait for
-    // the form itself first, so the absence below is not read off an empty
-    // page (see "An instant read races every lazy route").
-    await expect(page.locator('#trip-name')).toBeVisible();
-    await expect(page.locator('#trip-start-date')).toHaveCount(0);
-    await expect(page.locator('#trip-end-date')).toHaveCount(0);
   });
 
   test('trip card shows guests count after creation', async ({ page }) => {

@@ -1,5 +1,5 @@
 /**
- * @fileoverview `/trips/new` on a phone held sideways: the form, and nothing else.
+ * @fileoverview `/trips/new` on a phone held sideways: the wizard, and nothing else.
  *
  * A landscape iPhone reports 402px of viewport height. The shell spends a 56px
  * sticky header, 16px of top padding and a 64px bottom bar on that before the
@@ -18,7 +18,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { waitForRoute } from './support/routes';
-import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Fixtures
@@ -69,26 +68,12 @@ test.describe('creating a trip on a phone held sideways', () => {
     expect(scrollTop).toBe(0);
   });
 
-  test('puts the shell back the moment the phone is upright', async ({ page }) => {
-    // A trip already on the device, so this is the one-page form, which keeps
-    // the bottom bar when there is room for it.
-    await seedEarlierTrip(page);
+  test('keeps the header but not the bottom bar beside the wizard', async ({ page }) => {
     await page.setViewportSize(PORTRAIT);
     await page.goto('/trips/new');
     await waitForRoute(page);
 
-    await expect(page.getByRole('banner')).toHaveCount(1);
-    await expect(bottomBar(page)).toHaveCount(1);
-  });
-
-  test('keeps the header but not the bottom bar beside the first-trip wizard', async ({
-    page,
-  }) => {
-    await page.setViewportSize(PORTRAIT);
-    await page.goto('/trips/new');
-    await waitForRoute(page);
-
-    // On a first visit no trip tab can open, so the bar has nowhere to go.
+    // The wizard asks one question at a time, and the bar only competes with it.
     await expect(page.getByLabel(TRIP_NAME).first()).toBeVisible();
     await expect(page.getByRole('banner')).toHaveCount(1);
     await expect(bottomBar(page)).toHaveCount(0);

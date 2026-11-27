@@ -22,7 +22,6 @@ import AxeBuilder from '@axe-core/playwright';
 import { clearIndexedDB } from './support/storage';
 import { waitForRoute } from './support/routes';
 import { seedPerson, seedRoom, seedTrip } from './support/seed';
-import { seedEarlierTrip } from './support/trip-create';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -758,9 +757,7 @@ test.describe('Form Label Associations', () => {
   // --------------------------------------------------------------------------
   // Test 8: Forms have associated labels
   // --------------------------------------------------------------------------
-  test('trip form has properly associated labels', async ({ page }) => {
-    // A trip already on the device, so `/trips/new` is the one-page form.
-    await seedEarlierTrip(page);
+  test('trip creation wizard has properly associated labels', async ({ page }) => {
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
 
@@ -772,11 +769,11 @@ test.describe('Form Label Associations', () => {
      * fallback: a spinner has no form controls, so it has no label violations,
      * and the assertion below reported a clean form without one ever having
      * rendered. Every sibling test in this file already waited; this one was
-     * missed because its second half — a retrying `expect` on `#trip-name` —
+     * missed because its second half — a retrying `expect` on the name field —
      * made the omission invisible.
      */
     await waitForLoading(page);
-    const nameInput = page.locator('#trip-name');
+    const nameInput = page.locator('#wizard-trip-name');
     await expect(nameInput).toBeVisible();
 
     // Run a11y analysis. The whole result, not a label-shaped slice of it: this
@@ -785,7 +782,7 @@ test.describe('Form Label Associations', () => {
     const violations = await analyzeA11y(page);
 
     if (violations.length > 0) {
-      console.log('Trip form violations:\n', formatViolations(violations));
+      console.log('Trip creation violations:\n', formatViolations(violations));
     }
 
     expect(violations).toEqual([]);

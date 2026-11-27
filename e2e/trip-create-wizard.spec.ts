@@ -1,10 +1,10 @@
 /**
- * @fileoverview The first trip: a name, then the invite link. The dates come
+ * @fileoverview Every new trip: a name, then the invite link. The dates come
  * later, from the calendar's setup checklist.
  *
- * The wizard replaces the one-page form on `/trips/new` for a device that
- * holds no trip yet. A device with a trip gets the form. Specs that need a
- * trip and nothing more use `support/trip-create`.
+ * The wizard is the only screen on `/trips/new`, for the first trip of a
+ * device and every later one. Specs that need a trip and nothing more use
+ * `support/trip-create`.
  *
  * @module e2e/trip-create-wizard
  */
@@ -72,14 +72,14 @@ test.describe('the first-trip wizard', () => {
     await expect(page.getByText('Lake house').first()).toBeVisible();
   });
 
-  test('is only ever for the first trip on a device', async ({ page }) => {
+  test('is the screen for a second trip too', async ({ page }) => {
     await page.goto('/trips/new');
     await createThroughWizard(page, 'First');
 
-    // A second trip gets the one-page form, which asks for no dates either.
+    // The one-page form is gone: a device that holds a trip gets the wizard.
     await page.goto('/trips/new');
-    await expect(page.locator('#trip-name')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/what is the trip called/i)).toHaveCount(0);
+    await expect(page.locator('#wizard-trip-name')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#trip-name')).toHaveCount(0);
     await expect(page.locator('#trip-start-date')).toHaveCount(0);
   });
 });
