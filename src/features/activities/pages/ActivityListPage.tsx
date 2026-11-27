@@ -530,7 +530,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
           onClick={handleAddActivity}
           size="lg"
           className={cn(
-            'fixed bottom-nav-safe right-4 z-10',
+            'fixed bottom-nav-safe right-4 z-40',
             'size-14 rounded-full shadow-lg',
             'sm:hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',

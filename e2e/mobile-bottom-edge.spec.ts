@@ -407,3 +407,60 @@ test.describe('the last row of every list page takes a tap', () => {
     });
   }
 });
+
+test.describe('a card control scrolled under the FAB', () => {
+  // Regression: the guest card's delete button is `relative z-20` and the FAB
+  // was `z-10`. Neither the card nor `main` makes a stacking context, so a
+  // card scrolled under the FAB put its trash can on top: a tap on the "+"
+  // offered to delete that guest instead.
+  test('guests: a tap on the FAB reaches the FAB, not the delete button', async ({ page }) => {
+    const { tripId } = await seedTrip(page, {
+      name: 'Stacking Trip',
+      location: 'Brittany',
+      startDate: fixtureDate(1),
+      endDate: fixtureDate(10),
+    });
+    for (const name of ['Ana', 'Basile', 'Chloé', 'Dario', 'Elsa', 'Firmin']) {
+      await seedPerson(page, tripId, name);
+    }
+
+    await page.goto(`/trips/${tripId}/persons`);
+    await waitForRoute(page);
+
+    const trashes = page.getByRole('button', { name: /^(delete|supprimer)$/i });
+    await expect(trashes.first()).toBeVisible({ timeout: 15_000 });
+    const fab = fabOf(page);
+    await expect(fab).toBeVisible();
+
+    // Put a delete button that starts below the FAB right under its centre.
+    // Not the last card's: the page's bottom padding keeps that one clear.
+    const fabBox = await fab.boundingBox();
+    if (fabBox === null) {
+      throw new Error('the FAB has no box');
+    }
+    const fabCentreY = fabBox.y + fabBox.height / 2,
+      count = await trashes.count();
+    let pick = -1;
+    for (let index = 0; index < count - 1; index += 1) {
+      const box = await trashes.nth(index).boundingBox();
+      if (box !== null && box.y > fabCentreY) {
+        pick = index;
+        break;
+      }
+    }
+    expect(pick, 'a guest card starts below the FAB').toBeGreaterThanOrEqual(0);
+    const trash = trashes.nth(pick);
+    await trash.evaluate((element, targetY) => {
+      const rect = element.getBoundingClientRect();
+      window.scrollBy(0, rect.top + rect.height / 2 - targetY);
+    }, fabCentreY);
+    await expect
+      .poll(async () => {
+        const box = await trash.boundingBox();
+        return box === null ? Infinity : Math.abs(box.y + box.height / 2 - fabCentreY);
+      })
+      .toBeLessThan(fabBox.height / 2);
+
+    await expectTappable(fab, 'the FAB over a guest card');
+  });
+});
