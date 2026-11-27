@@ -22,6 +22,7 @@ import { isTripCreationPath } from '@/lib/pwa/trip-creation-path';
 import { NativeShell } from '@/components/native/NativeShell';
 import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
+import { usePhoneViewport } from '@/hooks/usePhoneViewport';
 
 // ============================================================================
 // Pre-paint theme
@@ -124,6 +125,7 @@ function useIsCreatingTrip(): boolean {
  */
 function App(): ReactElement {
   const isCreatingTrip = useIsCreatingTrip();
+  const isPhone = usePhoneViewport();
 
   return (
     /*
@@ -208,9 +210,22 @@ function App(): ReactElement {
         arithmetic is repeated; keep the two in step. `--nav-bar-height` is 0
         when Settings turned the bar off, which brings the toasts down with it.
       */}
+      {/*
+        On a phone the toasts go to the top, under the header. Even clear of
+        the FAB by the offset above, a toast sat right on top of it, and in a
+        store app every saved guest shows one: adding several people meant
+        waiting for each toast to leave the "+". The top edge holds nothing
+        that takes taps but the header, which the offset clears.
+      */}
       <Toaster
-        position="bottom-center"
-        mobileOffset={{ bottom: 'calc(var(--nav-bar-height, 4rem) + 5rem + env(safe-area-inset-bottom, 0px))' }}
+        position={isPhone ? 'top-center' : 'bottom-center'}
+        // Sonner reads `mobileOffset` below 600px only; a phone is up to 767px.
+        {...(isPhone ? { offset: { top: 'calc(var(--app-inset-top, 0px) + 4rem)' } } : {})}
+        mobileOffset={
+          isPhone
+            ? { top: 'calc(var(--app-inset-top, 0px) + 4rem)' }
+            : { bottom: 'calc(var(--nav-bar-height, 4rem) + 5rem + env(safe-area-inset-bottom, 0px))' }
+        }
         richColors
         closeButton
       />

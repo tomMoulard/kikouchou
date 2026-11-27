@@ -32,6 +32,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Baby,
+  BookmarkPlus,
   Phone,
   Plus,
   Trash2,
@@ -246,7 +247,9 @@ const PersonCard = memo(function PersonCard({
       className={cn(
         // `min-w-0`: a grid item is as wide as its content by default, so a
         // name with no spaces widened the card, and the page, past the screen.
-        'relative min-w-0 transition-all duration-200',
+        // `gap-2 py-3`: the stock card is `gap-6 py-6`, and with one row per
+        // fact only three guests fitted on a phone screen.
+        'relative min-w-0 gap-2 py-3 transition-all duration-200',
         readOnly ? 'cursor-default' : 'cursor-pointer hover:shadow-md hover:border-primary/20',
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
@@ -280,7 +283,7 @@ const PersonCard = memo(function PersonCard({
         />
       )}
 
-      <CardHeader className="min-w-0 pb-2">
+      <CardHeader className="min-w-0 px-4">
         <div className="flex min-w-0 items-center gap-3">
           {/* Color indicator */}
           <div
@@ -289,7 +292,7 @@ const PersonCard = memo(function PersonCard({
             style={{ backgroundColor: person.color }}
             aria-hidden="true"
           />
-          <CardTitle className="min-w-0 text-lg truncate" title={person.name}>
+          <CardTitle className="min-w-0 text-base truncate" title={person.name}>
             {person.name}
           </CardTitle>
           {personHeadcount > 1 && (
@@ -319,7 +322,7 @@ const PersonCard = memo(function PersonCard({
         </div>
       </CardHeader>
 
-      <CardContent className="pt-0 space-y-2">
+      <CardContent className="space-y-1 px-4 pt-0">
         {/* The declared child restraint. A badge rather than a labelled row:
             it is the one thing on this card a driver scans the roster for. */}
         {person.childSeat && (
@@ -344,24 +347,26 @@ const PersonCard = memo(function PersonCard({
         )}
 
         {hasTransportInfo ? (
-          <div className="space-y-2 text-sm text-muted-foreground">
+          <div className="space-y-1 text-sm text-muted-foreground">
             {/* Arrival info */}
             {transportSummary.arrival && (() => {
               const { full } = formatTransportDatetimeParts(transportSummary.arrival.datetime, dateLocale, 'dayAndTime');
               return (
-                <div className="flex items-start gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <ArrowDownRight
                     className={cn('size-4 shrink-0', statusVariants({ tone: 'arrival', emphasis: 'text' }))}
                     aria-hidden="true"
                   />
-                  <div className="min-w-0">
-                    <div className="font-medium text-foreground tabular-nums">
-                      {full}
-                    </div>
-                    <div className="text-muted-foreground truncate" title={transportSummary.arrival.location}>
-                      {transportSummary.arrival.location}
-                    </div>
-                  </div>
+                  {/* One line: when, then where, cut short rather than wrapped. */}
+                  <p className="min-w-0 truncate" title={transportSummary.arrival.location}>
+                    <span className="font-medium text-foreground tabular-nums">{full}</span>
+                    {transportSummary.arrival.location ? (
+                      <>
+                        {' · '}
+                        <span>{transportSummary.arrival.location}</span>
+                      </>
+                    ) : null}
+                  </p>
                 </div>
               );
             })()}
@@ -370,19 +375,21 @@ const PersonCard = memo(function PersonCard({
             {transportSummary.departure && (() => {
               const { full } = formatTransportDatetimeParts(transportSummary.departure.datetime, dateLocale, 'dayAndTime');
               return (
-                <div className="flex items-start gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <ArrowUpRight
                     className={cn('size-4 shrink-0', statusVariants({ tone: 'departure', emphasis: 'text' }))}
                     aria-hidden="true"
                   />
-                  <div className="min-w-0">
-                    <div className="font-medium text-foreground tabular-nums">
-                      {full}
-                    </div>
-                    <div className="text-muted-foreground truncate" title={transportSummary.departure.location}>
-                      {transportSummary.departure.location}
-                    </div>
-                  </div>
+                  {/* One line: when, then where, cut short rather than wrapped. */}
+                  <p className="min-w-0 truncate" title={transportSummary.departure.location}>
+                    <span className="font-medium text-foreground tabular-nums">{full}</span>
+                    {transportSummary.departure.location ? (
+                      <>
+                        {' · '}
+                        <span>{transportSummary.departure.location}</span>
+                      </>
+                    ) : null}
+                  </p>
                 </div>
               );
             })()}
@@ -390,13 +397,7 @@ const PersonCard = memo(function PersonCard({
         ) : null}
 
         {trimmedPhone && (
-          <div
-            className={cn(
-              'text-sm',
-              (person.childSeat || stayRangeLabel || roomsDisplay || hasTransportInfo) &&
-                'mt-2 border-t border-muted/60 pt-2',
-            )}
-          >
+          <div className="text-sm">
             <a
               href={`tel:${trimmedPhone.replace(/\s+/gu, '')}`}
               // The whole card opens the editor, so a tap meant for the number
@@ -415,19 +416,11 @@ const PersonCard = memo(function PersonCard({
         )}
 
         {trimmedNotes && (
-          <div
-            className={cn(
-              'text-sm text-muted-foreground',
-              (person.childSeat ||
-                stayRangeLabel ||
-                roomsDisplay ||
-                hasTransportInfo ||
-                trimmedPhone) &&
-                'mt-2 border-t border-muted/60 pt-2',
-            )}
-          >
+          <div className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{t('persons.notes')}</span>
-            <p className="mt-0.5 line-clamp-4 whitespace-pre-wrap break-words" title={trimmedNotes}>
+            {/* Two lines on a phone, where the list is long; the editor
+                holds the rest. */}
+            <p className="line-clamp-2 whitespace-pre-wrap break-words sm:line-clamp-4" title={trimmedNotes}>
               {trimmedNotes}
             </p>
           </div>
@@ -731,7 +724,10 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
           {t('guestGroups.importAction', 'Add from a group')}
         </Button>
         {persons.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={handleOpenSaveAsGroup}>
+          // Outline with an icon, like its neighbour: as a ghost button it
+          // read as plain text on a phone.
+          <Button variant="outline" size="sm" onClick={handleOpenSaveAsGroup}>
+            <BookmarkPlus className="size-4 mr-2" aria-hidden="true" />
             {t('guestGroups.saveAsGroup', 'Save as a group')}
           </Button>
         )}
