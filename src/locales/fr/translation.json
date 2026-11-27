@@ -590,6 +590,7 @@
     "departuresCount_one": "{{count}} départ",
     "departuresCount_other": "{{count}} départs",
     "new": "Nouveau transport",
+    "addArrival": "Ajouter une arrivée",
     "edit": "Modifier le transport",
     "type": "Type",
     "arrival": "Arrivée",

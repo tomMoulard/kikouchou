@@ -41,6 +41,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,6 +118,13 @@ export interface RideFormProps {
   readonly onCancel: () => void;
   /** Called whenever the dirty state changes, for the unsaved-changes guard. */
   readonly onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * Opens the "add a car" dialog over the form. With it, the car field offers
+   * to add one in place: a ride used to need a trip to the Cars page first.
+   */
+  readonly onCreateVehicle?: () => void;
+  /** A car just added through {@link onCreateVehicle}, selected once listed. */
+  readonly newVehicleId?: VehicleId;
 }
 
 /** Per-field validation messages, plus one for a failure with no field. */
@@ -311,6 +319,8 @@ const RideForm = memo(function RideForm({
   onSubmit,
   onCancel,
   onDirtyChange,
+  onCreateVehicle,
+  newVehicleId,
 }: RideFormProps) {
   const { t } = useTranslation();
 
@@ -465,6 +475,9 @@ const RideForm = memo(function RideForm({
       const vehicleId = value === NO_SELECTION ? '' : (value as VehicleId);
       setFormState((previous) => ({ ...previous, vehicleId }));
     }, []),
+    // Selected once the live query lists it, so the Select never holds an id
+    // it has no item for.
+    newVehicleListed = newVehicleId !== undefined && vehicles.some((vehicle) => vehicle.id === newVehicleId),
     handleNotesChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
       const { value } = event.target;
       setFormState((previous) => ({ ...previous, notes: value }));
@@ -583,6 +596,13 @@ const RideForm = memo(function RideForm({
     },
     [formState, t, mapSchemaIssues, doSubmit],
   );
+
+  // A car added from the field's "Add car" is the one this ride uses.
+  useEffect(() => {
+    if (newVehicleListed && newVehicleId !== undefined) {
+      setFormState((previous) => ({ ...previous, vehicleId: newVehicleId }));
+    }
+  }, [newVehicleId, newVehicleListed]);
 
   // ============================================================================
   // Render
@@ -783,12 +803,27 @@ const RideForm = memo(function RideForm({
 
       {/* Car */}
       <div className="space-y-2">
-        <Label htmlFor="ride-vehicle">{t('rides.vehicle')}</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="ride-vehicle">{t('rides.vehicle')}</Label>
+          {onCreateVehicle && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto px-2 py-1 text-primary"
+              onClick={onCreateVehicle}
+              disabled={isSubmitting}
+            >
+              <Plus className="mr-1 size-4" aria-hidden="true" />
+              {t('vehicles.new')}
+            </Button>
+          )}
+        </div>
         <Select
           name="ride-vehicle"
           value={formState.vehicleId || NO_SELECTION}
           onValueChange={handleVehicleChange}
-          disabled={isSubmitting || vehicles.length === 0}
+          disabled={isSubmitting || (vehicles.length === 0 && !onCreateVehicle)}
         >
           <SelectTrigger id="ride-vehicle" className="w-full">
             <SelectValue placeholder={t('rides.noVehicle')} />
@@ -802,7 +837,7 @@ const RideForm = memo(function RideForm({
             ))}
           </SelectContent>
         </Select>
-        {vehicles.length === 0 && (
+        {vehicles.length === 0 && !onCreateVehicle && (
           <p className="text-sm text-muted-foreground">{t('vehicles.noVehicles')}</p>
         )}
       </div>

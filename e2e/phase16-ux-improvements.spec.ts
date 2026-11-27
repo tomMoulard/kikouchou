@@ -1070,8 +1070,8 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Click add transport button - look for "New transport" button or FAB
-    const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
+    // Click add transport button - look for "Add an arrival" button or FAB
+    const addButton = page.getByRole('button', { name: /add an arrival|ajouter une arrivée/i });
     const hasFab = await addButton.isVisible({ timeout: 2000 }).catch(() => false);
 
     if (!hasFab) {
@@ -1129,7 +1129,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // button and a FAB, so the union resolves to two elements and asserting on
     // it raises a strict-mode violation rather than the missing-control failure
     // the assertion is for.
-    const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
+    const addButton = page.getByRole('button', { name: /add an arrival|ajouter une arrivée/i });
     const fabButton = page.locator('button[aria-label*="transport" i]');
     const anyAddControl = addButton.or(fabButton).first();
 

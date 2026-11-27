@@ -11,7 +11,7 @@
 import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fireEvent, render, screen, userEvent } from '@/test/utils';
+import { fireEvent, render, screen, userEvent, waitFor } from '@/test/utils';
 import type { Person, PersonId, Ride, RideId, TripId, Vehicle, VehicleId } from '@/types';
 
 // ============================================================================
@@ -380,6 +380,33 @@ describe('RideForm', () => {
     const { container: empty } = renderForm({ vehicles: [] });
     expect(optionValues(empty, 'ride-vehicle')).not.toContain('v1');
     expect(screen.getAllByText('vehicles.noVehicles').length).toBeGreaterThan(0);
+  });
+
+  // A ride used to need a trip to the Cars page first: with no car the field
+  // was disabled and said so, and nothing on the form could add one.
+  it('offers to add a car in place, and selects the car once it is listed', async () => {
+    const onCreateVehicle = vi.fn();
+    const { user, rerender, container } = renderForm({ vehicles: [], onCreateVehicle });
+
+    expect(screen.queryByText('vehicles.noVehicles')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /vehicles\.new/ }));
+    expect(onCreateVehicle).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <RideForm
+        persons={mockPersons}
+        vehicles={mockVehicles}
+        rides={[]}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+        onCreateVehicle={onCreateVehicle}
+        newVehicleId={'v1' as VehicleId}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector<HTMLSelectElement>('select[name="ride-vehicle"]')?.value).toBe('v1');
+    });
   });
 
   it('reports dirty state and cancels', async () => {

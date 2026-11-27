@@ -272,6 +272,8 @@ interface TransportListProps {
   readonly emptyTitle: string;
   /** Empty state description */
   readonly emptyDescription: string;
+  /** The empty state's button: add the first arrival. Absent when read-only. */
+  readonly onAddTransport?: () => void;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
   /** A read-only trip: every card and car is shown without its controls. */
@@ -1008,6 +1010,7 @@ const TransportList = memo(function TransportList({
   listLabel,
   emptyTitle,
   emptyDescription,
+  onAddTransport,
   isActionsDisabled = false,
   readOnly = false,
   drivenRideIds,
@@ -1036,6 +1039,9 @@ const TransportList = memo(function TransportList({
           icon={Plane}
           title={emptyTitle}
           description={emptyDescription}
+          {...(onAddTransport === undefined
+            ? {}
+            : { action: { label: t('transports.addArrival', 'Add an arrival'), onClick: onAddTransport } })}
         />
       </div>
     );
@@ -1711,7 +1717,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         </Button>
         <Button className="hidden sm:inline-flex" onClick={handleAddTransport}>
           <Plus className="size-4 mr-2" aria-hidden="true" />
-          {t('transports.new')}
+          {t('transports.addArrival', 'Add an arrival')}
         </Button>
       </div>
     ),
@@ -1910,6 +1916,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             ? t('transports.scope.emptyDescription')
             : t('transports.emptyDescription')
         }
+        {...(canEdit && !isScopedToNothing ? { onAddTransport: handleAddTransport } : {})}
         drivenRideIds={drivenRideIds}
         resolveHeadcount={headcountOf}
         myPersonId={myPersonId}
@@ -1929,13 +1936,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
           size="lg"
           className={cn(
             'fixed bottom-nav-safe right-4 z-40',
-            'size-14 rounded-full shadow-lg',
+            'h-14 rounded-full px-6 shadow-lg',
             'sm:hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           )}
-          aria-label={t('transports.new')}
         >
-          <Plus className="size-6" aria-hidden="true" />
+          {/* Labelled: the only labelled button on a phone was "New ride",
+              so the page about arrivals seemed to create a shuttle. */}
+          <Plus className="size-6 mr-2" aria-hidden="true" />
+          {t('transports.addArrival', 'Add an arrival')}
         </Button>
       )}
 

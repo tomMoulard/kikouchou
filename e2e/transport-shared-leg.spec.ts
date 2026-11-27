@@ -21,7 +21,8 @@ test.use({ timezoneId: 'UTC' });
 
 const LABELS = {
   transportList: /^transports?$/i,
-  newTransport: /^new transport$|^nouveau transport$/i,
+  // The page's add button says what it adds; the dialog keeps "New transport".
+  newTransport: /^add an arrival$|^ajouter une arrivée$/i,
   sharedLeg: /same train or flight as|même train ou vol que/i,
   save: /^save$|^enregistrer$/i,
   actions: /^actions/i,

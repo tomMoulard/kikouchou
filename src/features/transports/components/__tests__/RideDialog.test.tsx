@@ -124,6 +124,8 @@ vi.mock('@/features/transports/components/RideForm', () => ({
     onCancel,
     onSubmit,
     onDirtyChange,
+    onCreateVehicle,
+    newVehicleId,
   }: {
     ride?: Ride;
     passengerIds?: readonly PersonId[];
@@ -131,8 +133,14 @@ vi.mock('@/features/transports/components/RideForm', () => ({
     onCancel: () => void;
     onSubmit: (data: RideFormData) => Promise<void>;
     onDirtyChange?: (isDirty: boolean) => void;
+    onCreateVehicle?: () => void;
+    newVehicleId?: string;
   }) => (
     <div data-testid="ride-form">
+      <button data-testid="add-car-btn" onClick={onCreateVehicle}>
+        Add car
+      </button>
+      <span data-testid="new-vehicle-id">{newVehicleId ?? ''}</span>
       {ride ? (
         <span data-testid="edit-mode">{ride.location}</span>
       ) : (
@@ -160,6 +168,26 @@ vi.mock('@/features/transports/components/RideForm', () => ({
   ),
 }));
 
+vi.mock('@/features/vehicles/components/VehicleDialog', () => ({
+  VehicleDialog: ({
+    open,
+    onCreated,
+  }: {
+    open: boolean;
+    onCreated?: (vehicle: Vehicle) => void;
+  }) =>
+    open ? (
+      <div data-testid="vehicle-dialog">
+        <button
+          data-testid="create-car-btn"
+          onClick={() => onCreated?.({ id: 'v9' as VehicleId, tripId: TRIP_ID, name: 'Clio' })}
+        >
+          Create
+        </button>
+      </div>
+    ) : null,
+}));
+
 import { RideDialog } from '../RideDialog';
 
 // ============================================================================
@@ -180,6 +208,21 @@ describe('RideDialog', () => {
     expect(screen.getByText('rides.new')).toBeInTheDocument();
     expect(screen.getByText('rides.newDescription')).toBeInTheDocument();
     expect(screen.getByTestId('create-mode')).toBeInTheDocument();
+  });
+
+  // A ride used to need the Cars page first. The form's "Add car" opens the
+  // car dialog over this one, and the car it creates goes back to the form.
+  it('adds a car without leaving the ride, and hands it to the form', async () => {
+    // The stand-in car dialog renders outside the open ride dialog, which
+    // Radix makes inert; the real one is a dialog of its own.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<RideDialog open onOpenChange={vi.fn()} />, { withProviders: false });
+
+    expect(screen.queryByTestId('vehicle-dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('add-car-btn'));
+    await user.click(await screen.findByTestId('create-car-btn'));
+
+    expect(screen.getByTestId('new-vehicle-id')).toHaveTextContent('v9');
   });
 
   it('renders edit mode for a known ride', () => {

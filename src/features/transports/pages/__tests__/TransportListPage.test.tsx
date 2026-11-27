@@ -386,9 +386,11 @@ describe('TransportListPage', () => {
 
   it('renders add transport button', () => {
     render(<TransportListPage />, { withProviders: false });
-    // The FAB has aria-label={t('transports.new')} and desktop button has the same text
-    const addBtns = screen.getAllByRole('button', { name: /transports\.new/i });
-    expect(addBtns.length).toBeGreaterThanOrEqual(1);
+    // The FAB and the desktop button both say what they add: an arrival. On a
+    // phone the only labelled button was "New ride", so the page about
+    // arrivals seemed to create a shuttle.
+    const addBtns = screen.getAllByRole('button', { name: /transports\.addArrival/i });
+    expect(addBtns).toHaveLength(2);
   });
 
   it('renders departures tab', async () => {

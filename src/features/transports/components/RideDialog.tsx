@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RideForm } from '@/features/transports/components/RideForm';
+import { VehicleDialog } from '@/features/vehicles/components/VehicleDialog';
 import {
   CARPOOL_LEAD_TIME_MINUTES,
   resolveRides,
@@ -39,6 +40,8 @@ import {
   type RideDirection,
   type RideFormData,
   type RideId,
+  type Vehicle,
+  type VehicleId,
 } from '@/types';
 
 // ============================================================================
@@ -108,7 +111,17 @@ const RideDialog = memo(function RideDialog({
     { transports } = useTransportContext(),
     { notifySuccess } = useOfflineAwareNotify(),
     [isDirty, setIsDirty] = useState(false),
-    [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+    [showDiscardConfirm, setShowDiscardConfirm] = useState(false),
+    // The car field's "Add car" opens the car dialog over this one, and the
+    // car it creates is selected in the form.
+    [isVehicleDialogOpen, setIsVehicleDialogOpen] = useState(false),
+    [newVehicleId, setNewVehicleId] = useState<VehicleId | undefined>(undefined),
+    handleCreateVehicle = useCallback(() => {
+      setIsVehicleDialogOpen(true);
+    }, []),
+    handleVehicleCreated = useCallback((vehicle: Vehicle) => {
+      setNewVehicleId(vehicle.id);
+    }, []);
 
   // Reset the guard when the dialog opens, so a discarded edit does not leave
   // the next one believing it is already dirty.
@@ -278,9 +291,17 @@ const RideDialog = memo(function RideDialog({
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             onDirtyChange={setIsDirty}
+            onCreateVehicle={handleCreateVehicle}
+            {...(newVehicleId === undefined ? {} : { newVehicleId })}
           />
         </DialogContent>
       </Dialog>
+
+      <VehicleDialog
+        open={isVehicleDialogOpen}
+        onOpenChange={setIsVehicleDialogOpen}
+        onCreated={handleVehicleCreated}
+      />
 
       {/* Discard changes confirmation */}
       <ConfirmDialog

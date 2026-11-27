@@ -271,10 +271,10 @@ test.describe('an invite opened with no account', () => {
     await guestPage.waitForURL(/\/rooms/, { timeout: 15_000 });
     await expect(guestPage.getByRole('button', { name: /new room/i })).toHaveCount(0);
 
-    // Transport: no "new transport".
+    // Transport: no "add an arrival".
     await guestPage.getByRole('link', { name: /transport/i }).first().click();
     await guestPage.waitForURL(/\/transports/, { timeout: 15_000 });
-    await expect(guestPage.getByRole('button', { name: /new transport/i })).toHaveCount(0);
+    await expect(guestPage.getByRole('button', { name: /add an arrival/i })).toHaveCount(0);
 
     // And the trip never left the device: not a single log write was attempted.
     expect(stub.counts.updateAttempts).toBe(stub.counts.updateInserts);

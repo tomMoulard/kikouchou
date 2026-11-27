@@ -35,7 +35,8 @@ import { seedPerson, seedRide, seedTransport, seedTrip } from './support/seed';
 /** Both locales, because the suite runs against whichever the browser asks for. */
 const LABELS = {
   newRide: /^new ride$|^nouveau trajet$/i,
-  newTransport: /^new transport$|^nouveau transport$/i,
+  // The page's add button says what it adds; the dialog keeps "New transport".
+  newTransport: /^add an arrival$|^ajouter une arrivée$/i,
   ride: /^ride$|^trajet$/i,
   guest: /participant|guest/i,
   editRide: /^edit ride$|^modifier le trajet$/i,

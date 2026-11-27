@@ -455,7 +455,7 @@ describe('TransportListPage — the URL and the header', () => {
     const user = userEvent.setup();
     renderPage();
 
-    const newButtons = screen.getAllByRole('button', { name: /transports.new/i });
+    const newButtons = screen.getAllByRole('button', { name: /transports\.addArrival/i });
     await user.click(newButtons[0]!);
 
     expect(await screen.findByTestId('transport-dialog')).toHaveAttribute(

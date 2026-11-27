@@ -37,6 +37,8 @@ export interface VehicleDialogProps {
   readonly open: boolean;
   /** Callback to change the open state */
   readonly onOpenChange: (open: boolean) => void;
+  /** Called with a car this dialog created, so a ride form can select it. */
+  readonly onCreated?: (vehicle: Vehicle) => void;
 }
 
 // ============================================================================
@@ -58,6 +60,7 @@ const VehicleDialog = memo(function VehicleDialog({
   vehicle,
   open,
   onOpenChange,
+  onCreated,
 }: VehicleDialogProps): ReactElement {
   const { t } = useTranslation();
   const { persons } = usePersonContext();
@@ -82,8 +85,9 @@ const VehicleDialog = memo(function VehicleDialog({
         await updateVehicle(vehicle.id, data);
         notifySuccess(t('vehicles.updateSuccess'));
       } else {
-        await createVehicle(data);
+        const created = await createVehicle(data);
         notifySuccess(t('vehicles.createSuccess'));
+        onCreated?.(created);
       }
 
       // Counts and flags only: what somebody calls their car is not analytics
@@ -96,7 +100,7 @@ const VehicleDialog = memo(function VehicleDialog({
 
       onOpenChange(false);
     },
-    [createVehicle, onOpenChange, notifySuccess, t, updateVehicle, vehicle],
+    [createVehicle, onCreated, onOpenChange, notifySuccess, t, updateVehicle, vehicle],
   );
 
   const handleCancel = useCallback(() => {

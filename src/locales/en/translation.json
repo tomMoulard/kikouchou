@@ -590,6 +590,7 @@
     "departuresCount_one": "{{count}} departure",
     "departuresCount_other": "{{count}} departures",
     "new": "New transport",
+    "addArrival": "Add an arrival",
     "edit": "Edit transport",
     "type": "Type",
     "arrival": "Arrival",
