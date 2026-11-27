@@ -377,9 +377,12 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     return (
       <div className="flex flex-col gap-6 py-4" data-testid="trip-wizard-invite">
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <PartyPopper className="size-8" aria-hidden="true" />
-          </div>
+          {/* The sign-in form is tall: the icon gives its room to it. */}
+          {!signInFirst && (
+            <div className="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <PartyPopper className="size-8" aria-hidden="true" />
+            </div>
+          )}
           <div className="space-y-2">
             <h2 className="font-display text-2xl font-bold">
               {t('trips.wizard.inviteTitle', {
@@ -402,8 +405,20 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           withShareSheet
           onStateChange={handleLinkState}
         />
-        <div className="flex justify-center">
-          <Button variant={signInFirst ? 'ghost' : 'default'} onClick={openTrip}>
+        {/*
+          Signed out, the sign-in form above is taller than a phone screen,
+          and the only way on was below it. The exit sticks to the bottom
+          edge so it is in view from the start, and it is a real button.
+        */}
+        <div
+          className={cn(
+            'flex justify-center',
+            signInFirst &&
+              'sticky bottom-0 z-10 -mx-6 border-t bg-card/95 px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur supports-[backdrop-filter]:bg-card/80',
+          )}
+          data-testid="trip-wizard-exit"
+        >
+          <Button variant={signInFirst ? 'outline' : 'default'} onClick={openTrip}>
             {signInFirst
               ? t('trips.wizard.later', 'Later, open the trip')
               : t('trips.wizard.openCalendar', 'Open the calendar')}

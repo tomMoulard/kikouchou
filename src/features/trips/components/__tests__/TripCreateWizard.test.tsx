@@ -681,6 +681,9 @@ describe('TripCreateWizard invite screen', () => {
     await user.click(screen.getByRole('button', { name: 'link needs-account' }));
 
     expect(screen.queryByRole('button', { name: 'Open the calendar' })).not.toBeInTheDocument();
+    // The sign-in form is taller than a phone: the exit is pinned to the
+    // bottom edge, so it is in view without scrolling.
+    expect(screen.getByTestId('trip-wizard-exit')).toHaveClass('sticky', 'bottom-0');
     await user.click(screen.getByRole('button', { name: 'Later, open the trip' }));
 
     expect(onCreated).toHaveBeenCalledWith(CREATED_TRIP);
