@@ -168,6 +168,36 @@ describe('parseAuthSettings', () => {
     expect(settings?.oauth).toEqual(['google']);
   });
 
+  // GoTrue lists `external` alphabetically, so Apple came before Google and
+  // took the first button.
+  it('puts Google first, then Apple, then the rest alphabetically', () => {
+    const settings = parseAuthSettings({
+      external: { apple: true, discord: true, email: true, github: true, google: true, zoom: true },
+    });
+
+    expect(settings?.oauth).toEqual(['google', 'apple', 'discord', 'github', 'zoom']);
+  });
+
+  it('orders the list whatever order the project sent it in', () => {
+    const settings = parseAuthSettings({
+      external: { spotify: true, apple: true, azure: true },
+    });
+
+    expect(settings?.oauth).toEqual(['apple', 'azure', 'spotify']);
+  });
+
+  it('keeps Google when the list is long enough to be capped', () => {
+    const external: Record<string, boolean> = {};
+    for (let index = 0; index < 100; index += 1) {
+      external[`a_provider_${index}`] = true;
+    }
+    external['google'] = true;
+
+    const oauth = parseAuthSettings({ external })?.oauth;
+    expect(oauth).toHaveLength(24);
+    expect(oauth?.[0]).toBe('google');
+  });
+
   it('caps the list so a malformed response cannot render hundreds of buttons', () => {
     const external: Record<string, boolean> = {};
     for (let index = 0; index < 100; index += 1) {
@@ -327,6 +357,16 @@ describe('the cached answer', () => {
       passkeys: false,
       signupDisabled: false,
     });
+  });
+
+  it('is put in button order, since an older build stored it alphabetically', () => {
+    configure();
+    window.localStorage.setItem(
+      `kikouchou-auth-settings:${URL}`,
+      JSON.stringify({ oauth: ['apple', 'google', 'spotify'] }),
+    );
+
+    expect(readCachedAuthSettings()?.oauth).toEqual(['google', 'apple', 'spotify']);
   });
 
   it('survives a store that refuses to be read', () => {

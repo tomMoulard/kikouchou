@@ -49,8 +49,8 @@ import { readSupabaseConfig } from './client';
 /** What the project accepts as a way in, as it reported it. */
 export interface AuthSettings {
   /**
-   * Enabled OAuth provider ids, in the order the endpoint listed them, e.g.
-   * `['google', 'spotify']`. These are passed straight to
+   * Enabled OAuth provider ids, in the order the buttons show them (Google,
+   * then Apple, then the rest alphabetically), e.g. `['google', 'spotify']`. These are passed straight to
    * `signInWithOAuth({ provider })`, so they are ids and not display names.
    */
   readonly oauth: readonly string[];
@@ -101,6 +101,17 @@ const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9_]{1,31}$/;
 const MAX_OAUTH_PROVIDERS = 24;
 
 /**
+ * The providers that lead the list, in this order. Every other id follows,
+ * alphabetically.
+ *
+ * GoTrue lists `external` alphabetically, which put Apple above Google. Google
+ * leads because it is the provider every existing account uses; Apple comes
+ * next because its guidelines ask for Sign in with Apple to sit with the other
+ * main providers, not below a tail of minor ones.
+ */
+const LEADING_OAUTH_PROVIDERS: readonly string[] = ['google', 'apple'];
+
+/**
  * What to offer when there is nothing else to go on: offline on a first launch,
  * before this browser has ever reached the endpoint.
  *
@@ -126,6 +137,26 @@ const CACHE_KEY_PREFIX = 'kikouchou-auth-settings:';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Where an id sorts: its place among the leading providers, or after them. */
+function oauthRank(id: string): number {
+  const index = LEADING_OAUTH_PROVIDERS.indexOf(id);
+  return index === -1 ? LEADING_OAUTH_PROVIDERS.length : index;
+}
+
+/**
+ * The order the buttons are shown in: Google, then Apple, then the rest
+ * alphabetically. Sorted before the cap, so a long list cannot push Google out.
+ *
+ * Exported for the tests.
+ *
+ * @internal
+ */
+export function orderOAuthProviders(ids: readonly string[]): string[] {
+  return [...new Set(ids)]
+    .sort((a, b) => oauthRank(a) - oauthRank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .slice(0, MAX_OAUTH_PROVIDERS);
 }
 
 /**
@@ -160,14 +191,11 @@ export function parseAuthSettings(payload: unknown): AuthSettings | null {
     if (!PROVIDER_ID_PATTERN.test(id)) {
       continue;
     }
-    if (oauth.length >= MAX_OAUTH_PROVIDERS) {
-      break;
-    }
     oauth.push(id);
   }
 
   return {
-    oauth,
+    oauth: orderOAuthProviders(oauth),
     email: external['email'] === true,
     phone: external['phone'] === true,
     passkeys: payload['passkeys_enabled'] === true,
@@ -225,9 +253,13 @@ function parseCachedSettings(value: unknown): AuthSettings | null {
     return null;
   }
 
-  const oauth = value['oauth']
-    .filter((id): id is string => typeof id === 'string' && PROVIDER_ID_PATTERN.test(id))
-    .slice(0, MAX_OAUTH_PROVIDERS);
+  // Ordered again: an entry written by an older build kept GoTrue's
+  // alphabetical order, and it is what the first frame renders.
+  const oauth = orderOAuthProviders(
+    value['oauth'].filter(
+      (id): id is string => typeof id === 'string' && PROVIDER_ID_PATTERN.test(id),
+    ),
+  );
 
   return {
     oauth,

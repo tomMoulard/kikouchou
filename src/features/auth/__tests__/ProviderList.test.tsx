@@ -115,6 +115,34 @@ describe('the discovered OAuth providers', () => {
     ]);
   });
 
+  // The first button used to be filled and the rest outlined, so Apple sat a
+  // step below Google. Apple asks for its button to be at least as prominent.
+  it('draw Apple exactly as prominent as Google', () => {
+    discovered({ oauth: ['google', 'apple'] });
+
+    render(<ProviderList />, { withProviders: false });
+
+    const google = screen.getByRole('button', { name: continueWith('Google') });
+    const apple = screen.getByRole('button', { name: continueWith('Apple') });
+    expect(apple.className).toBe(google.className);
+  });
+
+  it('show the Apple logo rather than the neutral key', () => {
+    discovered({ oauth: ['apple', 'some_new_idp'] });
+
+    render(<ProviderList />, { withProviders: false });
+
+    const apple = screen.getByRole('button', { name: continueWith('Apple') });
+    const unknown = screen.getByRole('button', { name: continueWith('Some New Idp') });
+    // The key is a lucide icon, which stamps its name on the class; the marks
+    // are plain SVGs.
+    expect(unknown.querySelector('svg')?.getAttribute('class')).toContain('lucide-key-round');
+    const appleMark = apple.querySelector('svg');
+    expect(appleMark?.getAttribute('class')).not.toContain('lucide');
+    expect(appleMark).toHaveAttribute('aria-hidden', 'true');
+    expect(appleMark?.querySelector('path')).toHaveAttribute('fill', 'currentColor');
+  });
+
   it('include one this app has never heard of', () => {
     // `some_new_idp` appears nowhere in the source. A provider enabled in the
     // dashboard tomorrow looks exactly like this, and it has to work today.

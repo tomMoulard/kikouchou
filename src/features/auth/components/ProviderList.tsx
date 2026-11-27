@@ -252,13 +252,10 @@ export const ProviderList = memo(function ProviderList({
 
       {settings.oauth.length > 0 ? (
         <div className="flex flex-col gap-2">
-          {settings.oauth.map((providerId, index) => (
+          {settings.oauth.map((providerId) => (
             <ProviderButton
               key={providerId}
               providerId={providerId}
-              // One clear default among several equal-looking options; the order
-              // is the project's own.
-              isPrimary={index === 0}
               disabled={disabled}
               isPending={pending === providerId}
               onSelect={handleProvider}
@@ -319,7 +316,6 @@ export const ProviderList = memo(function ProviderList({
 
 interface ProviderButtonProps {
   readonly providerId: string;
-  readonly isPrimary: boolean;
   readonly disabled: boolean;
   readonly isPending: boolean;
   readonly onSelect: (providerId: string) => Promise<void>;
@@ -332,10 +328,15 @@ interface ProviderButtonProps {
  * brand name — rather than an interpolated sentence, because the brand name is
  * a proper noun in every locale and the provider list is not known at build
  * time, so there is no key to add for it.
+ *
+ * Every provider gets the same outlined button. The first one used to be
+ * filled, which made Google the default and drew Apple a step lower; Apple's
+ * guidelines ask for Sign in with Apple to be at least as prominent as any
+ * other sign-in button, and both brands draw their own button on a light or
+ * outlined background rather than on this app's accent colour.
  */
 const ProviderButton = memo(function ProviderButton({
   providerId,
-  isPrimary,
   disabled,
   isPending,
   onSelect,
@@ -348,7 +349,7 @@ const ProviderButton = memo(function ProviderButton({
 
   return (
     <Button
-      variant={isPrimary ? 'default' : 'outline'}
+      variant="outline"
       onClick={handleClick}
       disabled={disabled}
       className="w-full"
