@@ -193,7 +193,7 @@ test.describe('inviting guests from the activity form', () => {
     const invites = page
       .getByRole('dialog')
       .getByRole('group', { name: /who do you want to invite\?|qui voulez-vous inviter \?/i });
-    await expect(invites).toContainText(/already invited: Maud|déjà invités : Maud/i);
+    await expect(invites).toContainText(/already invited: Maud|déjà invités\s: Maud/i);
     await expect(invites.getByRole('button', { name: /Maud/ })).toHaveCount(0);
   });
 });

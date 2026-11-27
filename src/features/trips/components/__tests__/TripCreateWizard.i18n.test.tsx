@@ -87,7 +87,7 @@ describe('TripCreateWizard in French', () => {
     const user = await renderInFrench();
 
     expect(screen.getByRole('list', { name: 'Étape 1 sur 2' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: "Comment s'appelle le séjour ?" })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: "Comment s'appelle le séjour\u202f?" })).toBeInTheDocument();
     expect(
       screen.getByText("La maison, la ville, l'occasion : le nom que le groupe lui donne."),
     ).toBeInTheDocument();
@@ -119,7 +119,7 @@ describe('TripCreateWizard in French', () => {
     });
 
     expect(
-      await screen.findByRole('heading', { name: 'Lac est prêt : invitez le groupe' }),
+      await screen.findByRole('heading', { name: 'Lac est prêt\u00a0: invitez le groupe' }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
