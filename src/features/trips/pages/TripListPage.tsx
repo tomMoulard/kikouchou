@@ -305,41 +305,6 @@ const TripListPage = memo(function TripListPage() {
   );
 
   /**
-   * The first-run FAB: "New trip", labelled, and the only floating control on
-   * the screen.
-   *
-   * Before a trip exists the QR scanner was the one eye-catching thing on the
-   * page — a round, unlabelled button floating over an empty list, next to four
-   * dead nav items — while the only action worth taking sat as a plain button
-   * in the middle of the page. So the create action takes the floating slot and
-   * QR import moves into the empty state as the secondary of the two.
-   *
-   * Extended rather than icon-only, because the complaint about the QR button
-   * applies here too: a bare `+` over an empty page says nothing. The trip list
-   * keeps its icon-only FAB, where the cards behind it supply the context this
-   * page has none of.
-   */
-  const newTripFab = useMemo(
-    () => (
-      <Button
-        type="button"
-        onClick={handleCreateClick}
-        size="lg"
-        className={cn(
-          'fixed bottom-nav-safe right-4 z-40',
-          'h-14 rounded-full px-6 shadow-lg',
-          'sm:hidden',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-      >
-        <Plus className="size-6 mr-2" aria-hidden="true" />
-        {t('trips.new')}
-      </Button>
-    ),
-    [handleCreateClick, t],
-  );
-
-  /**
    * Nothing to keep online any more.
    *
    * A second Yjs binding used to be mounted here so a trip stayed connected
@@ -396,10 +361,10 @@ const TripListPage = memo(function TripListPage() {
   if (activeTrips.length === 0 && archivedTrips.length === 0) {
     return (
       <>
-        {/* One FAB only, so `<main>`'s own `pb-bottom-stack` is the whole
-            clearance and `pb-second-fab` would be padding under nothing. */}
+        {/* One "New trip": the empty state's own button. The header's and
+            the floating one said the same thing two more times. */}
         <div className="flex flex-col">
-          <PageHeader title={t('trips.title')} action={headerAction} />
+          <PageHeader title={t('trips.title')} />
           <div className="flex items-center justify-center py-16 sm:py-24">
             <EmptyState
               icon={Luggage}
@@ -423,7 +388,6 @@ const TripListPage = memo(function TripListPage() {
               a laptop leaves this device with no local trips at all, and without
               this the laptop offers no way into the trip. */}
           <RemoteTripsSection localTripCount={0} />
-          {newTripFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>

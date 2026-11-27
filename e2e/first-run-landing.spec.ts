@@ -46,6 +46,11 @@ test.describe('First-run landing', () => {
 
     await expect(page).toHaveURL(/\/trips$/);
     await expect(page.getByText('No trips yet')).toBeVisible();
+
+    // One way to start, not three: the header's and the floating "New trip"
+    // repeated the empty state's. And no greyed trip tab: there is no trip.
+    await expect(page.getByRole('button', { name: /^(new trip|nouveau voyage)$/i })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: /^(calendar|calendrier)$/i })).toHaveCount(0);
   });
 
   test('a device that already holds a trip lands on the list', async ({ page }) => {

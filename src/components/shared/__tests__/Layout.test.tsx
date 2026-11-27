@@ -259,7 +259,7 @@ describe('Layout load-time tables', () => {
   function withTrip(trip: Trip | null): void {
     mockUseTripContext.mockReturnValue({
       currentTrip: trip,
-      trips: trip ? [trip] : [],
+      trips: trip ? [trip] : [mockTrip],
       isLoading: false,
       error: null,
       setCurrentTrip: vi.fn(),
@@ -331,7 +331,8 @@ describe('Layout', () => {
     // Default: no trip selected
     mockUseTripContext.mockReturnValue({
       currentTrip: null,
-      trips: [],
+      // A trip exists, none is selected: the trip tabs show, disabled.
+      trips: [mockTrip],
       isLoading: false,
       error: null,
       setCurrentTrip: vi.fn(),
@@ -408,6 +409,61 @@ describe('Layout', () => {
   });
 
   // ============================================================================
+  // No Trip At All
+  // ============================================================================
+
+  // A first visit met eight greyed trip tabs. With no trip on the device the
+  // trip sections are left out, and the bar holds the app's own pages.
+  describe('No trip on the device', () => {
+    beforeEach(() => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: null,
+        trips: [],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    it('draws no trip tab, enabled or not, in either navigation', () => {
+      renderLayout();
+
+      expect(
+        within(getMobileNav() as HTMLElement).queryByRole('link', { name: 'nav.calendar' }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(getSidebar() as HTMLElement).queryByRole('link', { name: 'nav.calendar' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("fills the bar with the app's own pages, and drops an empty \"More\"", () => {
+      renderLayout();
+
+      const bar = getMobileNav() as HTMLElement;
+      expect(within(bar).getByRole('link', { name: 'trips.title' })).toBeInTheDocument();
+      expect(within(bar).getByRole('link', { name: 'nav.settings' })).toBeInTheDocument();
+      expect(within(bar).queryByRole('button', { name: 'nav.more' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the trip tabs while the trip list is still loading', () => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: null,
+        trips: [],
+        isLoading: true,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+      renderLayout();
+
+      expect(
+        within(getMobileNav() as HTMLElement).getByRole('link', { name: 'nav.calendar' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
   // No Trip Selected Tests
   // ============================================================================
 
@@ -415,7 +471,8 @@ describe('Layout', () => {
     beforeEach(() => {
       mockUseTripContext.mockReturnValue({
         currentTrip: null,
-        trips: [],
+        // A trip exists, none is selected: the trip tabs show, disabled.
+        trips: [mockTrip],
         isLoading: false,
         error: null,
         setCurrentTrip: vi.fn(),
@@ -491,10 +548,12 @@ describe('Layout', () => {
       expect(screen.queryByText('vehicles.title')).not.toBeInTheDocument();
     });
 
-    it('shows empty trip placeholder in header', () => {
+    // The header said "No trips yet" whenever no trip was selected, also
+    // right after the first trip was created.
+    it('names no trip in the header while none is selected', () => {
       renderLayout();
 
-      expect(screen.getByText('trips.empty')).toBeInTheDocument();
+      expect(screen.queryByText('trips.empty')).not.toBeInTheDocument();
     });
 
     it('mobile nav shows primary items and More button, trip items are disabled', () => {
@@ -844,7 +903,8 @@ describe('Layout', () => {
       // No trip selected
       mockUseTripContext.mockReturnValue({
         currentTrip: null,
-        trips: [],
+        // A trip exists, none is selected: the trip tabs show, disabled.
+        trips: [mockTrip],
         isLoading: false,
         error: null,
         setCurrentTrip: vi.fn(),
@@ -1048,7 +1108,8 @@ describe('Layout', () => {
     beforeEach(() => {
       mockUseTripContext.mockReturnValue({
         currentTrip: null,
-        trips: [],
+        // A trip exists, none is selected: the trip tabs show, disabled.
+        trips: [mockTrip],
         isLoading: false,
         error: null,
         setCurrentTrip: vi.fn(),
@@ -1650,7 +1711,7 @@ describe('Layout cards and tooltip timing', () => {
   function withTrip(trip: Trip | null): void {
     mockUseTripContext.mockReturnValue({
       currentTrip: trip,
-      trips: trip ? [trip] : [],
+      trips: trip ? [trip] : [mockTrip],
       isLoading: false,
       error: null,
       setCurrentTrip: vi.fn(),
@@ -1804,7 +1865,7 @@ describe('Layout drawing', () => {
   function withTrip(trip: Trip | null): void {
     mockUseTripContext.mockReturnValue({
       currentTrip: trip,
-      trips: trip ? [trip] : [],
+      trips: trip ? [trip] : [mockTrip],
       isLoading: false,
       error: null,
       setCurrentTrip: vi.fn(),
@@ -2120,7 +2181,8 @@ describe('Layout current page', () => {
   it('gives a trip-gated rail link no aria-current at all, current or not', () => {
     mockUseTripContext.mockReturnValue({
       currentTrip: null,
-      trips: [],
+      // A trip exists, none is selected: the trip tabs show, disabled.
+      trips: [mockTrip],
       isLoading: false,
       error: null,
       setCurrentTrip: vi.fn(),
@@ -2165,7 +2227,7 @@ describe('Layout, more of it', () => {
   function withTrip(trip: Trip | null): void {
     mockUseTripContext.mockReturnValue({
       currentTrip: trip,
-      trips: trip ? [trip] : [],
+      trips: trip ? [trip] : [mockTrip],
       isLoading: false,
       error: null,
       setCurrentTrip: vi.fn(),

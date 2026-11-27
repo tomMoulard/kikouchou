@@ -229,7 +229,9 @@ describe('TripListPage', () => {
     expect(screen.getByText('trips.empty')).toBeInTheDocument();
   });
 
-  it('floats the create action, not the QR scanner, before a trip exists', () => {
+  // The tester counted three "New trip" on the empty screen: the header's,
+  // the empty state's and the floating one. One is left, in the middle.
+  it('offers "New trip" once, and the QR scanner beside it, before a trip exists', () => {
     vi.mocked(useTripContext).mockReturnValue({
       trips: [],
       isLoading: false,
@@ -240,13 +242,10 @@ describe('TripListPage', () => {
     });
     render(<TripListPage />, { withProviders: false });
 
-    // `fixed` is what makes a button the floating one, which is the whole
-    // point of the fix: the create action holds that slot on first run.
-    const floating = screen
-      .getAllByRole('button')
-      .filter((button) => button.classList.contains('fixed'));
-    expect(floating).toHaveLength(1);
-    expect(floating[0]).toHaveAccessibleName('trips.new');
+    expect(screen.getAllByRole('button', { name: 'trips.new' })).toHaveLength(1);
+    expect(
+      screen.getAllByRole('button').filter((button) => button.classList.contains('fixed')),
+    ).toHaveLength(0);
 
     // And the QR scanner is still reachable, from the empty state rather than
     // from a second unlabelled circle — named for what it is for: an invite,

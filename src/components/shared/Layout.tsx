@@ -266,6 +266,13 @@ const ASSISTANT_NAV_ITEM: NavItem = {
   requiresTrip: false,
 };
 
+/** The app's own pages, in the order the "More" sheet lists them. */
+const APP_NAV_ITEMS: readonly NavItem[] = [
+  ...GLOBAL_NAV_ITEMS,
+  ASSISTANT_NAV_ITEM,
+  SETTINGS_NAV_ITEM,
+];
+
 /**
  * Builds the navigation path for a nav item.
  *
@@ -379,9 +386,13 @@ const Header = memo(function Header({
         <div className="shrink-0 md:hidden">
           <SyncStatusBadge />
         </div>
-        <span className="text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
-          {tripName ?? t('trips.empty')}
-        </span>
+        {/* The open trip's name, or nothing. It said "No trips yet" whenever
+            no trip was selected, also right after one was created. */}
+        {tripName !== null && (
+          <span className="text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
+            {tripName}
+          </span>
+        )}
       </div>
     </header>
   );
@@ -407,17 +418,26 @@ const MobileNav = memo(function MobileNav({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  // With no trip on the device there are no trip tabs: the bar holds the
+  // app's own pages instead, and "More" has nothing left to hold.
+  const barSource = useMemo(
+    () => (tripItems.length > 0 ? tripItems : APP_NAV_ITEMS),
+    [tripItems],
+  );
   const primaryItems = useMemo(
-    () => (showBar ? tripItems.slice(0, MOBILE_NAV_BAR_SLOTS) : []),
-    [showBar, tripItems],
+    () => (showBar ? barSource.slice(0, MOBILE_NAV_BAR_SLOTS) : []),
+    [barSource, showBar],
   );
   const sheetItems = useMemo(
-    () => [
-      ...(showBar ? tripItems.slice(MOBILE_NAV_BAR_SLOTS) : tripItems),
-      ...GLOBAL_NAV_ITEMS,
-      ASSISTANT_NAV_ITEM,
-      SETTINGS_NAV_ITEM,
-    ],
+    () =>
+      tripItems.length > 0
+        ? [
+            ...(showBar ? tripItems.slice(MOBILE_NAV_BAR_SLOTS) : tripItems),
+            ...APP_NAV_ITEMS,
+          ]
+        : showBar
+          ? APP_NAV_ITEMS.slice(MOBILE_NAV_BAR_SLOTS)
+          : APP_NAV_ITEMS,
     [showBar, tripItems],
   );
   const sheetTitle = showBar ? t('nav.more', 'More') : t('common.menu', 'Menu');
@@ -531,6 +551,7 @@ const MobileNav = memo(function MobileNav({
           })}
 
           {/* "More" button - highlights when a More item's route is active */}
+          {sheetItems.length > 0 && (
           <li className="flex-1">
             <button
               type="button"
@@ -547,6 +568,7 @@ const MobileNav = memo(function MobileNav({
               <span>{t('nav.more', 'More')}</span>
             </button>
           </li>
+          )}
         </ul>
         {/*
           Outside the <ul>, which may only contain <li>. Referenced by every
@@ -998,18 +1020,24 @@ const DesktopSidebar = memo(function DesktopSidebar({
   onToggle,
   tripId,
   trip,
+  hasTrips,
 }: {
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
   readonly tripId: string | null;
   readonly trip: Trip | null;
+  /** False on a device with no trip at all: the trip sections are left out. */
+  readonly hasTrips: boolean;
 }): React.ReactElement {
   const { t } = useTranslation();
   const mealPlanner = useMealPlannerEnabled();
   const sidebarItems = useMemo(() => {
+    if (!hasTrips) {
+      return [];
+    }
     const hidden = hiddenNavPages({ mealPlanner });
     return TRIP_NAV_ITEMS.filter((item) => !hidden.has(item.pathSuffix));
-  }, [mealPlanner]);
+  }, [hasTrips, mealPlanner]);
 
   return (
     <aside
@@ -1055,7 +1083,10 @@ const DesktopSidebar = memo(function DesktopSidebar({
         disagreed about what the app contains.
 
         Now they render disabled, exactly as on mobile: focusable, announced as
-        unavailable, and described with the reason.
+        unavailable, and described with the reason. A device with no trip at
+        all is the exception: there the list is left out, on both
+        navigations, because a first visit met eight greyed tabs and the
+        empty trip list already says what to do.
       */}
       <nav className="flex-1 overflow-y-auto py-2" aria-label={t('nav.tripSections', 'Trip navigation')}>
         <ul className="space-y-1 px-2">
@@ -1156,7 +1187,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
  */
 export function Layout({ children }: LayoutProps): React.ReactElement {
   const { t } = useTranslation(),
-   { currentTrip } = useTripContext(),
+   { currentTrip, trips, isLoading: isTripListLoading } = useTripContext(),
    location = useLocation(),
    isWideViewport = useWideViewport(),
    isShortLandscape = useShortLandscapeViewport(),
@@ -1164,7 +1195,16 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    { order: navOrder, mode: navMode } = useMobileNavPreferences(),
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
    [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false),
-   tripNavItems = useMemo(() => tripNavItemsInOrder(navOrder), [navOrder]),
+  /**
+   * Whether the device holds any trip. With none, the trip sections are left
+   * out rather than drawn disabled: a first visit met eight greyed tabs. A
+   * trip list still loading counts as some, so the bar does not flash.
+   */
+   hasTrips = isTripListLoading || trips.length > 0,
+   tripNavItems = useMemo(
+    () => (hasTrips ? tripNavItemsInOrder(navOrder) : []),
+    [hasTrips, navOrder],
+  ),
 
   /**
    * Whether a phone gets the bottom bar, or the header's menu button instead.
@@ -1327,6 +1367,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
             onToggle={toggleSidebar}
             tripId={tripId}
             trip={currentTrip}
+            hasTrips={hasTrips}
           />
         )}
 
