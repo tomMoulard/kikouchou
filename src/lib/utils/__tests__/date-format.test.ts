@@ -11,7 +11,12 @@
 import { describe, it, expect } from 'vitest';
 import { enUS, fr } from 'date-fns/locale';
 
-import { formatDateRange, formatFullDate, formatTripDateRange } from '../date-format';
+import {
+  formatDateRange,
+  formatFullDate,
+  formatShortDate,
+  formatTripDateRange,
+} from '../date-format';
 
 // ============================================================================
 // formatDateRange
@@ -84,6 +89,35 @@ describe('formatFullDate', () => {
 
   it('returns the raw key when it cannot be parsed', () => {
     expect(formatFullDate('nope', enUS)).toBe('nope');
+  });
+});
+
+// ============================================================================
+// formatShortDate
+// ============================================================================
+
+describe('formatShortDate', () => {
+  it('renders an English weekday, day and month, without the year', () => {
+    expect(formatShortDate('2026-11-27', enUS)).toBe('Fri 27 Nov');
+  });
+
+  it('renders French weekday and month names', () => {
+    expect(formatShortDate('2026-11-27', fr)).toBe('ven. 27 nov.');
+  });
+
+  it('reads the local day, not the UTC one, from a plain date key', () => {
+    // At a negative offset, UTC midnight of the 1st is the evening of the 31st.
+    expect(formatShortDate('2026-08-01', enUS)).toBe('Sat 1 Aug');
+  });
+
+  it('returns the raw key when it cannot be parsed', () => {
+    expect(formatShortDate('nope', enUS)).toBe('nope');
+  });
+
+  it('does not throw when a stored row is missing its date', () => {
+    const missing = undefined as unknown as string;
+
+    expect(formatShortDate(missing, enUS)).toBeUndefined();
   });
 });
 

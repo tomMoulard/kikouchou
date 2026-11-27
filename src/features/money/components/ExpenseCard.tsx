@@ -8,14 +8,16 @@
  * @module features/money/components/ExpenseCard
  */
 
-import { type ReactElement, memo, useCallback } from 'react';
+import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight } from 'lucide-react';
 
 import { statusVariants } from '@/components/ui/status.variants';
 import { ExpenseCategoryIcon } from '@/features/money/components/ExpenseCategoryIcon';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
+import { formatShortDate } from '@/lib/utils/date-format';
 import type { CurrencyCode, Expense, Person, PersonId } from '@/types';
 
 // ============================================================================
@@ -46,8 +48,9 @@ const ExpenseCard = memo(function ExpenseCard({
   currency,
   onOpen,
 }: ExpenseCardProps): ReactElement {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const formatMoney = useMoneyFormat(currency);
+  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   const handleClick = useCallback((): void => {
     onOpen(expense);
@@ -119,7 +122,7 @@ const ExpenseCard = memo(function ExpenseCard({
           {formatMoney(expense.amount)}
         </span>
         <span className="block text-xs text-muted-foreground tabular-nums">
-          {expense.date}
+          {formatShortDate(expense.date, dateLocale)}
         </span>
       </span>
     </button>

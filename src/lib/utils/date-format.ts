@@ -37,6 +37,12 @@ const DAY_MONTH_YEAR = 'd MMM yyyy';
 /** Day + abbreviated month, e.g. `15 Jul` / `15 juil.`. */
 const DAY_MONTH = 'd MMM';
 
+/**
+ * Abbreviated weekday + day + abbreviated month, e.g. `Fri 27 Nov` /
+ * `ven. 27 nov.`. The same pattern the transport cards use for their day.
+ */
+const SHORT_DAY = 'EEE d MMM';
+
 /** Bare day number, used for the left end of a same-month range. */
 const DAY = 'd';
 
@@ -186,4 +192,30 @@ export function formatFullDate(dateKey: string, locale: Locale): string {
     return dateKey;
   }
   return format(parsed, FULL_DATE, { locale });
+}
+
+/**
+ * Formats a day key as a short label for a list row.
+ *
+ * Used where a row has room for the day but not the year, such as a line on
+ * the money page. The key is parsed as a *local* day, so the label names the
+ * day the key names at any offset.
+ *
+ * @param dateKey - Day key in `YYYY-MM-DD` form
+ * @param locale - date-fns locale, from `getDateLocale(i18n.language)`
+ * @returns The formatted day, or the raw key when it cannot be parsed
+ *
+ * @example
+ * ```typescript
+ * formatShortDate('2026-11-27', enUS); // "Fri 27 Nov"
+ * formatShortDate('2026-11-27', fr);   // "ven. 27 nov."
+ * formatShortDate('nope', enUS);       // "nope"
+ * ```
+ */
+export function formatShortDate(dateKey: string, locale: Locale): string {
+  const parsed = parseDisplayDate(dateKey);
+  if (!parsed) {
+    return dateKey;
+  }
+  return format(parsed, SHORT_DAY, { locale });
 }

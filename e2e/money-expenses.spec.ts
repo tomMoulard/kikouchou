@@ -49,7 +49,7 @@ const LABELS = {
   delete: /^(delete|supprimer)$/i,
   deleteLine: /delete this line|supprimer cette ligne/i,
   expensesView: /^(expenses|dépenses)$/i,
-  balancesView: /^(settle up|remboursements)$/i,
+  balancesView: /^(balances|soldes)$/i,
   recordPayment: /^(record it|enregistrer)$/i,
   empty: /nothing spent yet|rien de dépensé/i,
   settled: /everybody is level|tout le monde est à jour/i,

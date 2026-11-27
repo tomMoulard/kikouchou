@@ -992,7 +992,7 @@
     "view": {
       "ariaLabel": "Vue des comptes",
       "expenses": "Dépenses",
-      "balances": "Remboursements",
+      "balances": "Soldes",
       "nights": "Nuits"
     },
     "expense": {
@@ -1007,7 +1007,7 @@
       "empty": "Rien de dépensé pour l'instant",
       "emptyDescription": "Ajoutez ce que le groupe a payé, et l'application calcule qui doit quoi à qui.",
       "title_field": "Intitulé",
-      "titlePlaceholder": "Courses du samedi",
+      "titlePlaceholder": "Ex : Courses du samedi",
       "category": "Catégorie",
       "categories": {
         "lodging": "La maison",
@@ -1033,7 +1033,7 @@
         "transfer": "Un invité en a remboursé un autre."
       },
       "amount": "Montant",
-      "amountPlaceholder": "84,20",
+      "amountPlaceholder": "Ex : 84,20",
       "date": "Jour",
       "paidBy": "Payé par",
       "receivedBy": "Reçu par",
@@ -1060,7 +1060,7 @@
       "sharesFor": "Parts pour {{name}}",
       "amountsTotal": "Les montants font {{typed}} sur {{amount}}.",
       "description": "Notes",
-      "descriptionPlaceholder": "Deux caddies, le vin compris",
+      "descriptionPlaceholder": "Ex : Deux caddies, le vin compris",
       "unknownGuest": "Un invité parti",
       "expenseSummary_one": "{{name}} a payé, pour {{count}} invité",
       "expenseSummary_other": "{{name}} a payé, pour {{count}} invités",

@@ -8,7 +8,7 @@
  *
  * - **Expenses** — the lines themselves, newest first, with a `+` to add one.
  *   Tapping a line opens it.
- * - **Settle up** — one balance per guest, and the shortest list of payments
+ * - **Balances** — one balance per guest, and the shortest list of payments
  *   that clears them. A payment is recorded as a transfer in one tap.
  *
  * The nights each guest slept there are not a view of their own: they are a

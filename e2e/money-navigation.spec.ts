@@ -40,7 +40,7 @@ const LABELS = {
   money: /^(money|argent)$/i,
   transports: /^(transport|transports)$/i,
   newLine: /new line|nouvelle ligne/i,
-  balancesView: /^(settle up|remboursements)$/i,
+  balancesView: /^(balances|soldes)$/i,
 } as const;
 
 // ============================================================================

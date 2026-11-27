@@ -142,7 +142,7 @@ test.describe('the trip currency', () => {
       /\$\s?90[.,]00|90[.,]00\s?\$/,
     );
 
-    await page.getByRole('radio', { name: /^(settle up|remboursements)$/i }).click();
+    await page.getByRole('radio', { name: /^(balances|soldes)$/i }).click();
     await expect(page.getByRole('table')).toContainText(/\$|USD/);
     await expect(page.getByRole('table')).not.toContainText('€');
   });

@@ -992,7 +992,7 @@
     "view": {
       "ariaLabel": "Money view",
       "expenses": "Expenses",
-      "balances": "Settle up",
+      "balances": "Balances",
       "nights": "Nights"
     },
     "expense": {
@@ -1007,7 +1007,7 @@
       "empty": "Nothing spent yet",
       "emptyDescription": "Add what the group has paid for, and the app works out who owes whom.",
       "title_field": "Title",
-      "titlePlaceholder": "Saturday shopping",
+      "titlePlaceholder": "e.g. Saturday shopping",
       "category": "Category",
       "categories": {
         "lodging": "The house",
@@ -1033,7 +1033,7 @@
         "transfer": "One guest paid another back."
       },
       "amount": "Amount",
-      "amountPlaceholder": "84.20",
+      "amountPlaceholder": "e.g. 84.20",
       "date": "Day",
       "paidBy": "Paid by",
       "receivedBy": "Received by",
@@ -1060,7 +1060,7 @@
       "sharesFor": "Parts for {{name}}",
       "amountsTotal": "The amounts come to {{typed}} of {{amount}}.",
       "description": "Notes",
-      "descriptionPlaceholder": "Two trolleys, the wine included",
+      "descriptionPlaceholder": "e.g. Two trolleys, the wine included",
       "unknownGuest": "A guest who left",
       "expenseSummary_one": "{{name}} paid, for {{count}} guest",
       "expenseSummary_other": "{{name}} paid, for {{count}} guests",
