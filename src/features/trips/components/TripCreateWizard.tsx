@@ -50,6 +50,7 @@ import {
   forgetPendingInvite,
   rememberPendingInvite,
 } from '@/features/sharing/utils/pending-invite';
+import { holdRewards } from '@/lib/achievements/reward-hold';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus, notify } from '@/lib/notifications';
 import { pushDataLayerEvent } from '@/lib/google-tag';
@@ -172,6 +173,12 @@ export const TripCreateWizard = memo(function TripCreateWizard({
       isMountedRef.current = false;
     };
   }, []);
+
+  // The wizard ends on its sign-in screen, and creating the trip unlocks the
+  // first achievement. Its toast sat over the sign-in buttons, so the message
+  // waits until the wizard is gone. The hold is here, not on a page, because
+  // two pages render this wizard: /trips/new and a template link.
+  useEffect(() => holdRewards(), []);
 
   // Anything typed is worth an unsaved-changes prompt; a finished trip is not.
   const isDirty = created === null && (name !== '' || step !== 'name');

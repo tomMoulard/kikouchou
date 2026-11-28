@@ -18,6 +18,7 @@ import {
 import { pushDataLayerEvent } from '@/lib/google-tag';
 import { announceStatus, notify } from '@/lib/notifications';
 import { captureEvent, captureUsage } from '@/lib/posthog';
+import { areRewardsHeld } from '@/lib/achievements/reward-hold';
 
 // ============================================================================
 // Test doubles
@@ -232,6 +233,17 @@ describe('TripCreateWizard', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
     expect(screen.getByText('What is the trip called?')).toBeInTheDocument();
     expect(mockedCreate).not.toHaveBeenCalled();
+  });
+
+  // The wizard ends on its sign-in screen, and the first trip unlocks an
+  // achievement whose toast covered the sign-in buttons. The hold sat on
+  // /trips/new alone, so a template link still showed it.
+  it('holds the achievement message while it is on screen, on any page', () => {
+    const { unmount } = renderTemplateWizard();
+    expect(areRewardsHeld()).toBe(true);
+
+    unmount();
+    expect(areRewardsHeld()).toBe(false);
   });
 
   it('counts the link as a step of its own', () => {
