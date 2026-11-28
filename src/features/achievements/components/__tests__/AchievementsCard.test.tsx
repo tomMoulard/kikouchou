@@ -5,6 +5,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useNavigate } from 'react-router-dom';
 
 import { db } from '@/lib/db/database';
 import { render, screen, userEvent, within } from '@/test/utils';
@@ -70,6 +71,36 @@ describe('AchievementsCard', () => {
     const toggle = await screen.findByRole('button', { name: /achievements\.title/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById('achievements')).not.toBeNull();
+  });
+
+  // Regression: a second "See" lands on the address already open. The effect
+  // read only whether the hash matched, which had not changed, so a card
+  // folded in between stayed folded.
+  it('opens again on a second "See" after it was folded', async () => {
+    function SeeAgain() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => void navigate('/settings#achievements')}>
+          see again
+        </button>
+      );
+    }
+    const user = userEvent.setup();
+    render(
+      <>
+        <AchievementsCard />
+        <SeeAgain />
+      </>,
+      { withProviders: false, initialEntries: ['/settings#achievements'] },
+    );
+    const toggle = await screen.findByRole('button', { name: /achievements\.title/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'see again' }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('opens on a click: nine family tiles, then eight specials', async () => {

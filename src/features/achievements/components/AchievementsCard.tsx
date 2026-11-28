@@ -397,9 +397,10 @@ export const AchievementsCard = memo(function AchievementsCard(): ReactElement {
   const { t, i18n } = useTranslation();
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
-  const { hash } = useLocation();
+  const { hash, key: locationKey } = useLocation();
   // `/settings#achievements`, from the unlock toast's "See": the card opens
-  // and comes into view.
+  // and comes into view. Each "See" is a new navigation with a new key, even
+  // to the address already open, so a card folded since opens again.
   const isLinkedTo = hash === `#${CARD_ID}`;
   const [isOpen, setIsOpen] = useState(isLinkedTo);
   const [stats, setStats] = useState<AchievementStats | null>(null);
@@ -411,7 +412,7 @@ export const AchievementsCard = memo(function AchievementsCard(): ReactElement {
     }
     setIsOpen(true);
     cardRef.current?.scrollIntoView?.({ block: 'start' });
-  }, [isLinkedTo]);
+  }, [isLinkedTo, locationKey]);
 
   const unlocked = useLiveQuery(async () => {
     const rows = await db.achievements.toArray();
