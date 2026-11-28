@@ -225,6 +225,24 @@ describe('RideDialog', () => {
     expect(screen.getByTestId('new-vehicle-id')).toHaveTextContent('v9');
   });
 
+  // The dialog stays mounted between rides. A car added for one ride used to
+  // reach the next one opened, and the form put it on that ride.
+  it('forgets the added car once the dialog closes', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 }),
+      { rerender } = render(<RideDialog open onOpenChange={vi.fn()} />, {
+        withProviders: false,
+      });
+
+    await user.click(screen.getByTestId('add-car-btn'));
+    await user.click(await screen.findByTestId('create-car-btn'));
+    expect(screen.getByTestId('new-vehicle-id')).toHaveTextContent('v9');
+
+    rerender(<RideDialog open={false} onOpenChange={vi.fn()} />);
+    rerender(<RideDialog rideId={'r1' as RideId} open onOpenChange={vi.fn()} />);
+
+    expect(screen.getByTestId('new-vehicle-id')).toHaveTextContent('');
+  });
+
   it('renders edit mode for a known ride', () => {
     render(<RideDialog rideId={'r1' as RideId} open onOpenChange={vi.fn()} />, {
       withProviders: false,

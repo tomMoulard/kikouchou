@@ -125,10 +125,16 @@ const RideDialog = memo(function RideDialog({
 
   // Reset the guard when the dialog opens, so a discarded edit does not leave
   // the next one believing it is already dirty.
+  //
+  // The car added from the last ride is forgotten on close, not on open: the
+  // form mounts with the dialog, and its effect runs before this one, so a
+  // stale id still there on the next open would put that car on another ride.
   useEffect(() => {
     if (open) {
       setIsDirty(false);
       setShowDiscardConfirm(false);
+    } else {
+      setNewVehicleId(undefined);
     }
   }, [open]);
 
