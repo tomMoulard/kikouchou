@@ -201,18 +201,23 @@ export function formatFullDate(dateKey: string, locale: Locale): string {
  * the money page. The key is parsed as a *local* day, so the label names the
  * day the key names at any offset.
  *
- * @param dateKey - Day key in `YYYY-MM-DD` form
+ * @param dateKey - Day key in `YYYY-MM-DD` form. A synced row can lack it.
  * @param locale - date-fns locale, from `getDateLocale(i18n.language)`
- * @returns The formatted day, or the raw key when it cannot be parsed
+ * @returns The formatted day, the raw key when it cannot be parsed, or an
+ *   empty string when there is no key: always a string, as the type says.
  *
  * @example
  * ```typescript
  * formatShortDate('2026-11-27', enUS); // "Fri 27 Nov"
  * formatShortDate('2026-11-27', fr);   // "ven. 27 nov."
  * formatShortDate('nope', enUS);       // "nope"
+ * formatShortDate(undefined, enUS);    // ""
  * ```
  */
-export function formatShortDate(dateKey: string, locale: Locale): string {
+export function formatShortDate(dateKey: string | undefined, locale: Locale): string {
+  if (dateKey === undefined) {
+    return '';
+  }
   const parsed = parseDisplayDate(dateKey);
   if (!parsed) {
     return dateKey;

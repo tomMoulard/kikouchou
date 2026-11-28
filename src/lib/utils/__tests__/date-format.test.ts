@@ -114,10 +114,10 @@ describe('formatShortDate', () => {
     expect(formatShortDate('nope', enUS)).toBe('nope');
   });
 
-  it('does not throw when a stored row is missing its date', () => {
-    const missing = undefined as unknown as string;
-
-    expect(formatShortDate(missing, enUS)).toBeUndefined();
+  // A synced row can lack its date. The result is still a string, so a
+  // caller that trusts the type does not throw on it.
+  it('returns an empty string when a stored row is missing its date', () => {
+    expect(formatShortDate(undefined, enUS)).toBe('');
   });
 });
 
