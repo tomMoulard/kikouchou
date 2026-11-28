@@ -51,7 +51,7 @@ import {
   rememberPendingInvite,
 } from '@/features/sharing/utils/pending-invite';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
-import { announceStatus } from '@/lib/notifications';
+import { announceStatus, notify } from '@/lib/notifications';
 import { pushDataLayerEvent } from '@/lib/google-tag';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
@@ -61,6 +61,7 @@ import {
   type NewTripGuest,
   type NewTripRoom,
   type TripCreationOutcome,
+  type TripCreationWarning,
 } from '../lib/create-trip-with-details';
 
 // ============================================================================
@@ -276,6 +277,21 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         guest_count: outcome.counts.guests,
         room_count: outcome.counts.rooms,
       });
+      // The trip exists either way, so a part that failed is an error toast
+      // beside the invite screen, never a rolled-back creation.
+      const warningMessages: Record<TripCreationWarning, string> = {
+        guests: t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'),
+        rooms: t('trips.roomsCreateFailed', 'Trip created but some rooms could not be added'),
+        photos: t('photos.saveFailedOnCreate', 'Trip created but a photo could not be saved'),
+        // Same message the settings picker shows, because it is the same failure.
+        identity: t(
+          'sharing.identityStorageFailed',
+          'Could not save your identity. You may need to re-select on your next visit.',
+        ),
+      };
+      for (const warning of outcome.warnings) {
+        notify.error(warningMessages[warning]);
+      }
       announceStatus(
         t('trips.wizard.createdAnnouncement', {
           tripName: outcome.trip.name,

@@ -196,6 +196,8 @@
     "created": "Voyage créé avec succès",
     "updated": "Voyage mis à jour avec succès",
     "deleted": "Voyage supprimé avec succès",
+    "guestsCreateFailed": "Voyage créé mais certains invités n'ont pas pu être ajoutés",
+    "roomsCreateFailed": "Voyage créé mais certaines chambres n'ont pas pu être ajoutées",
     "noGuests": "Aucun invité",
     "guestCount_one": "{{count}} invité",
     "guestCount_other": "{{count}} invités",
@@ -2466,6 +2468,7 @@
     "saved": "Photo enregistrée",
     "removed": "Photo retirée",
     "saveFailed": "La photo n'a pas pu être enregistrée",
+    "saveFailedOnCreate": "Voyage créé, mais une photo n'a pas pu être enregistrée",
     "errors": {
       "notAnImage": "Ce fichier n'est pas une image.",
       "tooLarge": "Cette photo est trop lourde, même réduite.",

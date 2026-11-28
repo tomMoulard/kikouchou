@@ -16,7 +16,7 @@ import {
   rememberPendingInvite,
 } from '@/features/sharing/utils/pending-invite';
 import { pushDataLayerEvent } from '@/lib/google-tag';
-import { announceStatus } from '@/lib/notifications';
+import { announceStatus, notify } from '@/lib/notifications';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 
 // ============================================================================
@@ -93,7 +93,7 @@ vi.mock('canvas-confetti', () => ({
 }));
 
 vi.mock('../../lib/create-trip-with-details', () => ({ createTripWithDetails: vi.fn() }));
-vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn() }));
+vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn(), notify: { error: vi.fn() } }));
 vi.mock('@/lib/google-tag', () => ({ pushDataLayerEvent: vi.fn() }));
 // One spy behind both shapes — see `TripLinkPage.test.tsx`.
 vi.mock('@/lib/posthog', () => {
@@ -556,6 +556,33 @@ describe('TripCreateWizard creating', () => {
       guest_count: 3,
       room_count: 2,
     });
+  });
+
+  // The trip exists even when a part of it failed. The one-page form that
+  // used to say so is gone, and the wizard said nothing.
+  it('says which part of the trip could not be saved, and still invites', async () => {
+    mockedCreate.mockResolvedValue({
+      ...(outcome() as object),
+      warnings: ['guests', 'rooms', 'photos', 'identity'],
+    } as never);
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+
+    const messages = vi.mocked(notify.error).mock.calls.map(([message]) => String(message));
+    expect(messages).toHaveLength(4);
+    expect(messages.some((message) => /guests/i.test(message))).toBe(true);
+    expect(messages.some((message) => /rooms/i.test(message))).toBe(true);
+    expect(messages.some((message) => /photo/i.test(message))).toBe(true);
+    expect(messages.some((message) => /identity/i.test(message))).toBe(true);
+  });
+
+  it('shows no error when every part was saved', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await reachInvite(user);
+
+    expect(vi.mocked(notify.error)).not.toHaveBeenCalled();
   });
 
   it('says nothing and counts nothing when it has left the screen', async () => {

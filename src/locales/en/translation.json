@@ -196,6 +196,8 @@
     "created": "Trip created successfully",
     "updated": "Trip updated successfully",
     "deleted": "Trip deleted successfully",
+    "guestsCreateFailed": "Trip created but some guests could not be added",
+    "roomsCreateFailed": "Trip created but some rooms could not be added",
     "noGuests": "No guests yet",
     "guestCount_one": "{{count}} guest",
     "guestCount_other": "{{count}} guests",
@@ -2466,6 +2468,7 @@
     "saved": "Photo saved",
     "removed": "Photo removed",
     "saveFailed": "The photo could not be saved",
+    "saveFailedOnCreate": "Trip created but a photo could not be saved",
     "errors": {
       "notAnImage": "This file is not an image.",
       "tooLarge": "This photo is too large, even after resizing.",
