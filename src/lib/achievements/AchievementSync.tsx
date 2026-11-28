@@ -27,7 +27,12 @@ import { notify } from '@/lib/notifications';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
 import { achievementNameKey, type AchievementKey } from './definitions';
-import { areRewardsHeld, onRewardsReleased } from './reward-hold';
+import {
+  areRewardsHeld,
+  onRewardsReleased,
+  rememberHeldRewards,
+  takeHeldRewards,
+} from './reward-hold';
 import { backfillFromDevice, onAchievementsUnlocked, recordAppOpened } from './store';
 import { syncAchievements } from './sync';
 
@@ -78,18 +83,23 @@ export function AchievementSync(): null {
   }, [t]);
 
   useEffect(() => {
-    let pending: AchievementKey[] = [];
+    // What a hold kept back before the page went away: a sign-in through
+    // Google or a magic link leaves from the wizard's held screen.
+    let pending: AchievementKey[] = takeHeldRewards();
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const flush = (): void => {
       timer = undefined;
       // A screen that needs the whole page (the wizard's sign-in) holds the
-      // message; it goes out when that screen lets go.
+      // message; it goes out when that screen lets go. Until then it is kept
+      // in storage too, so leaving the page to sign in does not lose it.
       if (areRewardsHeld()) {
+        rememberHeldRewards(pending);
         return;
       }
       const keys = pending;
       pending = [];
+      rememberHeldRewards([]);
       const translate = tRef.current,
         names = keys.map((key) => String(translate(achievementNameKey(key)))),
         // The list sits on the settings page, folded. The toast's button
@@ -128,6 +138,10 @@ export function AchievementSync(): null {
         timer = setTimeout(flush, BATCH_MS);
       }
     });
+
+    if (pending.length > 0) {
+      timer = setTimeout(flush, BATCH_MS);
+    }
 
     return () => {
       unsubscribe();

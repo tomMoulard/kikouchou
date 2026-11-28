@@ -979,6 +979,11 @@ one tile per family with a ring, and the specials below.
 - **One message per burst.** Unlocks within 400 ms share one
   `notify.reward` toast, an in-page toast on every target, never an OS
   notification.
+- **A held message waits in storage.** The wizard (on `/trips/new` and on a
+  template link) holds the toast (`reward-hold`) because its sign-in screen
+  is under it. Google and a magic link leave the page from there, so the held
+  keys go to `localStorage['kikouchou-held-rewards']` for 30 minutes, and
+  `AchievementSync` shows them on the next load.
 
 ### A global entity syncs per account, not through the trip document
 

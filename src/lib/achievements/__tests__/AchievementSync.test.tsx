@@ -11,7 +11,7 @@ import { db } from '@/lib/db/database';
 import { act, render, waitFor } from '@/test/utils';
 
 import { AchievementSync } from '../AchievementSync';
-import { holdRewards } from '../reward-hold';
+import { HELD_REWARDS_KEY, holdRewards } from '../reward-hold';
 import { unlockAchievement, unlockAchievements } from '../store';
 
 // ============================================================================
@@ -131,6 +131,36 @@ describe('AchievementSync', () => {
       );
     });
     expect(reward).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: Google and a magic link leave the page from the wizard's
+  // held sign-in screen, and the held message was only in memory.
+  it('shows a held message after the page went away to sign in', async () => {
+    localStorage.removeItem(HELD_REWARDS_KEY);
+    const release = holdRewards(),
+      first = render(<AchievementSync />, { withProviders: false });
+
+    await act(async () => {
+      await unlockAchievement('polyglot');
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(reward).not.toHaveBeenCalled();
+
+    // The page unloads: the component and the hold go with it.
+    first.unmount();
+    release();
+
+    render(<AchievementSync />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(reward).toHaveBeenCalledWith(
+        'achievements.unlocked',
+        'achievements.items.polyglot.name',
+        expect.objectContaining({ label: 'achievements.see' }),
+      );
+    });
+    expect(reward).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(HELD_REWARDS_KEY)).toBeNull();
   });
 
   it('counts a new day when the tab comes back', async () => {
