@@ -3,8 +3,8 @@
  *
  * Picking a place the household has been to before, in the edit form's
  * location suggestions, adopts that place with its pin (a name without its
- * coordinates would put the trip somewhere else on the map) and shows where
- * it came from.
+ * coordinates would put the trip somewhere else on the map), and nothing
+ * else: the rooms of that trip are not copied, so no badge says they are.
  *
  * The picker is stubbed down to a button that hands over a chosen trip: its own
  * searching has its own file.
@@ -124,37 +124,23 @@ beforeEach(() => {
 // ============================================================================
 
 describe('TripForm — importing an earlier trip', () => {
-  it('adopts the place and says where from', async () => {
+  it('adopts the place', async () => {
     const { user } = renderForm();
 
     await user.click(screen.getByTestId('import-trip'));
 
     expect(screen.getByTestId('location-input')).toHaveValue('Vannes');
-    // The badge names the trip and how many rooms come with it.
-    expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
-    // Through the plural key now, not a hardcoded English literal.
-    expect(screen.getByText(/rooms\.roomCount/)).toBeInTheDocument();
   });
 
-  it('lets the import be taken back', async () => {
-    const { user } = renderForm();
-
-    await user.click(screen.getByTestId('import-trip'));
-    await user.click(screen.getByRole('button', { name: 'trips.removeImport' }));
-
-    await waitFor(() => {
-      expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
-    });
-  });
-
-  it('says one room in the singular', async () => {
+  // The edit form copies no rooms. It used to show "Importing from Brittany
+  // 2025, 2 rooms", and the trip saved with none of them.
+  it('does not claim to import the rooms it never copies', async () => {
     const { user } = renderForm();
 
     await user.click(screen.getByTestId('import-trip'));
 
-    // Two rooms in the fixture, so the plural is what shows; the singular is
-    // the other half of the same expression.
-    expect(screen.queryByText(/1 room\b/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/rooms\.roomCount/)).not.toBeInTheDocument();
   });
 
   it('takes the pin of the trip it imports the place from', async () => {
@@ -163,16 +149,6 @@ describe('TripForm — importing an earlier trip', () => {
     await user.click(screen.getByTestId('import-trip'));
 
     expect(screen.getByTestId('location-input')).toHaveAttribute('data-pin', '47.66,-2.76');
-  });
-
-  it('drops the import when it is handed another trip', async () => {
-    const { user, rerender } = renderForm();
-    await user.click(screen.getByTestId('import-trip'));
-    expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
-
-    rerender(<TripForm trip={EDITED_TRIP} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-
-    expect(screen.queryByText(/trips.importedFrom/)).not.toBeInTheDocument();
   });
 
   it('keeps the typed place when the imported trip has none', async () => {

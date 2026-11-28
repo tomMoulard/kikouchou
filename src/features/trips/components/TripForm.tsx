@@ -39,11 +39,10 @@ import { toISODateStringFromString } from '@/lib/db/utils';
 import type { Coordinates } from '@/lib/geocoding';
 import {
   LocationAutocomplete,
-  ImportBadge,
   type TripImportData,
 } from '@/features/trips/components/LocationAutocomplete';
 import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES } from '@/types';
-import type { Trip, TripFormData, TripId } from '@/types';
+import type { Trip, TripFormData } from '@/types';
 
 // ============================================================================
 // Constants
@@ -169,17 +168,6 @@ const TripForm = memo(function TripForm({
   }, [focusField]);
 
   // ============================================================================
-  // Import State
-  // ============================================================================
-
-  /** Tracks the source trip selected for import (null = no import) */
-  const [importSource, setImportSource] = useState<{
-    readonly tripId: TripId;
-    readonly tripName: string;
-    readonly roomCount: number;
-  } | null>(null);
-
-  // ============================================================================
   // Form State
   // ============================================================================
 
@@ -241,7 +229,6 @@ const TripForm = memo(function TripForm({
     setEndDate(trip.endDate ?? '');
     setCurrency(trip.currency ?? DEFAULT_CURRENCY);
     setCoordinates(trip.coordinates);
-    setImportSource(null);
     setErrors({});
   }
 
@@ -363,33 +350,21 @@ const TripForm = memo(function TripForm({
 
   /**
    * Handles picking a previously used trip in the location suggestions.
-   * Pre-fills the location and its coordinates, and shows the badge.
+   * Pre-fills the location and its coordinates, and nothing else.
+   *
+   * No "importing from" badge: this form edits a trip that exists, and the
+   * rooms of the picked trip are not copied into it. The badge said they
+   * would be, and the trip got no rooms.
    */
-  const handleImportTrip = useCallback(
-    (data: TripImportData) => {
-      const { trip: sourceTip, rooms } = data;
+  const handleImportTrip = useCallback((data: TripImportData) => {
+    const { trip: sourceTrip } = data;
 
-      // Pre-fill location, and its pin alongside it — adopting the name while
-      // keeping an older trip's coordinates would pin the new trip elsewhere.
-      if (sourceTip.location) {
-        setLocation(sourceTip.location);
-        setCoordinates(sourceTip.coordinates);
-      }
-
-      setImportSource({
-        tripId: sourceTip.id,
-        tripName: sourceTip.name,
-        roomCount: rooms.length,
-      });
-    },
-    [],
-  );
-
-  /**
-   * Handles removing the import selection.
-   */
-  const handleRemoveImport = useCallback(() => {
-    setImportSource(null);
+    // Pre-fill location, and its pin alongside it — adopting the name while
+    // keeping an older trip's coordinates would pin the new trip elsewhere.
+    if (sourceTrip.location) {
+      setLocation(sourceTrip.location);
+      setCoordinates(sourceTrip.coordinates);
+    }
   }, []);
 
   /**
@@ -565,14 +540,6 @@ const TripForm = memo(function TripForm({
           disabled={isSubmitting}
           excludeTripId={trip.id}
         />
-        {importSource && (
-          <ImportBadge
-            tripName={importSource.tripName}
-            roomCount={importSource.roomCount}
-            onRemove={handleRemoveImport}
-            disabled={isSubmitting}
-          />
-        )}
       </div>
 
       {/* Currency — what the money page labels every amount with. One per
