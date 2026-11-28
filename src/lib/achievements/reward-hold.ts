@@ -124,7 +124,7 @@ export function rememberHeldRewards(keys: readonly AchievementKey[], now = Date.
  * @returns The keys still worth announcing, oldest first.
  */
 export function takeHeldRewards(now = Date.now()): AchievementKey[] {
-  let raw: string | null = null;
+  let raw: string | null;
   try {
     raw = localStorage.getItem(HELD_REWARDS_KEY);
     localStorage.removeItem(HELD_REWARDS_KEY);
