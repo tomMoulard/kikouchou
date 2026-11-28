@@ -152,6 +152,13 @@ interface UnassignedGuest {
 }
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/** No booking: asks whether a guest would have a night to cover at all. */
+const NO_ASSIGNMENTS: readonly RoomAssignment[] = [];
+
+// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -516,12 +523,27 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   */
    staysUnknown = roomPlanningWindow === null && persons.length > 0,
 
-  // Every guest holds at least one booking. Without it an empty "needs room"
-  // list said "Everyone has a room" while every bed was free.
-   everyGuestBooked = useMemo(() => {
-    const booked = new Set(assignments.map((assignment) => assignment.personId));
-    return persons.every((person) => booked.has(person.id));
-  }, [assignments, persons]),
+  // Every guest who sleeps here holds at least one booking, and somebody
+  // does. Without it an empty "needs room" list said "Everyone has a room"
+  // while every bed was free.
+  //
+  // A guest needs a bed when, with no booking at all, they would have a night
+  // to cover: the same rule as the "needs room" chips. A day visitor (a stay
+  // that starts and ends on one day) sleeps no night, so holding no booking
+  // is not a gap: requiring one kept the notice from ever showing.
+   everySleeperBooked = useMemo(() => {
+    const booked = new Set(assignments.map((assignment) => assignment.personId)),
+      stayWindow = {
+        startDate: roomPlanningWindow?.startDate,
+        endDate: roomPlanningWindow?.endDate,
+      },
+      sleepers = persons.filter(
+        (person) =>
+          calculateUnassignedDates(person, arrivals, departures, NO_ASSIGNMENTS, stayWindow) !==
+          null,
+      );
+    return sleepers.length > 0 && sleepers.every((person) => booked.has(person.id));
+  }, [assignments, persons, arrivals, departures, roomPlanningWindow]),
 
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
@@ -982,7 +1004,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       unassignedGuests.length === 0 &&
       !tripHasNoNights &&
       !staysUnknown &&
-      everyGuestBooked;
+      everySleeperBooked;
     if (!allAssigned) {
       return;
     }
@@ -1009,7 +1031,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
   }, [
     currentTrip?.id,
-    everyGuestBooked,
+    everySleeperBooked,
     persons.length,
     notifySuccess,
     staysUnknown,

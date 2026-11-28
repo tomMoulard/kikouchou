@@ -926,27 +926,48 @@ describe('RoomListPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/edit?focus=dates');
   });
 
-  it('does not say everyone has a room while a guest holds no booking', () => {
-    // Alice is booked; Bob has no dates of his own. With the trip's dates
-    // Bob needs a bed, but the toast must not depend on that inference alone.
-    vi.mocked(useAssignmentContext).mockReturnValue({
-      assignments: [mockAssignment],
-      isLoading: false,
-      error: null,
-      getAssignmentsByRoom: vi.fn(() => [mockAssignment]),
-      createAssignment: mockCreateAssignment,
-      updateAssignment: mockUpdateAssignment,
-    } as unknown as ReturnType<typeof useAssignmentContext>);
-    vi.mocked(usePersonContext).mockReturnValue({
-      persons: [mockPerson, { ...mockPerson2, stayStartDate: '2026-07-03', stayEndDate: '2026-07-03' } as Person],
-      isLoading: false,
-      error: null,
-      getPersonById: vi.fn(() => mockPerson),
-    } as unknown as ReturnType<typeof usePersonContext>);
+  describe('and the guests who sleep no night', () => {
+    function withAliceBookedAnd(persons: readonly Person[]): void {
+      vi.mocked(useAssignmentContext).mockReturnValue({
+        assignments: [mockAssignment],
+        isLoading: false,
+        error: null,
+        getAssignmentsByRoom: vi.fn(() => [mockAssignment]),
+        createAssignment: mockCreateAssignment,
+        updateAssignment: mockUpdateAssignment,
+      } as unknown as ReturnType<typeof useAssignmentContext>);
+      vi.mocked(usePersonContext).mockReturnValue({
+        persons,
+        isLoading: false,
+        error: null,
+        getPersonById: vi.fn(() => mockPerson),
+      } as unknown as ReturnType<typeof usePersonContext>);
+    }
 
-    render(<RoomListPage />, { withProviders: false });
+    /** Bob drops by for the day: his stay starts and ends on the 3rd. */
+    const dayVisitor = {
+      ...mockPerson2,
+      stayStartDate: '2026-07-03',
+      stayEndDate: '2026-07-03',
+    } as Person;
 
-    expect(mockSuccessToast).not.toHaveBeenCalled();
+    // Regression: the notice needed every guest to hold a booking, and a day
+    // visitor can never get one, so it never showed on such a trip.
+    it('says everyone has a room when only a day visitor holds no booking', () => {
+      withAliceBookedAnd([mockPerson, dayVisitor]);
+
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(mockSuccessToast).toHaveBeenCalledWith('rooms.allGuestsAssigned');
+    });
+
+    it('says nothing when nobody sleeps a night', () => {
+      withAliceBookedAnd([dayVisitor]);
+
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(mockSuccessToast).not.toHaveBeenCalled();
+    });
   });
 
   it('does not show success toast twice for all assigned (ref suppression within session)', () => {
