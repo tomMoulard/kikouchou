@@ -1122,6 +1122,7 @@
       "title": "Still without a room",
       "empty": "Everyone has a bed",
       "staysUnknown": "Set the trip dates to give out the beds",
+      "nobodySleeps": "Nobody needs a bed yet",
       "nights_one": "{{count}} night",
       "nights_other": "{{count}} nights",
       "more_one": "{{count}} more guest",

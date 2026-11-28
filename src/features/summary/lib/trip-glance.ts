@@ -45,6 +45,13 @@ import type {
 } from '@/types';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/** No booking: asks whether a guest would have a night to cover at all. */
+const NO_ASSIGNMENTS: readonly RoomAssignment[] = [];
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -118,6 +125,13 @@ export interface TripGlance {
    * "everyone has a bed".
    */
   readonly staysUnknown: boolean;
+  /**
+   * No guest sleeps a night here: no guests yet, only day visitors, or a trip
+   * that starts and ends on one day. An empty {@link guestsWithoutRoom} then
+   * means "nobody needs a bed", not "everyone has a bed". The rooms page
+   * holds back its "All guests have rooms" notice by the same rule.
+   */
+  readonly nobodySleeps: boolean;
 }
 
 /** What {@link buildTripGlance} reads. All of it is already in a context. */
@@ -243,6 +257,7 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
 
   const guestsWithoutRoom: GlanceGuestWithoutRoom[] = [];
   let staysUnknown = false;
+  let nobodySleeps = true;
 
   if (trip) {
     // The rooms page's own window, so a guest with no dates on a trip
@@ -250,6 +265,13 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
     const roomWindow = resolveRoomPlanningWindow(trip, persons, arrivals, departures, assignments);
     staysUnknown = roomWindow === null && persons.length > 0;
     const tripWindow = { startDate: roomWindow?.startDate, endDate: roomWindow?.endDate };
+    // A guest needs a bed when, with no booking at all, they would have a
+    // night to cover: the rule of the rooms page's chips.
+    nobodySleeps = !persons.some(
+      (person) =>
+        calculateUnassignedDates(person, arrivals, departures, NO_ASSIGNMENTS, tripWindow) !==
+        null,
+    );
     for (const person of persons) {
       const unassigned = calculateUnassignedDates(
         person,
@@ -287,5 +309,6 @@ export function buildTripGlance(input: TripGlanceInput): TripGlance {
     nextArrivals,
     guestsWithoutRoom,
     staysUnknown,
+    nobodySleeps,
   };
 }

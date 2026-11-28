@@ -282,6 +282,53 @@ describe('buildTripGlance', () => {
 
       expect(glance.guestsWithoutRoom).toEqual([]);
       expect(glance.staysUnknown).toBe(false);
+      expect(glance.nobodySleeps).toBe(false);
+    });
+
+    // Regression: with nobody to put to bed, the empty list read as
+    // "Everyone has a bed", the notice the rooms page now holds back.
+    describe('when nobody sleeps a night', () => {
+      it('says so for a trip with no guests', () => {
+        const glance = build({ rooms: [room('r1', 2)], persons: [] });
+
+        expect(glance.guestsWithoutRoom).toEqual([]);
+        expect(glance.nobodySleeps).toBe(true);
+      });
+
+      it('says so when every guest only drops by for the day', () => {
+        const glance = build({
+          rooms: [room('r1', 2)],
+          persons: [person('visitor', { stayStartDate: '2026-07-03', stayEndDate: '2026-07-03' })],
+        });
+
+        expect(glance.guestsWithoutRoom).toEqual([]);
+        expect(glance.nobodySleeps).toBe(true);
+      });
+
+      it('says so for a trip that starts and ends on one day', () => {
+        const glance = build({
+          trip: { ...TRIP, endDate: TRIP.startDate },
+          rooms: [room('r1', 2)],
+          persons: [person('p1')],
+        });
+
+        expect(glance.guestsWithoutRoom).toEqual([]);
+        expect(glance.nobodySleeps).toBe(true);
+      });
+
+      it('still counts a sleeper beside a day visitor', () => {
+        const glance = build({
+          rooms: [room('r1', 2)],
+          persons: [
+            person('p1'),
+            person('visitor', { stayStartDate: '2026-07-03', stayEndDate: '2026-07-03' }),
+          ],
+          assignments: [assignment('a1', 'r1', 'p1', '2026-07-01', '2026-07-08')],
+        });
+
+        expect(glance.guestsWithoutRoom).toEqual([]);
+        expect(glance.nobodySleeps).toBe(false);
+      });
     });
 
     // Regression: the panel said "Everyone has a bed" on a trip with no

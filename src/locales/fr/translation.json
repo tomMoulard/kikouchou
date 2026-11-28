@@ -1122,6 +1122,7 @@
       "title": "Encore sans chambre",
       "empty": "Tout le monde a un lit",
       "staysUnknown": "Fixez les dates du séjour pour attribuer les lits",
+      "nobodySleeps": "Personne n'a besoin d'un lit pour l'instant",
       "nights_one": "{{count}} nuit",
       "nights_other": "{{count}} nuits",
       "more_one": "{{count}} autre invité",
